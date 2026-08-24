@@ -39,7 +39,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
     logger.info(`Email sent to ${options.to}: ${options.subject}`);
     return true;
   } catch (error) {
-    logger.error("Failed to send email:", error);
+    logger.error("Failed to send email", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }

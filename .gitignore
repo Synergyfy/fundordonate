@@ -25,6 +25,10 @@ packages/*/src/*.d.ts.map
 *.sqlite
 *.sqlite-journal
 
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
 # IDE
 .vscode/
 .idea/
