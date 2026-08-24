@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =============================================================================
+// USER & AUTH
+// =============================================================================
+
 model User {
   id            String    @id @default(uuid())
   email         String    @unique
@@ -21,24 +25,31 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  campaigns          Campaign[]
-  fundraiserCampaigns Campaign[] @relation("FundraiserCampaigns")
-  donations          Donation[]
-  pledges            Pledge[]
-  bookmarks          Bookmark[]
-  activities         Activity[]
-  createdActivities  Activity[] @relation("ActivityCreator")
-  comments           Comment[]
-  wallet             Wallet?
-  withdrawalRequests WithdrawalRequest[]
-  collaborators      CampaignCollaborator[]
+  // Relations
+  campaigns             Campaign[]
+  fundraiserCampaigns   Campaign[]           @relation("FundraiserCampaigns")
+  donations             Donation[]
+  pledges               Pledge[]
+  bookmarks             Bookmark[]
+  activities            Activity[]
+  createdActivities     Activity[]           @relation("ActivityCreator")
+  comments              Comment[]
+  wallet                Wallet?
+  withdrawalRequests    WithdrawalRequest[]
+  collaborators         CampaignCollaborator[]
+  rewardItemDownloads   RewardItemDownload[]
 
   @@map("users")
 }
 
+// =============================================================================
+// CAMPAIGN
+// =============================================================================
+
 model Campaign {
   id              String   @id @default(uuid())
   slug            String   @unique
+  permalink       String?  @unique
   title           String
   shortDescription String?
   description     String?
@@ -54,32 +65,41 @@ model Campaign {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Foreign Keys
   authorId        String
-  author          User     @relation(fields: [authorId], references: [id])
   fundraiserId    String?
-  fundraiser      User?    @relation("FundraiserCampaigns", fields: [fundraiserId], references: [id])
   categoryId      String?
-  category        Category? @relation(fields: [categoryId], references: [id])
   fundId          String?
-  fund            Fund?    @relation(fields: [fundId], references: [id])
 
-  images          CampaignImage[]
-  tags            CampaignTag[]
-  collaborators   CampaignCollaborator[]
-  rewards         Reward[]
-  donations       Donation[]
-  pledges         Pledge[]
-  bookmarks       Bookmark[]
-  activities      Activity[]
-  posts           CampaignPost[]
-  comments        Comment[]
-  snapshots       CampaignSnapshot[]
-  walletTransactions WalletTransaction[]
-  withdrawalItems WithdrawalItem[]
+  // Relations
+  author              User                  @relation(fields: [authorId], references: [id])
+  fundraiser          User?                 @relation("FundraiserCampaigns", fields: [fundraiserId], references: [id])
+  category            Category?             @relation(fields: [categoryId], references: [id])
+  fund                Fund?                 @relation(fields: [fundId], references: [id])
+  images              CampaignImage[]
+  tags                CampaignTag[]
+  collaborators       CampaignCollaborator[]
+  rewards             Reward[]
+  donations           Donation[]
+  pledges             Pledge[]
+  bookmarks           Bookmark[]
+  activities          Activity[]
+  posts               CampaignPost[]
+  comments            Comment[]
+  snapshots           CampaignSnapshot[]
+  walletTransactions  WalletTransaction[]
+  withdrawalItems     WithdrawalItem[]
 
   @@index([authorId])
+  @@index([fundraiserId])
+  @@index([categoryId])
+  @@index([fundId])
   @@index([status])
   @@index([mode])
+  @@index([deadline])
+  @@index([createdAt])
+  @@index([status, mode]) // compound: filter by status+mode
+  @@index([authorId, status]) // compound: author's published campaigns
   @@map("campaigns")
 }
 
@@ -93,18 +113,133 @@ model CampaignImage {
   campaignId String
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  @@index([campaignId])
   @@map("campaign_images")
 }
 
-model Category {
+model CampaignCollaborator {
+  campaignId     String
+  collaboratorId String
+  createdAt      DateTime @default(now())
+
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  collaborator User     @relation(fields: [collaboratorId], references: [id])
+
+  @@id([campaignId, collaboratorId])
+  @@index([collaboratorId])
+  @@map("campaign_collaborators")
+}
+
+model CampaignSnapshot {
   id        String   @id @default(uuid())
-  name      String   @unique
-  slug      String   @unique
-  description String?
-  image     String?
-  order     Int      @default(0)
+  snapshot  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId])
+  @@map("campaign_snapshots")
+}
+
+// =============================================================================
+// CAMPAIGN ENGAGEMENT
+// =============================================================================
+
+model CampaignPost {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([createdAt])
+  @@map("campaign_posts")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  status    String   @default("approved") // approved, pending, spam
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaignId String
+  userId     String
+  parentId   String?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+  parent   Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([campaignId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([status])
+  @@map("comments")
+}
+
+model Bookmark {
+  createdAt DateTime @default(now())
+
+  campaignId String
+  userId     String
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@id([campaignId, userId])
+  @@index([userId])
+  @@map("bookmarks")
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  type      String
+  data      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  campaignId  String?
+  pledgeId    String?
+  donationId  String?
+  userId      String?
+  createdById String?
+
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  pledge     Pledge?   @relation(fields: [pledgeId], references: [id])
+  donation   Donation? @relation(fields: [donationId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id])
+  createdBy  User?     @relation("ActivityCreator", fields: [createdById], references: [id])
+
+  @@index([campaignId])
+  @@index([pledgeId])
+  @@index([donationId])
+  @@index([userId])
+  @@index([createdById])
+  @@index([type])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+// =============================================================================
+// CATEGORIES & TAGS
+// =============================================================================
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  image       String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   campaigns Campaign[]
 
@@ -130,20 +265,13 @@ model CampaignTag {
   tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([campaignId, tagId])
+  @@index([tagId])
   @@map("campaign_tags")
 }
 
-model CampaignCollaborator {
-  campaignId     String
-  collaboratorId String
-  createdAt      DateTime @default(now())
-
-  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  collaborator User     @relation(fields: [collaboratorId], references: [id])
-
-  @@id([campaignId, collaboratorId])
-  @@map("campaign_collaborators")
-}
+// =============================================================================
+// REWARDS (Crowdfunding Mode)
+// =============================================================================
 
 model Reward {
   id           String   @id @default(uuid())
@@ -152,110 +280,181 @@ model Reward {
   amount       Int
   deliveryDate DateTime?
   limit        Int?
-  status       String   @default("active")
+  status       String   @default("active") // active, inactive
   order        Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign   Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   pledges    Pledge[]
+  items      RewardItem[]
 
+  @@index([campaignId])
+  @@index([amount])
   @@map("rewards")
 }
+
+model RewardItem {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  quantity    Int      @default(0)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rewardId String
+  reward   Reward             @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  downloads RewardItemDownload[]
+
+  @@index([rewardId])
+  @@map("reward_items")
+}
+
+model RewardItemDownload {
+  id        String   @id @default(uuid())
+  fileName  String
+  fileUrl   String
+  createdAt DateTime @default(now())
+
+  rewardItemId String
+  rewardItem   RewardItem @relation(fields: [rewardItemId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@index([rewardItemId])
+  @@index([userId])
+  @@map("reward_item_downloads")
+}
+
+// =============================================================================
+// FUNDS
+// =============================================================================
 
 model Fund {
   id          String   @id @default(uuid())
   title       String
   description String?
   isDefault   Boolean  @default(false)
-  status      String   @default("active")
+  status      String   @default("active") // active, inactive
   createdAt   DateTime @default(now())
   createdBy   String?
   updatedAt   DateTime @updatedAt
   updatedBy   String?
 
-  campaigns   Campaign[]
-  donations   Donation[]
+  campaigns Campaign[]
+  donations Donation[]
 
+  @@index([status])
   @@map("funds")
 }
 
-model Donation {
-  id             String   @id @default(uuid())
-  uid            String   @unique
-  amount         Int
-  recoveryFee    Int      @default(0)
-  processingFee   Int      @default(0)
-  tributeType    String?
-  tributeSalutation String?
-  tributeTo      String?
-  tributeNotificationEmail String?
-  tributeNotificationMessage String?
-  notes          String?
-  status         String   @default("pending") // pending, completed, failed, refunded
-  transactionId  String?
-  paymentEngine  String?
-  paymentMethod  String?
-  paymentStatus  String?
-  isAnonymous    Boolean  @default(false)
-  isManual       Boolean  @default(false)
-  userInfo       String   @default("{}")
-  createdAt      DateTime @default(now())
-  createdBy      String?
-  updatedAt      DateTime @updatedAt
-  updatedBy      String?
+// =============================================================================
+// DONATIONS
+// =============================================================================
 
+model Donation {
+  id                     String   @id @default(uuid())
+  uid                    String   @unique
+  amount                 Int
+  recoveryFee            Int      @default(0)
+  processingFee          Int      @default(0)
+  tributeType            String?  // in_honor, in_memory
+  tributeSalutation      String?
+  tributeTo              String?
+  tributeNotificationEmail   String?
+  tributeNotificationMessage String?
+  notes                  String?
+  status                 String   @default("pending") // pending, completed, failed, refunded
+  transactionId          String?
+  paymentEngine          String?  // native, woocommerce
+  paymentMethod          String?
+  paymentStatus          String?
+  isAnonymous            Boolean  @default(false)
+  isManual               Boolean  @default(false)
+  userInfo               String   @default("{}")
+  createdAt              DateTime @default(now())
+  createdBy              String?
+  updatedAt              DateTime @updatedAt
+  updatedBy              String?
+
+  // Foreign Keys
   campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
   fundId     String?
-  fund       Fund?    @relation(fields: [fundId], references: [id])
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  activities Activity[]
+
+  // Relations
+  campaign           Campaign             @relation(fields: [campaignId], references: [id])
+  fund               Fund?                @relation(fields: [fundId], references: [id])
+  user               User?                @relation(fields: [userId], references: [id])
+  activities         Activity[]
   walletTransactions WalletTransaction[]
 
   @@index([campaignId])
+  @@index([fundId])
   @@index([userId])
+  @@index([status])
+  @@index([transactionId])
+  @@index([createdAt])
+  @@index([campaignId, status]) // compound: campaign donations by status
+  @@index([userId, createdAt]) // compound: user donation history
   @@map("donations")
 }
 
-model Pledge {
-  id                  String   @id @default(uuid())
-  uid                 String   @unique
-  status              String   @default("pending") // pending, completed, failed, cancelled
-  pledgeOption        String?
-  amount              Int
-  bonusSupportAmount  Int      @default(0)
-  shippingCost        Int      @default(0)
-  recoveryFee         Int      @default(0)
-  processingFee        Int      @default(0)
-  notes               String?
-  transactionId       String?
-  paymentEngine       String?
-  paymentMethod       String?
-  paymentStatus       String?
-  isManual            Boolean  @default(false)
-  rewardInfo          String   @default("{}")
-  userInfo            String   @default("{}")
-  createdAt           DateTime @default(now())
-  createdBy           String?
-  updatedAt           DateTime @updatedAt
-  updatedBy           String?
+// =============================================================================
+// PLEDGES (Crowdfunding Mode)
+// =============================================================================
 
+model Pledge {
+  id                 String   @id @default(uuid())
+  uid                String   @unique
+  status             String   @default("pending") // pending, completed, failed, cancelled
+  pledgeOption       String?
+  amount             Int
+  bonusSupportAmount Int      @default(0)
+  shippingCost       Int      @default(0)
+  recoveryFee        Int      @default(0)
+  processingFee      Int      @default(0)
+  notes              String?
+  transactionId      String?
+  paymentEngine      String?  // native, woocommerce
+  paymentMethod      String?
+  paymentStatus      String?
+  isManual           Boolean  @default(false)
+  rewardInfo         String   @default("{}")
+  userInfo           String   @default("{}")
+  createdAt          DateTime @default(now())
+  createdBy          String?
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+
+  // Foreign Keys
   campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
   rewardId   String?
-  reward     Reward?  @relation(fields: [rewardId], references: [id])
-  activities Activity[]
+
+  // Relations
+  campaign           Campaign             @relation(fields: [campaignId], references: [id])
+  user               User?                @relation(fields: [userId], references: [id])
+  reward             Reward?              @relation(fields: [rewardId], references: [id])
+  activities         Activity[]
   walletTransactions WalletTransaction[]
 
   @@index([campaignId])
   @@index([userId])
+  @@index([rewardId])
+  @@index([status])
+  @@index([transactionId])
+  @@index([createdAt])
+  @@index([campaignId, status]) // compound: campaign pledges by status
+  @@index([userId, createdAt]) // compound: user pledge history
   @@map("pledges")
 }
+
+// =============================================================================
+// WALLET & TRANSACTIONS
+// =============================================================================
 
 model Wallet {
   id              String   @id @default(uuid())
@@ -263,11 +462,12 @@ model Wallet {
   requestedAmount Int      @default(0)
   withdrawAmount  Int      @default(0)
   platformFee     Int      @default(0)
+  createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id])
-  transactions   WalletTransaction[]
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
 
   @@map("wallets")
 }
@@ -282,17 +482,32 @@ model WalletTransaction {
   referenceType String?  // pledge, donation, withdrawal_request
   createdAt     DateTime @default(now())
 
-  walletId     String
-  wallet       Wallet   @relation(fields: [walletId], references: [id])
-  campaignId   String?
-  campaign     Campaign? @relation(fields: [campaignId], references: [id])
-  pledgeId     String?
-  pledge       Pledge?  @relation(fields: [pledgeId], references: [id])
-  donationId   String?
-  donation     Donation? @relation(fields: [donationId], references: [id])
+  // Foreign Keys
+  walletId   String
+  campaignId String?
+  pledgeId   String?
+  donationId String?
 
+  // Relations
+  wallet   Wallet    @relation(fields: [walletId], references: [id])
+  campaign Campaign? @relation(fields: [campaignId], references: [id])
+  pledge   Pledge?   @relation(fields: [pledgeId], references: [id])
+  donation Donation? @relation(fields: [donationId], references: [id])
+
+  @@index([walletId])
+  @@index([campaignId])
+  @@index([pledgeId])
+  @@index([donationId])
+  @@index([type])
+  @@index([status])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
   @@map("wallet_transactions")
 }
+
+// =============================================================================
+// WITHDRAWALS
+// =============================================================================
 
 model WithdrawalRequest {
   id         String   @id @default(uuid())
@@ -310,92 +525,23 @@ model WithdrawalRequest {
   user   User   @relation(fields: [userId], references: [id])
   items  WithdrawalItem[]
 
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, status]) // compound: user's pending withdrawals
   @@map("withdrawal_requests")
 }
 
 model WithdrawalItem {
-  id                  String @id @default(uuid())
-  amount              Int
+  amount    Int
+
   withdrawalRequestId String
-  withdrawalRequest   WithdrawalRequest @relation(fields: [withdrawalRequestId], references: [id], onDelete: Cascade)
   campaignId          String
-  campaign            Campaign @relation(fields: [campaignId], references: [id])
 
+  withdrawalRequest WithdrawalRequest @relation(fields: [withdrawalRequestId], references: [id], onDelete: Cascade)
+  campaign          Campaign          @relation(fields: [campaignId], references: [id])
+
+  @@id([withdrawalRequestId, campaignId])
+  @@index([campaignId])
   @@map("withdrawal_items")
-}
-
-model Bookmark {
-  id        DateTime @default(now())
-  createdAt DateTime @default(now())
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-
-  @@id([campaignId, userId])
-  @@map("bookmarks")
-}
-
-model Activity {
-  id         String   @id @default(uuid())
-  type       String
-  data       String   @default("{}")
-  createdAt  DateTime @default(now())
-
-  campaignId String?
-  campaign   Campaign? @relation(fields: [campaignId], references: [id])
-  pledgeId   String?
-  pledge     Pledge?  @relation(fields: [pledgeId], references: [id])
-  donationId String?
-  donation   Donation? @relation(fields: [donationId], references: [id])
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  createdById String?
-  createdBy  User?    @relation("ActivityCreator", fields: [createdById], references: [id])
-
-  @@map("activities")
-}
-
-model CampaignPost {
-  id        String   @id @default(uuid())
-  title     String
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@map("campaign_posts")
-}
-
-model Comment {
-  id        String   @id @default(uuid())
-  content   String
-  status    String   @default("approved") // approved, pending, spam
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  parentId   String?
-  parent     Comment? @relation("CommentReplies", fields: [parentId], references: [id])
-  replies    Comment[] @relation("CommentReplies")
-
-  @@map("comments")
-}
-
-model CampaignSnapshot {
-  id        String   @id @default(uuid())
-  snapshot  String
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@unique([campaignId])
-  @@map("campaign_snapshots")
 }

@@ -1,3 +1,7 @@
+// =============================================================================
+// Enums
+// =============================================================================
+
 export type UserRole = "admin" | "fundraiser" | "collaborator" | "backer" | "donor";
 
 export type CampaignStatus = "draft" | "pending_review" | "published" | "ended" | "archived";
@@ -8,16 +12,34 @@ export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
 
 export type TransactionAction = "credit" | "debit";
 
-export type TransactionType = "earning" | "platform_fee" | "withdrawal_request" | "withdrawal_approval" | "withdrawal_rejection";
+export type TransactionType =
+  | "earning"
+  | "platform_fee"
+  | "withdrawal_request"
+  | "withdrawal_approval"
+  | "withdrawal_rejection";
 
 export type WithdrawalStatus = "pending" | "approved" | "rejected";
 
 export type PayoutMethod = "paypal" | "bank" | "others";
 
+export type CommentStatus = "approved" | "pending" | "spam";
+
+export type RewardStatus = "active" | "inactive";
+
+export type FundStatus = "active" | "inactive";
+
+export type TributeType = "in_honor" | "in_memory";
+
+// =============================================================================
+// Core Models
+// =============================================================================
+
 export interface User {
   id: string;
   email: string;
   username: string;
+  password: string;
   firstName?: string | null;
   lastName?: string | null;
   avatar?: string | null;
@@ -31,6 +53,7 @@ export interface User {
 export interface Campaign {
   id: string;
   slug: string;
+  permalink?: string | null;
   title: string;
   shortDescription?: string | null;
   description?: string | null;
@@ -54,9 +77,16 @@ export interface Campaign {
   fundId?: string | null;
   fund?: Fund | null;
   images?: CampaignImage[];
+  tags?: CampaignTag[];
+  collaborators?: CampaignCollaborator[];
   rewards?: Reward[];
   donations?: Donation[];
   pledges?: Pledge[];
+  posts?: CampaignPost[];
+  comments?: Comment[];
+  bookmarks?: Bookmark[];
+  activities?: Activity[];
+  snapshots?: CampaignSnapshot[];
 }
 
 export interface CampaignImage {
@@ -67,6 +97,69 @@ export interface CampaignImage {
   createdAt: Date;
   campaignId: string;
 }
+
+export interface CampaignCollaborator {
+  campaignId: string;
+  collaboratorId: string;
+  createdAt: Date;
+}
+
+export interface CampaignSnapshot {
+  id: string;
+  snapshot: string;
+  createdAt: Date;
+  updatedAt: Date;
+  campaignId: string;
+}
+
+// =============================================================================
+// Engagement
+// =============================================================================
+
+export interface CampaignPost {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  campaignId: string;
+}
+
+export interface Comment {
+  id: string;
+  content: string;
+  status: CommentStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  campaignId: string;
+  userId: string;
+  parentId?: string | null;
+  user?: User;
+  parent?: Comment | null;
+  replies?: Comment[];
+}
+
+export interface Bookmark {
+  campaignId: string;
+  userId: string;
+  createdAt: Date;
+}
+
+export interface Activity {
+  id: string;
+  type: string;
+  data: string;
+  createdAt: Date;
+  campaignId?: string | null;
+  pledgeId?: string | null;
+  donationId?: string | null;
+  userId?: string | null;
+  createdById?: string | null;
+}
+
+// =============================================================================
+// Categories & Tags
+// =============================================================================
 
 export interface Category {
   id: string;
@@ -86,6 +179,15 @@ export interface Tag {
   createdAt: Date;
 }
 
+export interface CampaignTag {
+  campaignId: string;
+  tagId: string;
+}
+
+// =============================================================================
+// Rewards (Crowdfunding Mode)
+// =============================================================================
+
 export interface Reward {
   id: string;
   title: string;
@@ -93,24 +195,54 @@ export interface Reward {
   amount: number;
   deliveryDate?: Date | null;
   limit?: number | null;
-  status: string;
+  status: RewardStatus;
   order: number;
   createdAt: Date;
   updatedAt: Date;
   campaignId: string;
+  items?: RewardItem[];
 }
+
+export interface RewardItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  quantity: number;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  rewardId: string;
+  downloads?: RewardItemDownload[];
+}
+
+export interface RewardItemDownload {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  createdAt: Date;
+  rewardItemId: string;
+  userId: string;
+}
+
+// =============================================================================
+// Funds
+// =============================================================================
 
 export interface Fund {
   id: string;
   title: string;
   description?: string | null;
   isDefault: boolean;
-  status: string;
+  status: FundStatus;
   createdAt: Date;
   createdBy?: string | null;
   updatedAt: Date;
   updatedBy?: string | null;
 }
+
+// =============================================================================
+// Donations
+// =============================================================================
 
 export interface Donation {
   id: string;
@@ -118,13 +250,17 @@ export interface Donation {
   amount: number;
   recoveryFee: number;
   processingFee: number;
-  tributeType?: string | null;
+  tributeType?: TributeType | null;
+  tributeSalutation?: string | null;
   tributeTo?: string | null;
+  tributeNotificationEmail?: string | null;
+  tributeNotificationMessage?: string | null;
   notes?: string | null;
   status: PaymentStatus;
   transactionId?: string | null;
   paymentEngine?: string | null;
   paymentMethod?: string | null;
+  paymentStatus?: string | null;
   isAnonymous: boolean;
   isManual: boolean;
   userInfo: string;
@@ -140,6 +276,10 @@ export interface Donation {
   user?: User | null;
 }
 
+// =============================================================================
+// Pledges (Crowdfunding Mode)
+// =============================================================================
+
 export interface Pledge {
   id: string;
   uid: string;
@@ -154,6 +294,8 @@ export interface Pledge {
   transactionId?: string | null;
   paymentEngine?: string | null;
   paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  isManual: boolean;
   rewardInfo: string;
   userInfo: string;
   createdAt: Date;
@@ -168,12 +310,17 @@ export interface Pledge {
   reward?: Reward | null;
 }
 
+// =============================================================================
+// Wallet & Transactions
+// =============================================================================
+
 export interface Wallet {
   id: string;
   balance: number;
   requestedAmount: number;
   withdrawAmount: number;
   platformFee: number;
+  createdAt: Date;
   updatedAt: Date;
   userId: string;
   user?: User;
@@ -192,7 +339,15 @@ export interface WalletTransaction {
   walletId: string;
   campaignId?: string | null;
   campaign?: Campaign | null;
+  pledgeId?: string | null;
+  pledge?: Pledge | null;
+  donationId?: string | null;
+  donation?: Donation | null;
 }
+
+// =============================================================================
+// Withdrawals
+// =============================================================================
 
 export interface WithdrawalRequest {
   id: string;
@@ -211,29 +366,15 @@ export interface WithdrawalRequest {
 }
 
 export interface WithdrawalItem {
-  id: string;
   amount: number;
   withdrawalRequestId: string;
   campaignId: string;
   campaign?: Campaign;
 }
 
-export interface Bookmark {
-  campaignId: string;
-  userId: string;
-  createdAt: Date;
-}
-
-export interface Activity {
-  id: string;
-  type: string;
-  data: string;
-  createdAt: Date;
-  campaignId?: string | null;
-  pledgeId?: string | null;
-  donationId?: string | null;
-  userId?: string | null;
-}
+// =============================================================================
+// API Types
+// =============================================================================
 
 export interface ApiResponse<T> {
   status: "success" | "error";
