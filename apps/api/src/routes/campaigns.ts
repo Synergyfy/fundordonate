@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
-import { authenticate } from "../middleware/auth";
+import { authenticate, type AuthRequest } from "../middleware/auth";
 
 const campaignsRouter = Router();
 
@@ -46,13 +46,20 @@ campaignsRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-campaignsRouter.post("/", authenticate, async (req, res, next) => {
+campaignsRouter.post("/", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { title, description, goalAmount, deadline, mode, categoryId } = req.body;
+
+    const slug = title
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
     const campaign = await prisma.campaign.create({
       data: {
         title,
+        slug,
         description,
         goalAmount: parseInt(goalAmount),
         deadline: new Date(deadline),

@@ -18,11 +18,9 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@fundordonate/types": ["../../packages/types/src"],
-      "@fundordonate/utils": ["../../packages/utils/src"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "../../packages/*/src"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }

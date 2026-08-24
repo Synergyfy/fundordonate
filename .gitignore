@@ -7,6 +7,11 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+*.js.map
+packages/*/src/*.js
+packages/*/src/*.d.ts
+packages/*/src/*.js.map
+packages/*/src/*.d.ts.map
 
 # Environment files
 .env

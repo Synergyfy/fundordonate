@@ -22,10 +22,13 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   campaigns          Campaign[]
+  fundraiserCampaigns Campaign[] @relation("FundraiserCampaigns")
   donations          Donation[]
   pledges            Pledge[]
   bookmarks          Bookmark[]
   activities         Activity[]
+  createdActivities  Activity[] @relation("ActivityCreator")
+  comments           Comment[]
   wallet             Wallet?
   withdrawalRequests WithdrawalRequest[]
   collaborators      CampaignCollaborator[]
@@ -61,6 +64,7 @@ model Campaign {
   fund            Fund?    @relation(fields: [fundId], references: [id])
 
   images          CampaignImage[]
+  tags            CampaignTag[]
   collaborators   CampaignCollaborator[]
   rewards         Reward[]
   donations       Donation[]
