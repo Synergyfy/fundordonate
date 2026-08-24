@@ -373,6 +373,37 @@ export interface WithdrawalItem {
 }
 
 // =============================================================================
+// Auth Tokens
+// =============================================================================
+
+export interface RefreshToken {
+  id: string;
+  token: string;
+  used: boolean;
+  expiresAt: Date;
+  createdAt: Date;
+  userId: string;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  token: string;
+  expiresAt: Date;
+  used: boolean;
+  createdAt: Date;
+  userId: string;
+}
+
+export interface EmailVerificationToken {
+  id: string;
+  token: string;
+  expiresAt: Date;
+  used: boolean;
+  createdAt: Date;
+  userId: string;
+}
+
+// =============================================================================
 // API Types
 // =============================================================================
 
