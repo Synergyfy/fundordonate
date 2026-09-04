@@ -8,6 +8,8 @@ interface User {
   lastName?: string | null;
   avatar?: string | null;
   role: string;
+  userType: string;
+  businessId?: string | null;
   emailVerified: boolean;
 }
 

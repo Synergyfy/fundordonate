@@ -1,63 +1,114 @@
-import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuthStore } from "@/stores/auth.store";
+import { useAuthStore, type User } from "@/stores/auth.store";
+import { hasPermission, hasAnyPermission } from "@/lib/roles";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { AccessDeniedPage } from "@/components/ui/AccessDeniedPage";
+import type { Permission, Role } from "@fundordonate/types";
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  /** Required roles (capability roles like admin, fundraiser, donor) */
   requiredRoles?: string[];
+  /** Required account types (userType like admin, business, consumer) */
+  requiredUserTypes?: string[];
+  /** Required single permission */
+  requiredPermission?: Permission;
+  /** Required at least one of these permissions */
+  requiredAnyPermission?: Permission[];
+  /** Require verified email */
   requireEmailVerification?: boolean;
 }
+
+// =============================================================================
+// Post-Login Redirect Helper
+// =============================================================================
+
+function getDashboardRoute(user: User): string {
+  if (user.userType === "admin") return "/admin";
+  if (user.userType === "business" && user.role === "fundraiser") return "/fundraiser";
+  return "/dashboard";
+}
+
+// =============================================================================
+// ProtectedRoute
+// =============================================================================
 
 export function ProtectedRoute({
   children,
   requiredRoles,
+  requiredUserTypes,
+  requiredPermission,
+  requiredAnyPermission,
   requireEmailVerification = false,
 }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const authStatus = useAuthStore((s) => s.authStatus);
   const location = useLocation();
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      // Store the intended destination for redirect after login
-    }
-  }, [isLoading, isAuthenticated, location]);
+  // State A — Authentication still initializing
+  if (authStatus === "initializing") {
+    return <LoadingScreen message="Checking your session..." />;
+  }
 
-  if (isLoading) {
+  // State B — User is unauthenticated → redirect to login with return path
+  if (authStatus === "unauthenticated" || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
-      </div>
+      <Navigate
+        to="/auth/login"
+        state={{ from: location }}
+        replace
+      />
     );
   }
 
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/auth/login" state={{ from: location }} replace />;
-  }
-
+  // State C — Email verification required
   if (requireEmailVerification && !user.emailVerified) {
     return <Navigate to="/auth/verify-email" replace />;
   }
 
-  if (requiredRoles && !requiredRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+  // State D — User is authenticated but lacks authorization (403)
+  // Check userType authorization
+  if (requiredUserTypes && !requiredUserTypes.includes(user.userType)) {
+    return <AccessDeniedPage />;
   }
 
+  // Check role authorization
+  if (requiredRoles && !requiredRoles.includes(user.role)) {
+    return <AccessDeniedPage />;
+  }
+
+  // Check single permission
+  if (requiredPermission && !hasPermission(user.role as Role, requiredPermission)) {
+    return <AccessDeniedPage />;
+  }
+
+  // Check any permission
+  if (requiredAnyPermission && !hasAnyPermission(user.role as Role, requiredAnyPermission)) {
+    return <AccessDeniedPage />;
+  }
+
+  // State E — Authorized, render children
   return <>{children}</>;
 }
 
-export function GuestRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+// =============================================================================
+// GuestRoute — Redirects authenticated users to their dashboard
+// =============================================================================
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
-      </div>
-    );
+export function GuestRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  const authStatus = useAuthStore((s) => s.authStatus);
+
+  if (authStatus === "initializing") {
+    return <LoadingScreen message="Restoring your session..." />;
   }
 
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+  if (authStatus === "authenticated" && user) {
+    return <Navigate to={getDashboardRoute(user)} replace />;
   }
 
   return <>{children}</>;

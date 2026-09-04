@@ -1,0 +1,16 @@
+{
+  "name": "themeum/growfund-pro",
+  "type": "project",
+  "autoload": {
+    "psr-4": {
+      "GrowfundPro\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Growfund",
+      "email": "support@growfund.com"
+    }
+  ],
+  "require": {}
+}

@@ -1,0 +1,120 @@
+<?php
+
+namespace Growfund\Constants;
+
+defined( 'ABSPATH' ) || exit;
+
+class HookNames
+{
+    const ONBOARDING_COMPLETED = 'growfund_onboarding_completed';
+    const WP = 'wp';
+    const WP_HEAD = 'wp_head';
+    const BODY_CLASS = 'body_class';
+    const PLUGINS_LOADED = 'plugins_loaded';
+    const INIT = 'init';
+    const ADMIN_INIT = 'admin_init';
+    const ADMIN_NOTICES = 'admin_notices';
+    const REST_API_INIT = 'rest_api_init';
+    const ADMIN_MENU = 'admin_menu';
+    const ADMIN_ENQUEUE_SCRIPT = 'admin_enqueue_scripts';
+    const WP_ENQUEUE_SCRIPT = 'wp_enqueue_scripts';
+    const AJAX_QUERY_ATTACHMENTS_ARGS = 'ajax_query_attachments_args';
+    const ADMIN_COMMENT_TYPES_DROPDOWN = 'admin_comment_types_dropdown';
+    const WP_MAIL_FROM = 'wp_mail_from';
+    const WP_MAIL_FROM_NAME = 'wp_mail_from_name';
+    const WP_PHP_MAILER_INIT = 'phpmailer_init';
+    const EDITABLE_ROLES = 'editable_roles';
+    const WP_TRASH_POST = 'wp_trash_post';
+    const LOGIN_REDIRECT = 'login_redirect';
+    const TEMPLATE_INCLUDE = 'template_include';
+    const GET_BLOCK_TEMPLATES = 'get_block_templates';
+    const SHOW_ADMIN_BAR = 'show_admin_bar';
+    const STYLE_LOADER_SRC = 'style_loader_src';
+    const WP_AUTHENTICATE_USER = 'wp_authenticate_user';
+    const WP_USER_REGISTER = 'user_register';
+    const PLUGIN_ROW_META = 'plugin_row_meta';
+    const REST_REQUEST_AFTER_CALLBACKS = 'rest_request_after_callbacks';
+    const WP_LOADED = 'wp_loaded';
+    const WP_NEW_USER_FORM = 'user_new_form';
+    const WP_EDIT_USER_FORM = 'edit_user_profile';
+    const WP_UPDATE_USER = 'edit_user_profile_update';
+    const WP_EDIT_PROFILE_FORM = 'show_user_profile';
+    const WP_UPDATE_PROFILE = 'personal_options_update';
+    const WP_USER_ROW_ACTIONS = 'user_row_actions';
+    const WP_GET_SAMPLE_PERMALINK_HTML = 'get_sample_permalink_html';
+    
+    // Woocommerce hooks
+    const WC_PRODUCT_GET_NAME = 'woocommerce_product_get_name';
+    const WC_CHECKOUT_ORDER_PROCESSED = 'woocommerce_checkout_order_processed';
+    const WC_STORE_API_CHECKOUT_ORDER_PROCESSED = 'woocommerce_store_api_checkout_order_processed';
+    const WC_CLASSIC_CHECKOUT_FIELDS = 'woocommerce_checkout_fields';
+    const WC_CHECKOUT_ORDER_LINE_ITEM  = 'woocommerce_checkout_create_order_line_item';
+    const WC_BLOCK_CHECKOUT_FIELDS = 'woocommerce_get_country_locale';
+    const WC_ORDER_STATUS_CHANGED = 'woocommerce_order_status_changed';
+    const WC_BEFORE_CALCULATE_TOTAL = 'woocommerce_before_calculate_totals';
+    const WC_ADD_TO_CART_VALIDATION = 'woocommerce_add_to_cart_validation';
+    const WC_CHECKOUT_ORDER_RECEIVED_URL = 'woocommerce_get_checkout_order_received_url';
+    const WC_PREVENT_ADMIN_ACCESS = 'woocommerce_prevent_admin_access';
+    const WC_BEFORE_PRODUCT_SAVE = 'woocommerce_before_product_object_save';
+	const WC_COUPONS_ENABLE = 'woocommerce_coupons_enabled';
+	const WC_PRODUCT_IS_TAXABLE = 'woocommerce_product_is_taxable';
+    const WC_SOLD_INDIVIDUALLY = 'woocommerce_is_sold_individually';
+    const WC_REMOVE_CART_ITEM = 'woocommerce_remove_cart_item';
+
+    // Plugin Updater hooks
+    /** @deprecated since 1.0.3 */
+    const PLUGINS_API = 'plugins_api'; // @todo: deprecated since 1.0.3. keep it just because of backward compatibility - will be removed in 1.1.0.
+    /** @deprecated since 1.0.3 */
+    const UPGRADER_PRE_DOWNLOAD = 'upgrader_pre_download'; // @todo: deprecated since 1.0.3. keep it just because of backward compatibility - will be removed in 1.1.0.
+
+    // Scheduler hooks
+    const SCHEDULED_EMAILS = 'growfund_scheduled_emails';
+    const SCHEDULED_CHARGE_BACKERS = 'growfund_scheduled_charge_backers';
+    const SCHEDULED_RECURRING = 'growfund_scheduled_recurring';
+    const STOP_SCHEDULED_RECURRING = 'growfund_stop_scheduled_recurring';
+
+    // Growfund Hooks
+    const APPLY_ONBOARDING_FROM_CROWDFUNDING  = 'growfund_apply_onboarding_from_wp_crowdfunding';
+    /** @deprecated since 1.0.2 */
+    const GROWFUND_FILTER_PRO_FEATURES = 'growfund/features'; // @todo: deprecated since 1.0.2. keep it just because of backward compatibility - will be removed in 1.1.0.
+    /** @deprecated since 1.0.2 */
+    const GROWFUND_FILTER_FEATURES = 'growfund/features'; // @todo: deprecated since 1.0.2. keep it just because of backward compatibility - will be removed in 1.1.0.
+    const GROWFUND_ROUTE_BEFORE_INIT_ACTION = 'growfund/route/before_init';
+    const GROWFUND_CAMPAIGN_AFTER_SAVE_ACTION = 'growfund/campaign/after_save';
+    const GROWFUND_CAMPAIGN_PUBLISHED = 'growfund/campaign/published';
+    const GROWFUND_CAMPAIGN_COMPLETED = 'growfund/campaign/completed';
+    const GROWFUND_CAMPAIGN_AFTER_PERMANENT_DELETE_ACTION = 'growfund/campaign/after_permanent_delete';
+    const GROWFUND_CAMPAIGN_UPDATE_VALIDATION_RULES_FILTER = 'growfund/campaign/update_validation_rules';
+    /** @deprecated since 1.0.3 */
+    const GROWFUND_ANALYTICS_DATA_FILTER = 'growfund/analytics/data'; // @todo: deprecated since 1.0.3. keep it just because of backward compatibility - will be removed in 1.1.0.
+    const GROWFUND_REWARD_VALIDATION_RULES_FILTER = 'growfund/reward/validation_rules';
+    const GROWFUND_BACKER_OVERVIEW_FILTER = 'growfund/backer/overview';
+    const GROWFUND_DONOR_OVERVIEW_FILTER = 'growfund/donor/overview';
+    const GROWFUND_BEFORE_REGISTER_SITE_ROUTES_ACTION = 'growfund/route/before_register_site_routes';
+    const GROWFUND_APP_PAYMENT_CONFIG_FILTER = 'growfund/app_payment_config';
+    const GROWFUND_BEFORE_APP_CONFIG_UPDATE_FILTER = 'growfund/app_config/before_update';
+    const GROWFUND_BEFORE_OPTION_UPDATE_FILTER = 'growfund/option/before_update';
+    const GROWFUND_ALLOW_CAMPAIGN_COMMENTS_FILTER = 'growfund/campaign/allow-comments';
+    const GROWFUND_ALLOW_CAMPAIGN_TRIBUTE_FILTER = 'growfund/campaign/allow-tribute';
+    const GROWFUND_ALLOW_CAMPAIGN_FUND_FILTER = 'growfund/campaign/allow-fund';
+    const GROWFUND_ALLOW_ANONYMOUS_CONTRIBUTION_FILTER = 'growfund/permission/allow-anonymous-contribution';
+    const GROWFUND_ALLOW_CONTRIBUTOR_COMMENTS_FILTER = 'growfund/permission/allow-contributor-comments';
+    const GROWFUND_FUNDRAISER_CAMPAIGN_DELETION_FILTER = 'growfund/permission/fundraiser-can-delete-campaign';
+    const GROWFUND_FUNDRAISER_CAMPAIGN_PUBLISH_FILTER = 'growfund/permission/fundraiser-can-publish-campaign';
+    const GROWFUND_ALLOW_GUEST_CHECKOUT_FILTER = 'growfund/payment/allow-guest-checkout';
+    const GROWFUND_ALLOW_EMAIL_VERIFICATION = 'growfund/enable_email_verification';
+    const GROWFUND_IS_APPLY_EMAIL_VERIFICATION = 'growfund/apply_email_verification';
+    const GROWFUND_COLLABORATOR_LIST_FILTER = 'growfund/collaborator/list';
+    const GROWFUND_COLLABORATOR_CAMPAIGN_IDS_FILTER = 'growfund/collaborator/campaign-ids';
+    const GROWFUND_FUNDRAISER_CAMPAIGN_IDS_QUERY_FILTER = 'growfund/fundraiser/campaign-ids-query';
+    const GROWFUND_FUND_LIST_FILTER = 'growfund/fund/list';
+    const GROWFUND_CAMPAIGN_MIGRATION_BATCH_SIZE_FILTER = 'growfund/campaign_migration/batch_size';
+    const GROWFUND_DONATION_MIGRATION_BATCH_SIZE_FILTER = 'growfund/donation_migration/batch_size';
+    const GROWFUND_PLEDGE_MIGRATION_BATCH_SIZE_FILTER = 'growfund/pledge_migration/batch_size';
+    const GROWFUND_CURRENT_USER_FILTER = 'growfund/current_user';
+    const GROWFUND_PLEDGE_AFTER_BACKED_ACTION = 'growfund/pledge/after_backed';
+    const GROWFUND_DONATION_AFTER_COMPLETED_ACTION = 'growfund/donation/after_completed';
+    const GROWFUND_WALLET_TRANSACTION_SYNC_ACTION = 'growfund/wallet/transactions/sync';
+
+    const WP_CROWDFUNDING_DEACTIVATE = 'wp_crowdfunding_deactivate';
+}

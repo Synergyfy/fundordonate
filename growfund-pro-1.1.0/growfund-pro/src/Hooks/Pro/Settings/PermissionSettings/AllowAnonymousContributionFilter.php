@@ -1,0 +1,37 @@
+<?php
+
+namespace GrowfundPro\Hooks\Pro\Settings\PermissionSettings;
+
+defined( 'ABSPATH' ) || exit;
+
+use GrowfundPro\Constants\ProHookNames;
+use Growfund\Constants\HookTypes;
+use Growfund\Hooks\BaseHook;
+
+class AllowAnonymousContributionFilter extends BaseHook
+{
+    public function get_name()
+    {
+        return ProHookNames::GROWFUND_ALLOW_ANONYMOUS_CONTRIBUTION_FILTER;
+    }
+
+    public function get_type()
+    {
+        return HookTypes::FILTER;
+    }
+
+    public function get_args_count()
+    {
+        return 2;
+    }
+
+    public function handle(...$args)
+    {
+        $value = $args[0];
+        $settings = $args[1];
+        
+		return isset($settings['allow_anonymous_contributions'])
+            ? filter_var($settings['allow_anonymous_contributions'], FILTER_VALIDATE_BOOLEAN)
+            : false;
+    }
+}

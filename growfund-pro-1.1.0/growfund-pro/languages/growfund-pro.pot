@@ -1,0 +1,2504 @@
+# Copyright (C) 2026 Themeum
+# This file is distributed under the GPLv2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Growfund Pro 1.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/growfund-pro\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-08T11:33:09+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: growfund-pro\n"
+
+#. Plugin Name of the plugin
+#: growfund-pro.php
+msgid "Growfund Pro"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: growfund-pro.php
+msgid "https://growfund.com"
+msgstr ""
+
+#. Description of the plugin
+#: growfund-pro.php
+msgid "Take fundraising further with Growfund’s advanced features."
+msgstr ""
+
+#. Author of the plugin
+#: growfund-pro.php
+msgid "Themeum"
+msgstr ""
+
+#. Author URI of the plugin
+#: growfund-pro.php
+msgid "https://themeum.com"
+msgstr ""
+
+#: growfund-pro.php:190
+msgid "Connect the license key to access the Growfund pro features!"
+msgstr ""
+
+#: growfund-pro.php:195
+msgid "Connect Now"
+msgstr ""
+
+#: src/Controllers/API/CampaignController.php:47
+msgid "Campaign copied successfully"
+msgstr ""
+
+#: src/Controllers/API/CollaboratorController.php:65
+msgid "Collaborator created successfully."
+msgstr ""
+
+#: src/Controllers/API/FundController.php:109
+msgid "Fund created successfully."
+msgstr ""
+
+#: src/Controllers/API/FundController.php:143
+msgid "Fund updated successfully."
+msgstr ""
+
+#: src/Controllers/API/FundController.php:227
+msgid "Fund deleted successfully."
+msgstr ""
+
+#: src/Controllers/API/FundController.php:270
+msgid "Bulk action successfully applied for all the selected funds."
+msgstr ""
+
+#. translators: %s: fund ids
+#: src/Controllers/API/FundController.php:273
+#, php-format
+msgid "Bulk action successfully applied for all the selected funds except the funds with id: %s."
+msgstr ""
+
+#: src/Controllers/API/FundController.php:297
+#: src/Controllers/API/FundraiserController.php:284
+msgid "Failed to empty trash"
+msgstr ""
+
+#: src/Controllers/API/FundController.php:303
+#: src/Controllers/API/FundraiserController.php:290
+msgid "Trash emptied successfully"
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:82
+msgid "Fundraiser created successfully."
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:96
+msgid "User is already a fundraiser."
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:105
+msgid "Made fundraiser successfully"
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:119
+#: src/Controllers/API/FundraiserController.php:158
+#: src/Controllers/API/FundraiserController.php:217
+#: src/Controllers/API/FundraiserController.php:253
+#: src/Controllers/API/FundraiserController.php:355
+#: src/Controllers/API/FundraiserController.php:371
+msgid "Invalid fundraiser ID."
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:142
+msgid "Fundraiser updated successfully."
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:177
+msgid "Payout payment method updated successfully."
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:239
+msgid "Fundraiser status updated successfully"
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:264
+msgid "Fundraiser deleted successfully"
+msgstr ""
+
+#: src/Controllers/API/FundraiserController.php:333
+msgid "Bulk action successfully applied for all the selected fundraiser."
+msgstr ""
+
+#. translators: %s: fundraiser ids
+#: src/Controllers/API/FundraiserController.php:336
+#, php-format
+msgid "Bulk action successfully applied for all the selected fundraiser except the fundraiser with id: %s."
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:75
+msgid "Withdrawal request created successfully."
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:134
+#: src/Controllers/API/WithdrawalController.php:163
+msgid "Withdrawal request not found"
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:141
+msgid "Withdrawal request has already been processed"
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:154
+msgid "Withdrawal request updated successfully"
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:173
+#: src/Controllers/Site/FundraiserController.php:41
+#: src/Policies/WithdrawalRequestPolicy.php:22
+#: src/Policies/WithdrawalRequestPolicy.php:29
+#: src/Policies/WithdrawalRequestPolicy.php:36
+msgid "You do not have permission for this action"
+msgstr ""
+
+#: src/Controllers/API/WithdrawalController.php:180
+msgid "Invoice not found"
+msgstr ""
+
+#: src/Controllers/Site/FundraiserController.php:50
+msgid "Document not found"
+msgstr ""
+
+#: src/DTO/WithdrawalRequest/CreateWithdrawalRequestDTO.php:47
+#: src/Services/WithdrawalService.php:190
+#: src/Services/WithdrawalService.php:391
+msgid "Wallet not found"
+msgstr ""
+
+#. translators: %s: available amount
+#: src/DTO/WithdrawalRequest/CreateWithdrawalRequestDTO.php:55
+#, php-format
+msgid "You have only %s available to withdraw."
+msgstr ""
+
+#: src/Hooks/Core/CheckLicenseKeyAction.php:59
+#: src/Hooks/Core/CheckLicenseKeyAction.php:75
+#: src/Hooks/Core/CheckLicenseKeyAction.php:79
+msgid "Something went wrong!!"
+msgstr ""
+
+#: src/Hooks/Core/CheckPluginLicenseBeforeUpdateFilter.php:49
+msgid "A valid license key is required to update Growfund Pro. Please enter your license key in the plugin settings."
+msgstr ""
+
+#. translators: %s: field name
+#: src/Hooks/Pro/Campaign/UpdateValidationRuleFilter.php:35
+#, php-format
+msgid "The %s field is required."
+msgstr ""
+
+#: src/Imports/CampaignImport.php:42
+msgid "Failed to create campaign."
+msgstr ""
+
+#: src/Mails/Admin/NewCampaignSubmittedForReviewMail.php:22
+#: src/Mails/CampaignHalfMilestoneReachedMail.php:26
+#: src/Mails/CampaignPostUpdateMail.php:20
+#: src/Mails/Fundraiser/CampaignApprovedMail.php:23
+#: src/Mails/Fundraiser/CampaignDeclinedMail.php:23
+msgid "Campaign ID is required"
+msgstr ""
+
+#: src/Mails/Admin/NewCampaignSubmittedForReviewMail.php:26
+#: src/Mails/CampaignHalfMilestoneReachedMail.php:22
+#: src/Mails/CampaignPostUpdateMail.php:24
+#: src/Mails/Fundraiser/CampaignApprovedMail.php:27
+#: src/Mails/Fundraiser/DonationAmountChargedMail.php:30
+#: src/Mails/Fundraiser/DonationCancelledMail.php:27
+#: src/Mails/Fundraiser/PledgeAmountChargedMail.php:29
+msgid "Receiver User ID is required"
+msgstr ""
+
+#: src/Mails/Admin/WithdrawalRequestReceivedMail.php:20
+#: src/Mails/Fundraiser/WithdrawalRequestAcceptedMail.php:20
+#: src/Mails/Fundraiser/WithdrawalRequestRejectedMail.php:19
+msgid "Withdrawal Request ID is required"
+msgstr ""
+
+#: src/Mails/Donor/TributeMail.php:22
+#: src/Mails/Fundraiser/DonationAmountChargedMail.php:26
+#: src/Mails/Fundraiser/DonationCancelledMail.php:23
+msgid "Donation ID is required"
+msgstr ""
+
+#: src/Mails/Fundraiser/CampaignApprovedMail.php:63
+msgid "See Live"
+msgstr ""
+
+#: src/Mails/Fundraiser/CampaignDeclinedMail.php:53
+msgid "Edit Your Campaign"
+msgstr ""
+
+#: src/Mails/Fundraiser/DonationAmountChargedMail.php:85
+msgid "View Campaign"
+msgstr ""
+
+#: src/Mails/Fundraiser/PledgeAmountChargedMail.php:25
+msgid "Pledge ID is required"
+msgstr ""
+
+#. translators: %s: campaign title
+#: src/Services/CampaignService.php:100
+#, php-format
+msgid "Copy of %s"
+msgstr ""
+
+#: src/Services/CollaboratorService.php:31
+msgid "Username already exists"
+msgstr ""
+
+#: src/Services/CollaboratorService.php:37
+msgid "Email already exists"
+msgstr ""
+
+#: src/Services/FundraiserService.php:215
+#: src/Services/FundraiserService.php:378
+#: src/Services/FundraiserService.php:522
+#: src/Services/WithdrawalService.php:184
+#: src/Services/WithdrawalService.php:385
+msgid "Fundraiser not found"
+msgstr ""
+
+#. translators: %s: fundraiser id
+#: src/Services/FundraiserService.php:336
+#: src/Services/FundraiserService.php:625
+#, php-format
+msgid "Fundraiser with ID %s not found."
+msgstr ""
+
+#: src/Services/FundraiserService.php:444
+msgid "Fundraisers could not be deleted."
+msgstr ""
+
+#: src/Services/FundraiserService.php:445
+msgid "Fundraisers could not be trashed."
+msgstr ""
+
+#: src/Services/FundraiserService.php:451
+msgid "Fundraisers has been deleted."
+msgstr ""
+
+#: src/Services/FundraiserService.php:452
+msgid "Fundraisers has been trashed."
+msgstr ""
+
+#: src/Services/FundraiserService.php:490
+msgid "Fundraisers could not be restored."
+msgstr ""
+
+#: src/Services/FundraiserService.php:495
+msgid "Fundraisers has been restored."
+msgstr ""
+
+#: src/Services/FundraiserService.php:667
+msgid "Failed to update payout payment method"
+msgstr ""
+
+#: src/Services/FundService.php:51
+msgid "Failed to create fund"
+msgstr ""
+
+#: src/Services/FundService.php:70
+msgid "Fund not found"
+msgstr ""
+
+#: src/Services/FundService.php:82
+msgid "Failed to update fund"
+msgstr ""
+
+#: src/Services/FundService.php:105
+msgid "Cannot delete default fund"
+msgstr ""
+
+#: src/Services/FundService.php:154
+msgid "Fund could not be deleted."
+msgstr ""
+
+#: src/Services/FundService.php:155
+msgid "Fund could not be trashed."
+msgstr ""
+
+#: src/Services/FundService.php:161
+msgid "Fund has been deleted."
+msgstr ""
+
+#: src/Services/FundService.php:162
+msgid "Fund has been trashed."
+msgstr ""
+
+#: src/Services/FundService.php:231
+msgid "Fund could not be restored."
+msgstr ""
+
+#: src/Services/FundService.php:236
+msgid "Fund has been restored."
+msgstr ""
+
+#: src/Services/WalletService.php:96
+msgid "Failed to create wallet"
+msgstr ""
+
+#: src/Services/WithdrawalService.php:210
+msgid "Failed to create withdrawal request"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Revenue Breakdown"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "View detailed revenue breakdown data organized by date for the selected time period. This table provides insights into daily revenue patterns and trends."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Backers"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Pledged"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Total Backed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Net Backed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Donors"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Total Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Net Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Password is required"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Password must be at least 6 characters long"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Collaborator created successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Create User"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Cancel"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Save"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Search to add..."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "No results found."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Add user"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Collaborators"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Question"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Enter your question"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Answer"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Enter your answer"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Delete"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Frequently Asked Questions"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Add FAQ"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Funds"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Fund Selection Type"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Fixed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Let Donors Choose"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Default Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Select default fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Select funds..."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Please provide a reason for declining this fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Status updated successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Fundraiser updated successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Fundraiser created successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Add fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Auto close campaign"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Launch Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Pick a date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Suggested Options"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Amount Only"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Amount & Description"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Campaign duplicated successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Make a copy"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Update posted successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Post an update"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "by"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Title"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "e.g. We already raked in 50% of the revenue!"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Image"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Description"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "e.g., Dedicated to providing immediate support and essential resources to communities affected by unexpected crises."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Post"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Hit enter to save"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Tribute Options"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Mark as default"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Add Option"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Tribute"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Tribute Requirement"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Optional"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Required"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Tribute Title"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "e.g. Dedicate this donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Notification Preference"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Let the donor decide"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Send eCard"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Send post mail"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Send eCard and post mail"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Show collaborator's list in the campaign"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+msgid "Select Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:1
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Fund"
+msgstr ""
+
+#. translators: %s: campaign title
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Activity Logs"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "No activities created yet."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "See All Logs"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Total Donated"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Average Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Donated Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "All Funds"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Button Primary Color"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "e.g. #000000"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Button Hover Color"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Button Text Color"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Enable Comments on Campaign"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "If enabled, users can add comments to campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Comment Moderation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Comments will be posted immediately"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Approve comments before publishing"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Comment Visibility"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Visible to Everyone"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Visible to Logged-in Users Only"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Choose whether fund functionality will be available on all campaigns by default."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Choose whether tribute functionality will be available on all campaigns by default."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "e-Card Template"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Download PDF"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Customize PDF"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Campaign Updates Visibility"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New Campaign Submitted for Review"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Get notified when a fundraiser submits a new campaign for review."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Campaign Update"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Get notified when an update is posted in a campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Withdrawal Request"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Get notified when a withdrawal request is submitted."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Campaign 50% funded"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notifies the backer when the campaign is 50% funded."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Campaign Updates"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify backers when an update is posted to a campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "50% Milestone Achieved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Celebrate and inform donors when a campaign reaches 50% of its goal."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify donors when an update is posted to a campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Tribute Mail"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "The recipient of the tribute notification will get a link to their eCard."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Fundraiser Emails"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Manage fundraiser email settings here."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New User Registration"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notifies when a user has registered on the site."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Account Approved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notifies when a fundraiser account is approved."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Account Declined"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notifies when a fundraiser account is declined."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Alerts the fundraiser when a new donation is made."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Donation Charged"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Alerts the fundraiser when a donation amount has been charged from a donor."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Donation Cancelled"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser when a donor cancels their donation."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New Pledge"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Alerts the fundraiser when a new pledge is made."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Pledge Charged"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Alerts the fundraiser when a pledge amount has been charged from a backer."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Pledge Cancelled"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser when a backer cancels their pledge."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Reset Password"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Receive an email when a password reset is requested."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Campaign Approved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser when their campaign is approved."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Campaign Declined"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the fundraiser when their campaign is declined."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the fundraiser when an update is posted about the campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Campaign Funded"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the fundraiser when their campaign reaches its goal."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New Offline Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser about a new offline donation."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "New Offline Pledge"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser about a new offline pledge."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Rewards Delivered"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the campaign fundraiser when rewards have been delivered to the backer."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Withdrawal Request Accepted"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser when a withdrawal request has been accepted."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Withdrawal Request Rejected"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Notify the fundraiser when a withdrawal request has been rejected."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Background"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Text"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Link"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Label"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Button Color"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Button BG"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Colors"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Style how the emails will look"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Donation Form Options"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Manage the fields available for all donation campaigns."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Disabled"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Company Field"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Name Title Prefix"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Salutations"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Type to add salutations..."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Wallet"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Wallet description goes here."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Minimum Withdrawal Amount"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Fundraiser withdrawal options"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "PayPal"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Bank Transfer"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/payment-settings-page.payment-settings-page.tsx.DsLx-5Xn.js:1
+msgid "Others"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Guest Checkout"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Allow users to donate without creating an account."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Platform Fee"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Define how much the site-admin receives from each campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Percentage"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Flat Fee"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:7
+msgid "Fee Type"
+msgstr ""
+
+#. translators: 1: file name, 2: max size in MB
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Account Holder Name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. John Citizen"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "BSB code (6 digits)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 123-456"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Account Number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 12345678"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "State"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Select your state"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "New South Wales"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Victoria"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Queensland"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Western Australia"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "South Australia"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Tasmania"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Northern Territory"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Australian Capital Territory"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "City"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Sydney"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Zip/Postal Code"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 2000"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Your postal address"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Street address, P.O. box, etc."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Banking details document (AUD)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Upload document"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Rahim Ahmed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Bank Name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Dutch-Bangla Bank"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Branch Name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Motijheel Branch"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Enter your local account number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Routing Number (9 digits)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 123456789"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Street Address"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "House and street name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Dhaka"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "District / Division"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Dhaka Division"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Zip / Postal Code"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 1000"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Jane Smith"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Institution Code (3 digits)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 001"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Transit Code (5 digits)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 12345"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "7 to 12 digits"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Province"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Ontario"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Toronto"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Oliver Twist"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "8-digit account number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "UK Sort Code (6 digits)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 102030"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Banking details document (GBP)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Bank Account Number (IBAN)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. DE89 3704 0044 0532 0130 00"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "BIC / SWIFT Code"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "8 or 11 characters, e.g. DEUTDEFF"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Banking details document (IBAN/BIC)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. John Doe"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "ACH Routing Number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "9-digit routing number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. California"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. Los Angeles"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. 90210"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Postal Address"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Street address and suite/apt"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Banking details document (USD)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Other"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/main.chunk.BYP87R3P.js:2
+msgid "Payouts"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Payout Method"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "IBAN/BIC"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "USD"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "CAD"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "AUD"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "BEFTN"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "GBP"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Type"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Email"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g. paypal-email@example.com"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Information"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Please provide any additional payment details here (e.g., wallet address, specific branch instructions, or other relevant data)."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Annual Receipt"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Enable this option to allow donors to download their annual donation receipts from their dashboard."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Default PDF Template"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Customize your receipt template with your logo, colors, greetings, footer and more."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Edit"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Primary Text"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Secondary Text"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Style how the pdf will look"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Add Signature"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Signature Image"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Upload Image"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Drag and drop, or upload image"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Signature"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Add Tax Information"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Tax Information"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Email Verification"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Ensure user account security by requiring email verification for account activation."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Anonymous Donations"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Allow donors to donate anonymously."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Manage fundraiser permissions and controls."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Publishing Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Toggle to allow direct campaign publishing."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Campaign Deletion"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Toggle to allow deleting a campaign permanently."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Please provide a reason for declining this request"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Withdrawal approved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Withdrawal declined"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Account Holder:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "IBAN:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "SWIFT/BIC:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "BSB Code:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Account Number:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "State:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "City:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Zip Code:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Address:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Bank Name:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Branch:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Routing Number:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "District:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Institution Code:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Transit Code:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Province:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Sort Code:"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Approve withdrawal request?"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Requested amount"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#, js-format
+msgid "Requested on %s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Payment Information"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Copied"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Bank Details"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Download"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Invoice"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Mark Paid"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Deny withdrawal request?"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Requested on"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Reason for denial"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "e.g., the requested withdrawal amount exceeds the total amount"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Deny"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "All"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Pending"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Approved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Declined"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#, js-format
+msgid "Payment declined on %s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#, js-format
+msgid "Payment approved on %s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Approve"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Select all"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Select row"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "ID"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Amount"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Requested Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Status"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Error loading withdrawal requests"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "You haven’t received any withdrawal requests yet."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Search..."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Date Range"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the fundraiser when their campaign is approved"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "New Donation "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Alert the fundraiser when a new donation is made."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "New Pledge "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Alert the fundraiser when a new pledge is made."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the fundraiser when a backer cancels their pledge"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Notify the campaign creator when rewards has been delivered to the backer"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Settings"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Discard"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "You are not allowed to access this page."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Annual Receipts"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Error loading user"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "No user found"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Bookmarks"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "My Donations"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "My giving stats"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "My Pledges"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Verified"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:9
+msgid "Awaiting Verification"
+msgstr ""
+
+#. translators: %s: joined date
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#, js-format
+msgid "Joined %s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Edit Profile"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Details"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "First Name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Last Name"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Phone Number"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Profile"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Dialog"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "I understand"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Completed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Rejected"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Your withdrawal request was rejected"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Method"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Error loading withdawals"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "You haven’t requested any withdrawals yet."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Select Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Available to withdraw"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Minimum withdrawal"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Withdrawal amount"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Request Withdrawal"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Request a withdrawal?"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Net Balance"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Pending Payouts"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Total Withdrawal"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#, js-format
+msgid "The preferred payment method is selected as %s. You can change your withdraw preference."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#, js-format
+msgid "The preferred payment method is selected as %s. You can change your "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Withdraw Preference"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "All Withdrawals"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Overview"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Fundraiser not found."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Decline fundraiser?"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Reason"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "e.g., the fundraiser is not suitable for the campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "When you deny the fundraiser, he will not be live and will not take part in the fundraising campaign."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Deny Fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Trash emptied successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Trashed"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Restore"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Move to trash"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Fundraisers restored successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Empty Trashed Fundraisers"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Are you sure you want to empty the trash? This action will remove all the trashed fundraisers"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Delete all associated campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Empty Trash"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Keep"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Delete fundraisers Permanently"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Are you sure you want to delete the selected fundraisers permanently? This action cannot be undone."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Delete Permanently"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Fundraisers deleted permanently."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Fundraiser Details"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Created Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Status/Joined Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "You have declined this fundraiser application"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Your Fundraiser Application is Declined!"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Your request to be a fundraiser has been reviewed and requires some changes before it can be approved."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Approve Fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Are you sure you want to approve the fundraiser?"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:11
+msgid "Move Fundraiser to trash"
+msgstr ""
+
+#. translators: %d: number of fundraisers
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#, js-format
+msgid "Move %d Fundraisers to trash"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Error loading fundraisers"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "No fundraisers added yet."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Move the following fundraisers to trash? You can restore them anytime if needed."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Fundraisers moved to trash successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "Fundraisers"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+msgid "New Fundraiser"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:12
+#, js-format
+msgid "Submitted Campaign “%s” for review"
+msgstr ""
+
+#. translators: %s: campaign title
+#: resources/dist/index.index.ts.Df5LgNFV.js:14
+#, js-format
+msgid "Campaign “%s” resubmitted for review."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:14
+#, js-format
+msgid "Campaign “%s” got declined "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:14
+msgid "declined"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:14
+#: resources/dist/index.index.ts.Df5LgNFV.js:18
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#, js-format
+msgid "Campaign “%s” "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:14
+msgid "approved and published"
+msgstr ""
+
+#. translators: 1: campaign title, 2: campaign deadline
+#: resources/dist/index.index.ts.Df5LgNFV.js:16
+#, js-format
+msgid "Set campaign “%1$s” deadline to %2$s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:16
+#, js-format
+msgid "Remove campaign “%s” deadline"
+msgstr ""
+
+#. translators: 1: campaign title, 2: count of extended campaign days
+#: resources/dist/index.index.ts.Df5LgNFV.js:18
+#, js-format
+msgid "Extended campaign “%1$s” deadline by %2$s days. "
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:18
+msgid "marked as completed"
+msgstr ""
+
+#. translators: %s: campaign title
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#, js-format
+msgid "Posted an update to the campaign:  “%s”"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "reached it’s goal"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Activity Log"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "That’s it—end of the list, unless you’re here for invisible items. ;)"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Total Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Successful Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Failed Campaigns"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Fund created successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Fund updated successfully"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Edit Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "New Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "e.g., Relief Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Campaign"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Total Given"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Reassigned the donations to the selected fund."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Reassign Fund"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Recent Donations"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Date: Last 30 days"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Fund Details"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Published"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Search"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Funds restored successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Empty Trashed Funds"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Are you sure you want to empty the trash? This action will remove all the trashed funds"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Delete funds permanently"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Are you sure you want to delete the selected funds permanently? This action cannot be undone."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Funds deleted permanently."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Trash"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Donations"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Revenue"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Latest Donation"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:20
+msgid "Move Fund to trash"
+msgstr ""
+
+#. translators: %d: funds count
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+#, js-format
+msgid "Move %d Funds to trash"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Error fetching funds"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "You haven't added any fund yet."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Move the following funds to trash? Revenues of these funds will be reassigned to default fund."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Fund moved to trash successfully."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "License Type"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Expiration Date"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Never Expires"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Update License Key"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Failed to update the license, please check your license key."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "License Key"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Enter your license key"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "If you have already purchased a Growfund Pro license, please paste your code here."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Get the license key."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+#, js-format
+msgid "Added on %s"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Remove License Key"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Are you sure, you want to remove this license key? This action cannot be undone."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Yes, remove it"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Keep as it is"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Remove"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Failed to remove license key."
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Cannot connect with license. Please try again with a valid license key"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "License Not Set"
+msgstr ""
+
+#: resources/dist/index.index.ts.Df5LgNFV.js:21
+msgid "Connect with License Key"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Account Holder Name is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Bank Account Number is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "BIC / SWIFT Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Bank details document is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Account Number is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Routing Number is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "BSB Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "State is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "City is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Zip/Postal Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Address is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Institution Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Transit Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Bank Name is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Branch Name is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Street Address is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "District / Division is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Zip / Postal Code is required"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Email is required for PayPal"
+msgstr ""
+
+#: resources/dist/settings.chunk.C8wiGtT9.js:1
+msgid "Information is required for other payment methods"
+msgstr ""

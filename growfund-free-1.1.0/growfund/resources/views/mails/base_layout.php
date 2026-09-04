@@ -1,0 +1,68 @@
+<?php
+
+use Growfund\Mailer;
+
+defined( 'ABSPATH' ) || exit;
+
+$growfund_mail_data = [
+    'message' => $message,
+    'heading' => $heading,
+    'content' => $template['content'] ?? [],
+    'colors' => $template['colors'] ?? [],
+    'media' => $template['media'] ?? [],
+];
+
+?>
+
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
+    xmlns:o="urn:schemas-microsoft-com:office:office">
+
+<head>
+    <title></title><!--[if !mso]><!-->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"><!--<![endif]-->
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <?php Mailer::apply_styles(); ?>
+
+    <!--[if mso]>
+        <noscript>
+        <xml>
+        <o:OfficeDocumentSettings>
+            <o:AllowPNG/>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+        </xml>
+        </noscript>
+        <![endif]--><!--[if lte mso 11]>
+        <style type="text/css">
+            .mj-outlook-group-fix { width:100% !important; }
+        </style>
+    <![endif]-->
+</head>
+
+<body style="word-spacing:normal;background-color:#f4f4f5;">
+    <div style="background-color:#f4f4f5;">
+        <!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:560px;" width="560" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
+        <div style="margin:0px auto;max-width:560px;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+                <tbody>
+                    <tr>
+                        <td style="direction:ltr;font-size:0px;padding:0;padding-top:32px;
+                        padding-bottom:32px;text-align:center;">
+                            <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><![endif]-->
+
+                            <?php growfund_renderer()->render('mails.layouts.header', $growfund_mail_data); ?>
+                            <?php growfund_renderer()->render('mails.layouts.body', $growfund_mail_data); ?>
+                            <?php growfund_renderer()->render('mails.layouts.additional', $growfund_mail_data); ?>
+                            <?php growfund_renderer()->render('mails.layouts.footer', $growfund_mail_data); ?>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div><!--[if mso | IE]></td></tr></table><![endif]-->
+    </div>
+</body>
+
+</html>

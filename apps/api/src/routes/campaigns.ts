@@ -4,7 +4,8 @@ import * as campaignService from "../services/campaign.service";
 import { authenticate, authorize, optionalAuth, type AuthRequest } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import { uploadSingle, uploadMultiple } from "../middleware/upload";
-import { campaignCreateSchema, campaignUpdateSchema } from "../validations";
+import { campaignCreateSchema, campaignUpdateSchema, campaignStatusSchema } from "../validations";
+import { requireCampaignCreatorEligible, type AuthorizedRequest } from "../middleware/authorization";
 
 const campaignsRouter = Router();
 
@@ -26,6 +27,9 @@ campaignsRouter.get("/", optionalAuth, async (req, res, next) => {
       authorId: req.query.authorId as string,
       fundraiserId: req.query.fundraiserId as string,
       categoryId: req.query.categoryId as string,
+      tag: req.query.tag as string,
+      campaignTypeId: req.query.campaignTypeId as string,
+      seasonId: req.query.seasonId as string,
       sortBy: req.query.sortBy as string,
       sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
     });
@@ -73,8 +77,9 @@ campaignsRouter.get("/slug/:slug", async (req, res, next) => {
 campaignsRouter.post(
   "/",
   authenticate,
+  requireCampaignCreatorEligible,
   validateBody(campaignCreateSchema),
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthorizedRequest, res, next) => {
     try {
       const campaign = await campaignService.createCampaign(req.userId!, req.body);
       res.status(201).json({ status: "success", data: campaign });
@@ -116,9 +121,7 @@ campaignsRouter.delete("/:id", authenticate, async (req: AuthRequest, res, next)
 campaignsRouter.patch(
   "/:id/status",
   authenticate,
-  validateBody(z.object({
-    status: z.enum(["draft", "pending_review", "published", "ended", "archived"]),
-  })),
+  validateBody(campaignStatusSchema),
   async (req: AuthRequest, res, next) => {
     try {
       const id = req.params.id as string;
@@ -254,6 +257,121 @@ campaignsRouter.post(
 campaignsRouter.delete("/trash/empty", authenticate, authorize("admin"), async (req: AuthRequest, res, next) => {
   try {
     const result = await campaignService.emptyTrash(req.body?.ids);
+    res.json({ status: "success", data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// Campaign Hierarchy — parent/child relationships
+// =============================================================================
+
+campaignsRouter.get("/hierarchy/:id/children", async (req, res, next) => {
+  try {
+    const children = await campaignService.getCampaignChildren(req.params.id);
+    res.json({ status: "success", data: children });
+  } catch (error) {
+    next(error);
+  }
+});
+
+campaignsRouter.get("/hierarchy/:id/parent", async (req, res, next) => {
+  try {
+    const parent = await campaignService.getCampaignParent(req.params.id);
+    res.json({ status: "success", data: parent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+campaignsRouter.get("/hierarchy/:id/tree", async (req, res, next) => {
+  try {
+    const tree = await campaignService.getHierarchyTree(req.params.id);
+    res.json({ status: "success", data: tree });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// Opportunities — approved campaign types with isOpportunity
+// =============================================================================
+
+campaignsRouter.get("/opportunities/types", async (_req, res, next) => {
+  try {
+    const types = await campaignService.listOpportunityTypes();
+    res.json({ status: "success", data: types });
+  } catch (error) {
+    next(error);
+  }
+});
+
+campaignsRouter.get("/opportunities/:typeSlug", async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const result = await campaignService.listCampaignsByOpportunity(req.params.typeSlug, {
+      page,
+      limit,
+      status: req.query.status as any,
+    });
+    res.json({ status: "success", data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// Self-Funding — campaigns with owner contribution
+// =============================================================================
+
+campaignsRouter.get("/self-funding", async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const result = await campaignService.listSelfFundingCampaigns({
+      page,
+      limit,
+      level: req.query.level as string,
+    });
+    res.json({ status: "success", data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// Enhanced List — supports new filter params
+// =============================================================================
+
+campaignsRouter.get("/discover", optionalAuth, async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const result = await campaignService.listCampaignsEnhanced({
+      page,
+      limit,
+      search: req.query.search as string,
+      status: req.query.status as any,
+      mode: req.query.mode as any,
+      authorId: req.query.authorId as string,
+      fundraiserId: req.query.fundraiserId as string,
+      categoryId: req.query.categoryId as string,
+      tag: req.query.tag as string,
+      campaignTypeId: req.query.campaignTypeId as string,
+      seasonId: req.query.seasonId as string,
+      sortBy: req.query.sortBy as string,
+      sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
+      // New filter params
+      parentId: req.query.parentId as string,
+      isEvergreen: req.query.isEvergreen === "true" ? true : req.query.isEvergreen === "false" ? false : undefined,
+      isSelfFunding: req.query.isSelfFunding === "true" ? true : req.query.isSelfFunding === "false" ? false : undefined,
+      selfFundingLevel: req.query.selfFundingLevel as string,
+      location: req.query.location as string,
+    });
+
     res.json({ status: "success", data: result });
   } catch (error) {
     next(error);

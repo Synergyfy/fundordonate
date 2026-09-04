@@ -6,6 +6,24 @@
   body {
     @apply bg-white text-gray-900 antialiased;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
@@ -35,5 +53,207 @@
 
   .card {
     @apply rounded-xl border border-gray-200 bg-white shadow-sm;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* ═══════════════ Custom Animations ═══════════════ */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up-delay {
+  0%, 30% { opacity: 0; transform: translateY(24px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up-delay-2 {
+  0%, 50% { opacity: 0; transform: translateY(24px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes float-delay {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* Hero slider crossfade */
+@keyframes hero-fade-in {
+  from { opacity: 0; transform: scale(1.02); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Play button pulse ring */
+@keyframes play-ring-pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Subtle ribbon / heart float */
+@keyframes ribbon-float {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.7; }
+  90% { opacity: 0.7; }
+  100% { transform: translateY(-100vh) rotate(25deg); opacity: 0; }
+}
+
+/* Image reveal on scroll */
+@keyframes img-reveal {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Gentle card entrance stagger */
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Hero slide 1 — storefront parallax drift */
+@keyframes storefront-drift {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  50% { transform: translateX(-6px) translateY(-3px); }
+}
+
+/* Hero slide 2 — funding progress fill */
+@keyframes funding-fill {
+  from { width: 0; }
+}
+
+/* Hero slide 3 — reward card entrance */
+@keyframes reward-entrance {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Community hub marker pulse */
+@keyframes hub-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Floating community notification */
+@keyframes community-notify {
+  0% { opacity: 0; transform: translateY(8px) scale(0.9); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  85% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-4px) scale(0.95); }
+}
+
+/* Subtle horizontal drift for layered elements */
+@keyframes drift-left {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-4px); }
+}
+@keyframes drift-right {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(4px); }
+}
+
+@keyframes scroll-up {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes scroll-down {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 0.6s ease-out both;
+  }
+  .animate-slide-up {
+    animation: slide-up 0.7s ease-out both;
+  }
+  .animate-slide-up-delay {
+    animation: slide-up-delay 0.9s ease-out both;
+  }
+  .animate-slide-up-delay-2 {
+    animation: slide-up-delay-2 1.1s ease-out both;
+  }
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  .animate-float-delay {
+    animation: float-delay 3s ease-in-out infinite 1.5s;
+  }
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out both;
+  }
+  .animate-hero-fade {
+    animation: hero-fade-in 0.8s ease-out both;
+  }
+  .animate-play-ring {
+    animation: play-ring-pulse 2s ease-out infinite;
+  }
+  .animate-ribbon {
+    animation: ribbon-float 8s linear infinite;
+  }
+  .animate-img-reveal {
+    animation: img-reveal 0.6s ease-out both;
+  }
+  .animate-card-enter {
+    animation: card-enter 0.5s ease-out both;
+  }
+  .animate-storefront-drift {
+    animation: storefront-drift 6s ease-in-out infinite;
+  }
+  .animate-funding-fill {
+    animation: funding-fill 1.8s ease-out both;
+  }
+  .animate-reward-entrance {
+    animation: reward-entrance 0.6s ease-out both;
+  }
+  .animate-hub-pulse {
+    animation: hub-pulse 2s ease-in-out infinite;
+  }
+  .animate-community-notify {
+    animation: community-notify 3s ease-in-out both;
+  }
+  .animate-drift-left {
+    animation: drift-left 5s ease-in-out infinite;
+  }
+  .animate-drift-right {
+    animation: drift-right 5s ease-in-out infinite;
+  }
+  .animate-scroll-up {
+    animation: scroll-up var(--scroll-duration, 45s) linear infinite;
+  }
+  .animate-scroll-down {
+    animation: scroll-down var(--scroll-duration, 50s) linear infinite;
   }
 }

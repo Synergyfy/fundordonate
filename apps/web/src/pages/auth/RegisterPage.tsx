@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -15,7 +15,15 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const register = useAuthStore((s) => s.register);
+  const centralHubEnabled = useAuthStore((s) => s.centralHubEnabled);
+  const centralHubLoading = useAuthStore((s) => s.centralHubLoading);
+  const checkCentralHub = useAuthStore((s) => s.checkCentralHub);
+  const loginWithCentralHub = useAuthStore((s) => s.loginWithCentralHub);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    checkCentralHub();
+  }, [checkCentralHub]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -221,6 +229,31 @@ export default function RegisterPage() {
               </Link>
             </p>
           </form>
+
+          {/* Central Hub SSO */}
+          {centralHubEnabled && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-4 text-gray-500">or sign up with</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => loginWithCentralHub("/")}
+                disabled={centralHubLoading}
+                className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="currentColor"/>
+                </svg>
+                {centralHubLoading ? "Connecting..." : "Sign up with Central Hub"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

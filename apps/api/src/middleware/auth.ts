@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "./errorHandler";
-
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+import { AUTH_CONFIG } from "../lib/config";
+import { prisma } from "../lib/prisma";
 
 export interface AuthRequest extends Request {
   userId?: string;
   userRole?: string;
+  userType?: string;
+  businessId?: string | null;
+  dbUser?: any;
 }
 
 interface JwtPayload {
@@ -24,7 +27,7 @@ export function authenticate(req: AuthRequest, _res: Response, next: NextFunctio
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(token, AUTH_CONFIG.JWT_SECRET) as JwtPayload;
     req.userId = decoded.userId;
     req.userRole = decoded.role;
     next();
@@ -46,7 +49,7 @@ export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunctio
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(token, AUTH_CONFIG.JWT_SECRET) as JwtPayload;
     req.userId = decoded.userId;
     req.userRole = decoded.role;
   } catch {
@@ -93,4 +96,46 @@ export function requireOwnership(getOwnerId: (req: AuthRequest) => Promise<strin
       next(error);
     }
   };
+}
+
+// =============================================================================
+// loadUser
+// Loads the full user record from the database and attaches it to the request.
+// Use this after authenticate when you need userType, businessId, or other
+// server-side identity data that is NOT in the JWT.
+// =============================================================================
+
+export function loadUser(req: AuthRequest, _res: Response, next: NextFunction) {
+  if (!req.userId) {
+    return next(new AppError(401, "Authentication required"));
+  }
+
+  prisma.user
+    .findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        avatar: true,
+        role: true,
+        userType: true,
+        businessId: true,
+        emailVerified: true,
+      },
+    })
+    .then((user) => {
+      if (!user) {
+        return next(new AppError(404, "User not found"));
+      }
+      req.dbUser = user;
+      req.userType = user.userType;
+      req.businessId = user.businessId;
+      next();
+    })
+    .catch((error) => {
+      next(error);
+    });
 }

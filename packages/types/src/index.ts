@@ -1,14 +1,22 @@
 // =============================================================================
-// Enums
+// Domain Constants — single source of truth
+// =============================================================================
+export * from "./constants";
+
+import type { CampaignMode, CampaignStatus } from "./constants";
+
+// =============================================================================
+// Shared Utilities
+// =============================================================================
+export * from "./utils";
+
+// =============================================================================
+// Legacy Type Aliases (backward compatibility)
+// These are string literal types used in interfaces below.
+// The constants.ts file provides the runtime values.
 // =============================================================================
 
 export type UserRole = "admin" | "fundraiser" | "collaborator" | "backer" | "donor";
-
-export type CampaignStatus = "draft" | "pending_review" | "published" | "ended" | "archived";
-
-export type CampaignMode = "donation" | "crowdfunding";
-
-export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
 
 export type TransactionAction = "credit" | "debit";
 
@@ -18,8 +26,6 @@ export type TransactionType =
   | "withdrawal_request"
   | "withdrawal_approval"
   | "withdrawal_rejection";
-
-export type WithdrawalStatus = "pending" | "approved" | "rejected";
 
 export type PayoutMethod = "paypal" | "bank" | "others";
 
@@ -39,54 +45,15 @@ export interface User {
   id: string;
   email: string;
   username: string;
-  password: string;
   firstName?: string | null;
   lastName?: string | null;
   avatar?: string | null;
-  role: UserRole;
+  role: string;
+  userType?: string;
+  businessId?: string | null;
   emailVerified: boolean;
-  notifications: string;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface Campaign {
-  id: string;
-  slug: string;
-  permalink?: string | null;
-  title: string;
-  shortDescription?: string | null;
-  description?: string | null;
-  goalAmount: number;
-  raisedAmount: number;
-  deadline: Date;
-  status: CampaignStatus;
-  mode: CampaignMode;
-  featuredImage?: string | null;
-  videoUrl?: string | null;
-  platformFee?: number | null;
-  settings: string;
-  createdAt: Date;
-  updatedAt: Date;
-  authorId: string;
-  author?: User;
-  fundraiserId?: string | null;
-  fundraiser?: User | null;
-  categoryId?: string | null;
-  category?: Category | null;
-  fundId?: string | null;
-  fund?: Fund | null;
-  images?: CampaignImage[];
-  tags?: CampaignTag[];
-  collaborators?: CampaignCollaborator[];
-  rewards?: Reward[];
-  donations?: Donation[];
-  pledges?: Pledge[];
-  posts?: CampaignPost[];
-  comments?: Comment[];
-  bookmarks?: Bookmark[];
-  activities?: Activity[];
-  snapshots?: CampaignSnapshot[];
 }
 
 export interface CampaignImage {
@@ -95,71 +62,76 @@ export interface CampaignImage {
   alt?: string | null;
   order: number;
   createdAt: Date;
-  campaignId: string;
 }
 
-export interface CampaignCollaborator {
-  campaignId: string;
-  collaboratorId: string;
-  createdAt: Date;
-}
-
-export interface CampaignSnapshot {
+export interface CampaignTag {
   id: string;
-  snapshot: string;
-  createdAt: Date;
-  updatedAt: Date;
   campaignId: string;
+  tagId: string;
+  tag?: Tag;
 }
 
-// =============================================================================
-// Engagement
-// =============================================================================
-
-export interface CampaignPost {
+export interface Campaign {
   id: string;
   title: string;
-  content: string;
+  slug: string;
+  description: string;
+  shortDescription?: string | null;
+  goalAmount: number;
+  raisedAmount: number;
+  campaignTarget?: number | null;
+  ownerContribution?: number | null;
+  deadline: Date;
+  featuredImage?: string | null;
+  videoUrl?: string | null;
+  mode: CampaignMode;
+  status: CampaignStatus;
+  creatorType?: string;
+  platformFee?: number | null;
+  settings?: string;
   createdAt: Date;
   updatedAt: Date;
-  campaignId: string;
-}
+  authorId: string;
+  author?: User;
+  categoryId?: string | null;
+  category?: Category;
+  fundId?: string | null;
+  fund?: Fund;
+  fundraiserId?: string | null;
+  shareCode?: string | null;
 
-export interface Comment {
-  id: string;
-  content: string;
-  status: CommentStatus;
-  createdAt: Date;
-  updatedAt: Date;
-  campaignId: string;
-  userId: string;
+  // Campaign Hierarchy
   parentId?: string | null;
-  user?: User;
-  parent?: Comment | null;
-  replies?: Comment[];
-}
+  parent?: Campaign | null;
+  children?: Campaign[];
 
-export interface Bookmark {
-  campaignId: string;
-  userId: string;
-  createdAt: Date;
-}
+  // Campaign Context
+  location?: string | null;
+  isEvergreen?: boolean;
 
-export interface Activity {
-  id: string;
-  type: string;
-  data: string;
-  createdAt: Date;
-  campaignId?: string | null;
-  pledgeId?: string | null;
-  donationId?: string | null;
-  userId?: string | null;
-  createdById?: string | null;
-}
+  // Participation Configuration
+  participationTypes?: string; // JSON array: ["fund","donate","sponsor"]
+  backerTiersEnabled?: boolean;
+  recurringEnabled?: boolean;
 
-// =============================================================================
-// Categories & Tags
-// =============================================================================
+  // Self-Funding Configuration
+  selfFundingLevel?: string | null;
+  isSelfFunding?: boolean;
+
+  // Taxonomy
+  campaignTypeId?: string | null;
+  campaignType?: CampaignType | null;
+  seasonId?: string | null;
+  season?: CampaignSeason | null;
+  membershipPlanId?: string | null;
+  membershipPlan?: MembershipPlan | null;
+
+  // Computed / Joined
+  images?: CampaignImage[];
+  tags?: CampaignTag[];
+  rewards?: Reward[];
+  _count?: { donations: number; pledges: number; comments?: number; bookmarks?: number };
+}
 
 export interface Category {
   id: string;
@@ -168,25 +140,77 @@ export interface Category {
   description?: string | null;
   image?: string | null;
   order: number;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface Tag {
   id: string;
   name: string;
   slug: string;
+}
+
+export interface Fund {
+  id: string;
+  title: string;
+  description?: string | null;
+  isDefault: boolean;
+  status: string;
+}
+
+export interface Donation {
+  id: string;
+  uid: string;
+  amount: number;
+  recoveryFee: number;
+  processingFee: number;
+  tributeType?: string | null;
+  tributeSalutation?: string | null;
+  tributeTo?: string | null;
+  tributeNotificationEmail?: string | null;
+  tributeNotificationMessage?: string | null;
+  notes?: string | null;
+  status: string;
+  transactionId?: string | null;
+  paymentEngine?: string | null;
+  paymentMethod?: string | null;
+  isAnonymous: boolean;
+  isManual: boolean;
+  contributionType: string;
+  currency: string;
   createdAt: Date;
-}
-
-export interface CampaignTag {
+  updatedAt: Date;
   campaignId: string;
-  tagId: string;
+  campaign?: Campaign;
+  userId?: string | null;
+  user?: User | null;
 }
 
-// =============================================================================
-// Rewards (Crowdfunding Mode)
-// =============================================================================
+export interface Pledge {
+  id: string;
+  uid: string;
+  amount: number;
+  bonusSupportAmount: number;
+  shippingCost: number;
+  recoveryFee: number;
+  processingFee: number;
+  pledgeOption?: string | null;
+  notes?: string | null;
+  status: string;
+  transactionId?: string | null;
+  paymentEngine?: string | null;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  isManual: boolean;
+  rewardInfo: string;
+  userInfo: string;
+  createdAt: Date;
+  updatedAt: Date;
+  campaignId: string;
+  campaign?: Campaign;
+  userId?: string | null;
+  user?: User;
+  rewardId?: string | null;
+  reward?: Reward;
+}
 
 export interface Reward {
   id: string;
@@ -195,11 +219,17 @@ export interface Reward {
   amount: number;
   deliveryDate?: Date | null;
   limit?: number | null;
-  status: RewardStatus;
+  status: string;
   order: number;
+  rewardType: string;
+  statedValue: number;
+  benefitValue: number;
+  currency: string;
+  eligibility: string;
+  conversionRule: string;
   createdAt: Date;
-  updatedAt: Date;
   campaignId: string;
+  campaign?: Campaign;
   items?: RewardItem[];
 }
 
@@ -209,8 +239,6 @@ export interface RewardItem {
   description?: string | null;
   quantity: number;
   order: number;
-  createdAt: Date;
-  updatedAt: Date;
   rewardId: string;
   downloads?: RewardItemDownload[];
 }
@@ -219,168 +247,208 @@ export interface RewardItemDownload {
   id: string;
   fileName: string;
   fileUrl: string;
-  createdAt: Date;
+  fileSize?: number | null;
   rewardItemId: string;
-  userId: string;
 }
 
-// =============================================================================
-// Funds
-// =============================================================================
-
-export interface Fund {
+export interface CampaignPost {
   id: string;
   title: string;
-  description?: string | null;
-  isDefault: boolean;
-  status: FundStatus;
+  content: string;
   createdAt: Date;
-  createdBy?: string | null;
   updatedAt: Date;
-  updatedBy?: string | null;
-}
-
-// =============================================================================
-// Donations
-// =============================================================================
-
-export interface Donation {
-  id: string;
-  uid: string;
-  amount: number;
-  recoveryFee: number;
-  processingFee: number;
-  tributeType?: TributeType | null;
-  tributeSalutation?: string | null;
-  tributeTo?: string | null;
-  tributeNotificationEmail?: string | null;
-  tributeNotificationMessage?: string | null;
-  notes?: string | null;
-  status: PaymentStatus;
-  transactionId?: string | null;
-  paymentEngine?: string | null;
-  paymentMethod?: string | null;
-  paymentStatus?: string | null;
-  isAnonymous: boolean;
-  isManual: boolean;
-  userInfo: string;
-  createdAt: Date;
-  createdBy?: string | null;
-  updatedAt: Date;
-  updatedBy?: string | null;
   campaignId: string;
-  campaign?: Campaign;
-  fundId?: string | null;
-  fund?: Fund | null;
-  userId?: string | null;
-  user?: User | null;
+  authorId: string;
+  author?: User;
 }
 
-// =============================================================================
-// Pledges (Crowdfunding Mode)
-// =============================================================================
-
-export interface Pledge {
+export interface Comment {
   id: string;
-  uid: string;
-  status: PaymentStatus;
-  pledgeOption?: string | null;
-  amount: number;
-  bonusSupportAmount: number;
-  shippingCost: number;
-  recoveryFee: number;
-  processingFee: number;
-  notes?: string | null;
-  transactionId?: string | null;
-  paymentEngine?: string | null;
-  paymentMethod?: string | null;
-  paymentStatus?: string | null;
-  isManual: boolean;
-  rewardInfo: string;
-  userInfo: string;
+  content: string;
+  status: string;
   createdAt: Date;
-  createdBy?: string | null;
   updatedAt: Date;
-  updatedBy?: string | null;
   campaignId: string;
-  campaign?: Campaign;
-  userId?: string | null;
-  user?: User | null;
-  rewardId?: string | null;
-  reward?: Reward | null;
+  userId: string;
+  user?: User;
+  parentId?: string | null;
 }
 
-// =============================================================================
-// Wallet & Transactions
-// =============================================================================
+export interface Bookmark {
+  id: string;
+  createdAt: Date;
+  campaignId: string;
+  userId: string;
+}
 
 export interface Wallet {
   id: string;
   balance: number;
-  requestedAmount: number;
-  withdrawAmount: number;
-  platformFee: number;
   createdAt: Date;
   updatedAt: Date;
   userId: string;
-  user?: User;
-  transactions?: WalletTransaction[];
 }
 
 export interface WalletTransaction {
   id: string;
+  uid: string;
   amount: number;
-  action: TransactionAction;
-  type: TransactionType;
-  status: "pending" | "completed";
+  type: string;
   referenceId?: string | null;
   referenceType?: string | null;
+  note?: string | null;
+  status: string;
   createdAt: Date;
+  updatedAt: Date;
   walletId: string;
+  wallet?: Wallet;
   campaignId?: string | null;
-  campaign?: Campaign | null;
   pledgeId?: string | null;
-  pledge?: Pledge | null;
   donationId?: string | null;
-  donation?: Donation | null;
 }
-
-// =============================================================================
-// Withdrawals
-// =============================================================================
 
 export interface WithdrawalRequest {
   id: string;
+  uid: string;
   amount: number;
-  method: PayoutMethod;
-  status: WithdrawalStatus;
+  status: string;
   note?: string | null;
+  method?: string | null;
   attachment?: string | null;
   payoutInfo: string;
   createdAt: Date;
-  updatedBy?: string | null;
   updatedAt: Date;
+  createdBy?: string | null;
+  updatedBy?: string | null;
   userId: string;
   user?: User;
   items?: WithdrawalItem[];
 }
 
 export interface WithdrawalItem {
+  id: string;
   amount: number;
+  note?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   withdrawalRequestId: string;
   campaignId: string;
   campaign?: Campaign;
 }
 
-// =============================================================================
-// Auth Tokens
-// =============================================================================
+export interface MembershipPlan {
+  id: string;
+  name: string;
+  slug: string;
+  tier: string;
+  level: string;
+  description?: string | null;
+  price: number;
+  duration: number | null;
+  status: string;
+  order: number;
+  entitlements: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserMembership {
+  id: string;
+  status: string;
+  startDate: Date;
+  endDate?: Date | null;
+  autoRenew: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  userId: string;
+  user?: User;
+  planId: string;
+  plan?: MembershipPlan;
+}
+
+export interface CampaignType {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: string;
+  // Opportunity Configuration
+  isOpportunity?: boolean;
+  eligibleTiers?: string; // JSON array
+  eligibleLevels?: string; // JSON array
+  parentInitiative?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignSeason {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignGroup {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignCollection {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignEvent {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ExternalReference {
+  id: string;
+  provider: string;
+  entityType: string;
+  entityId: string;
+  externalId: string;
+  externalData: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignShare {
+  id: string;
+  code: string;
+  shareType: string;
+  source?: string | null;
+  metadata: string;
+  createdAt: Date;
+  campaignId: string;
+}
 
 export interface RefreshToken {
   id: string;
   token: string;
-  used: boolean;
   expiresAt: Date;
+  used: boolean;
   createdAt: Date;
   userId: string;
 }
@@ -419,4 +487,120 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+// =============================================================================
+// MCOM Integration
+// =============================================================================
+
+export interface ShareUrlData {
+  campaignSlug: string;
+  shareCode: string;
+  baseUrl: string;
+}
+
+export interface QRCodeData {
+  url: string;
+  campaignSlug: string;
+  shareCode: string;
+}
+
+export interface CentralHubConfig {
+  baseUrl: string;
+  apiVersion: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  enabled: boolean;
+}
+
+export interface CentralHubUserInfo {
+  externalId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  businessId?: string;
+  businessName?: string;
+}
+
+export interface CentralHubAuthResult {
+  success: boolean;
+  user?: CentralHubUserInfo;
+  error?: string;
+}
+
+export interface VCardConfig {
+  baseUrl: string;
+  apiVersion: string;
+  apiKey: string;
+  enabled: boolean;
+}
+
+export interface VCardEcardRequest {
+  campaignId: string;
+  rewardId: string;
+  donorUserId: string;
+  statedValue: number;
+  benefitValue: number;
+  currency: string;
+  idempotencyKey: string;
+}
+
+export interface VCardEcardResponse {
+  success: boolean;
+  ecardId?: string;
+  status?: string;
+  error?: string;
+}
+
+export interface VCardEcardStatus {
+  ecardId: string;
+  status: "pending" | "created" | "active" | "failed" | "revoked" | "cancelled";
+  activatedAt?: Date;
+  expiresAt?: Date;
+}
+
+export interface TerminalConfig {
+  baseUrl: string;
+  apiVersion: string;
+  merchantId: string;
+  apiKey: string;
+  webhookSecret: string;
+  enabled: boolean;
+}
+
+export interface TerminalPaymentRequest {
+  amount: number;
+  currency: string;
+  campaignId: string;
+  contributionType: "owner" | "external";
+  description?: string;
+  reference?: string;
+  idempotencyKey: string;
+}
+
+export interface TerminalPaymentResponse {
+  success: boolean;
+  transactionId?: string;
+  status?: "pending" | "processing" | "completed" | "failed";
+  clientSecret?: string;
+  error?: string;
+}
+
+export interface TerminalWebhookEvent {
+  eventId: string;
+  eventType: string;
+  transactionId: string;
+  status: string;
+  amount: number;
+  currency: string;
+  timestamp: Date;
+  signature: string;
+  data: Record<string, unknown>;
+}
+
+export interface TerminalWebhookResult {
+  processed: boolean;
+  donationId?: string;
+  error?: string;
 }

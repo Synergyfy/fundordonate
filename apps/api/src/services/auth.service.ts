@@ -3,15 +3,12 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { generateToken, getTokenExpiry } from "../lib/tokens";
+import { AUTH_CONFIG, APP_URL } from "../lib/config";
 import {
   sendEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
 } from "../lib/email";
-
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
-const ACCESS_TOKEN_EXPIRY = "15m";
-const REFRESH_TOKEN_EXPIRY_HOURS = 7 * 24; // 7 days
 
 // =============================================================================
 // Types
@@ -30,6 +27,8 @@ interface UserPayload {
   lastName?: string | null;
   avatar?: string | null;
   role: string;
+  userType: string;
+  businessId?: string | null;
   emailVerified: boolean;
 }
 
@@ -38,7 +37,7 @@ interface UserPayload {
 // =============================================================================
 
 function generateAccessToken(userId: string, role: string): string {
-  return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  return jwt.sign({ userId, role }, AUTH_CONFIG.JWT_SECRET, { expiresIn: AUTH_CONFIG.ACCESS_TOKEN_EXPIRY as any });
 }
 
 function generateRefreshToken(): string {
@@ -52,7 +51,7 @@ async function storeRefreshToken(userId: string, token: string): Promise<void> {
     data: {
       token,
       userId,
-      expiresAt: getTokenExpiry(REFRESH_TOKEN_EXPIRY_HOURS),
+      expiresAt: getTokenExpiry(AUTH_CONFIG.REFRESH_TOKEN_EXPIRY_HOURS),
     },
   });
 }
@@ -64,7 +63,7 @@ async function createAuthTokens(userId: string, role: string): Promise<AuthToken
   return { accessToken, refreshToken };
 }
 
-function sanitizeUser(user: { password: string; id: string; email: string; username: string; firstName?: string | null; lastName?: string | null; avatar?: string | null; role: string; emailVerified: boolean; createdAt: Date; updatedAt: Date }): UserPayload {
+function sanitizeUser(user: { password: string; id: string; email: string; username: string; firstName?: string | null; lastName?: string | null; avatar?: string | null; role: string; userType: string; businessId?: string | null; emailVerified: boolean; createdAt: Date; updatedAt: Date }): UserPayload {
   return {
     id: user.id,
     email: user.email,
@@ -73,6 +72,8 @@ function sanitizeUser(user: { password: string; id: string; email: string; usern
     lastName: user.lastName,
     avatar: user.avatar,
     role: user.role,
+    userType: user.userType,
+    businessId: user.businessId,
     emailVerified: user.emailVerified,
   };
 }
@@ -110,8 +111,9 @@ export async function register(data: {
     throw new AppError(409, "This username is already taken");
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, AUTH_CONFIG.BCRYPT_SALT_ROUNDS);
   const role = userType === "fundraiser" ? "fundraiser" : "donor";
+  const accountType = userType === "fundraiser" ? "business" : "consumer";
 
   const user = await prisma.user.create({
     data: {
@@ -121,6 +123,7 @@ export async function register(data: {
       firstName,
       lastName,
       role,
+      userType: accountType,
     },
   });
 
@@ -136,7 +139,7 @@ export async function register(data: {
     },
   });
 
-  const appUrl = process.env.APP_URL || "http://localhost:5173";
+  const appUrl = APP_URL;
   const verificationUrl = `${appUrl}/auth/verify-email?token=${verificationToken}`;
 
   await sendEmail({
@@ -267,7 +270,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
     },
   });
 
-  const appUrl = process.env.APP_URL || "http://localhost:5173";
+  const appUrl = APP_URL;
   const resetUrl = `${appUrl}/auth/reset-password?token=${resetToken}`;
 
   await sendEmail({
@@ -388,7 +391,7 @@ export async function resendVerificationEmail(userId: string): Promise<void> {
     },
   });
 
-  const appUrl = process.env.APP_URL || "http://localhost:5173";
+  const appUrl = APP_URL;
   const verificationUrl = `${appUrl}/auth/verify-email?token=${verificationToken}`;
 
   await sendEmail({
@@ -397,6 +400,114 @@ export async function resendVerificationEmail(userId: string): Promise<void> {
   });
 }
 
+// =============================================================================
+// Central Hub Identity Resolution
+// =============================================================================
+// After Central Hub authenticates a user, resolve or create the FundOrDonate identity.
+// This is the boundary between Central Hub auth and FundOrDonate identity.
+
+export interface CentralHubIdentityResult {
+  user: UserPayload;
+  tokens: AuthTokens;
+  isNewUser: boolean;
+}
+
+export async function resolveCentralHubIdentity(centralHubUser: {
+  externalId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  businessId?: string;
+  businessName?: string;
+}): Promise<CentralHubIdentityResult> {
+  // Step 1: Find existing ExternalReference for this Central Hub user
+  const existingRef = await prisma.externalReference.findUnique({
+    where: {
+      provider_entityType_externalId: {
+        provider: "central_hub",
+        entityType: "user",
+        externalId: centralHubUser.externalId,
+      },
+    },
+  });
+
+  // Step 2: If linked, return existing user
+  if (existingRef) {
+    const user = await prisma.user.findUnique({ where: { id: existingRef.entityId } });
+    if (user) {
+      const tokens = await createAuthTokens(user.id, user.role);
+      return { user: sanitizeUser(user as never), tokens, isNewUser: false };
+    }
+    // External reference points to deleted user — fall through to create
+  }
+
+  // Step 3: Check if a user with this email already exists (local account)
+  const existingUser = await prisma.user.findUnique({ where: { email: centralHubUser.email } });
+
+  if (existingUser) {
+    // Link existing local account to Central Hub
+    const { createExternalReference } = await import("../integrations/reference-store");
+    await createExternalReference({
+      provider: "central_hub",
+      entityType: "user",
+      entityId: existingUser.id,
+      externalId: centralHubUser.externalId,
+      externalData: {
+        email: centralHubUser.email,
+        firstName: centralHubUser.firstName,
+        lastName: centralHubUser.lastName,
+        businessId: centralHubUser.businessId,
+        businessName: centralHubUser.businessName,
+      },
+      status: "active",
+    });
+
+    const tokens = await createAuthTokens(existingUser.id, existingUser.role);
+    return { user: sanitizeUser(existingUser as never), tokens, isNewUser: false };
+  }
+
+  // Step 4: Create new FundOrDonate user from Central Hub identity
+  const username = centralHubUser.email.split("@")[0] + "_" + Date.now().toString(36);
+  const accountType = centralHubUser.businessId ? "business" : "consumer";
+  const role = "donor"; // Default capability for new Central Hub users
+
+  const newUser = await prisma.user.create({
+    data: {
+      email: centralHubUser.email,
+      username,
+      password: await bcrypt.hash(crypto.randomUUID(), AUTH_CONFIG.BCRYPT_SALT_ROUNDS),
+      firstName: centralHubUser.firstName,
+      lastName: centralHubUser.lastName,
+      role,
+      userType: accountType,
+      businessId: centralHubUser.businessId || null,
+      emailVerified: true, // Central Hub verified the email
+    },
+  });
+
+  // Link the new user to Central Hub
+  const { createExternalReference } = await import("../integrations/reference-store");
+  await createExternalReference({
+    provider: "central_hub",
+    entityType: "user",
+    entityId: newUser.id,
+    externalId: centralHubUser.externalId,
+    externalData: {
+      email: centralHubUser.email,
+      firstName: centralHubUser.firstName,
+      lastName: centralHubUser.lastName,
+      businessId: centralHubUser.businessId,
+      businessName: centralHubUser.businessName,
+    },
+    status: "active",
+  });
+
+  const tokens = await createAuthTokens(newUser.id, newUser.role);
+  return { user: sanitizeUser(newUser as never), tokens, isNewUser: true };
+}
+
+// =============================================================================
+// Get Current User
 // =============================================================================
 // Get Current User
 // =============================================================================
