@@ -3,7 +3,7 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   Menu, X, Heart,
-  Home, Compass, Info, HelpCircle, MapPin,
+  Home, Info, HelpCircle, MapPin, Megaphone,
   LogIn,
   LayoutDashboard, LogOut,
   Facebook, Twitter, Instagram, Mail,
@@ -11,15 +11,8 @@ import {
 
 const NAV_LINKS = [
   { label: "Home", to: "/", icon: Home, exact: true },
-  { label: "Explore", to: "/campaigns", icon: Compass, exact: false },
-  {
-    label: "UK Hub Activation", to: "/uk-hub-activation", icon: MapPin, exact: false,
-    children: [
-      { label: "Overview", to: "/uk-hub-activation" },
-      { label: "Business Founding", to: "/uk-hub-activation/business" },
-      { label: "Consumer Founding", to: "/uk-hub-activation/consumer" },
-    ],
-  },
+  { label: "UK Hub Activation", to: "/uk-hub-activation", icon: MapPin, exact: false },
+  { label: "Campaigns", to: "/campaigns", icon: Megaphone, exact: false },
   { label: "How It Works", to: "/how-it-works", icon: HelpCircle, exact: true },
   { label: "About", to: "/about", icon: Info, exact: true },
 ];
@@ -31,9 +24,7 @@ function isActive(currentPath: string, linkTo: string, exact: boolean): boolean 
 
 const FOOTER_LINKS = {
   discover: [
-    { label: "Explore Campaigns", to: "/campaigns" },
-    { label: "Fund Campaigns", to: "/campaigns?mode=fund" },
-    { label: "Donate Campaigns", to: "/campaigns?mode=donation" },
+    { label: "Fund vs Donate", to: "/fund-vs-donate" },
     { label: "How It Works", to: "/how-it-works" },
   ],
   fund: [
@@ -60,7 +51,6 @@ const FOOTER_LINKS = {
 export function PublicLayout({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [hubDropdownOpen, setHubDropdownOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
   const location = useLocation();
 
@@ -122,55 +112,18 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
-              {NAV_LINKS.map((link) => {
-                const hasDropdown = "children" in link && link.children;
-                if (hasDropdown) {
-                  const children = link.children!;
-                  const isHubActive = location.pathname === link.to || location.pathname.startsWith(link.to + "/") || children.some(c => location.pathname === c.to);
-                  return (
-                    <div key={link.to} className="relative"
-                      onMouseEnter={() => setHubDropdownOpen(true)}
-                      onMouseLeave={() => setHubDropdownOpen(false)}>
-                      <Link
-                        to={link.to}
-                        className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isHubActive ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                        }`}
-                      >
-                        <link.icon className="w-4 h-4" />
-                        {link.label}
-                        <svg className={`w-3 h-3 transition-transform ${hubDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </Link>
-                      {hubDropdownOpen && (
-                        <div className="absolute top-full left-0 mt-1 w-52 rounded-xl border bg-white py-1.5 shadow-lg z-50">
-                          {children.map(child => (
-                            <Link
-                              key={child.to}
-                              to={child.to}
-                              className={`block px-4 py-2 text-sm font-medium transition-colors ${
-                                location.pathname === child.to ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                              }`}
-                            >
-                              {child.label}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                );
-              })}
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  <link.icon className="w-4 h-4" />
+                  {link.label}
+                </Link>
+              ))}
             </nav>
 
             {/* Desktop Actions */}
@@ -235,54 +188,19 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
               </div>
 
               <div className="space-y-1">
-                {NAV_LINKS.map((link) => {
-                  const hasDropdown = "children" in link && link.children;
-                  if (hasDropdown) {
-                    const children = link.children!;
-                    const isHubActive = location.pathname === link.to || location.pathname.startsWith(link.to + "/") || children.some(c => location.pathname === c.to);
-                    return (
-                      <div key={link.to}>
-                        <Link
-                          to={link.to}
-                          onClick={() => setMobileOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                            isHubActive ? "text-primary-600 bg-primary-50" : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <link.icon className="w-5 h-5" />
-                          {link.label}
-                        </Link>
-                        <div className="ml-8 space-y-0.5">
-                          {children.map(child => (
-                            <Link
-                              key={child.to}
-                              to={child.to}
-                              onClick={() => setMobileOpen(false)}
-                              className={`block px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-                                location.pathname === child.to ? "text-primary-600 bg-primary-50" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                              }`}
-                            >
-                              {child.label}
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                        isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <link.icon className="w-5 h-5" />
-                      {link.label}
-                    </Link>
-                  );
-                })}
+                {NAV_LINKS.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                      isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <link.icon className="w-5 h-5" />
+                    {link.label}
+                  </Link>
+                ))}
               </div>
 
               <div className="border-t border-gray-100 my-6" />

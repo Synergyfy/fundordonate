@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { getCampaignCardAriaLabel } from "@/utils/accessibility";
 
 function getProgressPercentage(raised: number, goal: number): number {
   if (goal === 0) return 0;
@@ -28,6 +29,11 @@ interface CampaignCardProps {
     featuredImage?: string;
     author?: { firstName?: string; lastName?: string; avatar?: string; username: string };
     category?: { name: string; slug: string };
+    hierarchyLevel?: string | null;
+    location?: string;
+    isSelfFunding?: boolean;
+    selfFundingLevel?: string;
+    creatorType?: string;
     _count?: { donations: number; pledges: number; comments: number };
   };
 }
@@ -47,10 +53,14 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
     ? "bg-amber-500/90 text-white"
     : "bg-secondary-500/90 text-white";
 
+  const ariaLabel = getCampaignCardAriaLabel(campaign);
+
   return (
     <Link
       to={`/campaigns/${campaign.slug}`}
       className="group block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
+      aria-label={ariaLabel}
+      role="article"
     >
       {/* Image */}
       <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-primary-50 to-secondary-50">
@@ -69,10 +79,21 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
         )}
 
         {/* Mode Badge */}
-        <div className="absolute left-3 top-3">
+        <div className="absolute left-3 top-3 flex items-center gap-1.5">
           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur ${modeColor}`}>
             {modeLabel}
           </span>
+          {campaign.hierarchyLevel && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-gray-700 backdrop-blur">
+              <span>{campaign.hierarchyLevel === "national" ? "🇬🇧" : campaign.hierarchyLevel === "city" ? "🏙️" : campaign.hierarchyLevel === "borough" ? "🏘️" : campaign.hierarchyLevel === "high_street" ? "🛒" : "🏢"}</span>
+              <span className="capitalize">{campaign.hierarchyLevel.replace("_", " ")}</span>
+            </span>
+          )}
+          {campaign.creatorType === "business" && (
+            <span className="inline-flex items-center rounded-full bg-blue-100/90 px-2 py-0.5 text-[10px] font-bold text-blue-700 backdrop-blur">
+              Business
+            </span>
+          )}
         </div>
 
         {/* Days Left */}
@@ -106,7 +127,14 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 
         {/* Progress Bar */}
         <div className="mt-3">
-          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-2 overflow-hidden rounded-full bg-gray-100"
+            role="progressbar"
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${progress}% of £${(campaign.goalAmount / 100).toLocaleString()} goal reached`}
+          >
             <div
               className="h-full rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-500"
               style={{ width: `${progress}%` }}
@@ -127,6 +155,13 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
           <span>{backers} backer{backers !== 1 ? "s" : ""}</span>
           <span>{daysLeft} day{daysLeft !== 1 ? "s" : ""} left</span>
         </div>
+
+        {/* Founding Programme Indicator */}
+        {(campaign as any).participationTypes?.includes("founding") && (
+          <div className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-center">
+            <span className="text-[10px] font-medium text-amber-700">⭐ Founding Programme Available</span>
+          </div>
+        )}
 
         {/* Author */}
         <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">

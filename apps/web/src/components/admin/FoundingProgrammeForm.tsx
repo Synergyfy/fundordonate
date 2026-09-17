@@ -64,8 +64,8 @@ export function FoundingProgrammeForm({
       title: initial?.title || "",
       description: initial?.description || "",
       totalAllocation: initial?.totalAllocation?.toString() || "",
-      opensAt: initial?.opensAt ? new Date(initial.opensAt).toISOString().split("T")[0] : "",
-      closesAt: initial?.closesAt ? new Date(initial.closesAt).toISOString().split("T")[0] : "",
+      opensAt: initial?.opensAt ? new Date(initial.opensAt).toISOString().split("T")[0] || "" : "",
+      closesAt: initial?.closesAt ? new Date(initial.closesAt).toISOString().split("T")[0] || "" : "",
       contributionAmounts: amounts,
       benefits,
     };

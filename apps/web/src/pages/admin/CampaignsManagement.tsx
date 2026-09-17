@@ -37,6 +37,9 @@ interface CampaignRow {
   location?: string;
   season?: string;
   isSelfFunding?: boolean;
+  hierarchyLevel?: string | null;
+  locationId?: string | null;
+  creatorType?: string;
 }
 
 const formatCurrency = (a: number) =>
@@ -160,6 +163,7 @@ export function CampaignsManagement() {
               <th className="px-3 py-3 font-medium text-gray-500">Campaign</th>
               <th className="px-3 py-3 font-medium text-gray-500">Owner</th>
               <th className="px-3 py-3 font-medium text-gray-500">Mode</th>
+              <th className="px-3 py-3 font-medium text-gray-500 hidden sm:table-cell">Level</th>
               <th className="px-3 py-3 font-medium text-gray-500">Progress</th>
               <th className="px-3 py-3 font-medium text-gray-500 hidden sm:table-cell">Status</th>
               <th className="px-3 py-3 font-medium text-gray-500 hidden md:table-cell">Date</th>
@@ -169,12 +173,12 @@ export function CampaignsManagement() {
           <tbody className="divide-y divide-gray-50">
             {loading && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-gray-400">Loading...</td>
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-400">Loading...</td>
               </tr>
             )}
             {!loading && campaigns.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-gray-400">No campaigns found.</td>
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-400">No campaigns found.</td>
               </tr>
             )}
             {!loading && campaigns.map((c) => {
@@ -195,6 +199,16 @@ export function CampaignsManagement() {
                     {c.author ? `${c.author.firstName} ${c.author.lastName}` : "N/A"}
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-500 capitalize">{c.mode}</td>
+                  <td className="px-3 py-3 hidden sm:table-cell">
+                    {c.hierarchyLevel ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-700">
+                        <span>{c.hierarchyLevel === "national" ? "🇬🇧" : c.hierarchyLevel === "city" ? "🏙️" : c.hierarchyLevel === "borough" ? "🏘️" : c.hierarchyLevel === "high_street" ? "🛒" : "🏢"}</span>
+                        <span className="capitalize">{c.hierarchyLevel.replace("_", " ")}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3">
                     <p className="text-sm font-semibold text-gray-900">{formatCurrency(c.raisedAmount)}</p>
                     <p className="text-xs text-gray-400">{pct.toFixed(0)}% of {formatCurrency(c.goalAmount)}</p>

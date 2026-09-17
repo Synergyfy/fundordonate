@@ -8,7 +8,7 @@ import {
   Building2, Megaphone, Target, Zap, Star,
   ChevronDown, Award, HandHeart,
   Lightbulb, BadgeCheck, Repeat, Wallet, Camera,
-  BookOpen, MessageCircle, Pause, Store,
+  BookOpen, MessageCircle, Pause, Store, MapPin,
 } from "lucide-react";
 import {
   DEMO_BANNERS,
@@ -16,9 +16,9 @@ import {
   DEMO_TESTIMONIALS,
   DEMO_FAQ,
   DEMO_CATEGORIES,
-  DEMO_CAMPAIGNS,
 } from "@/data/demo";
-import type { DemoCampaign, DemoVideo } from "@/data/demo";
+import type { DemoVideo } from "@/data/demo";
+import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
 import HeroVisual from "@/components/home/HeroVisual";
 import { SplitContributionExplain } from "@/components/hub/SplitContributionExplain";
 
@@ -29,6 +29,22 @@ const formatCurrency = (pence: number) =>
 
 const formatNumber = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+
+/* ───────────────────── hubActivation campaign source ───────────────────── */
+
+function getAllHubCampaigns() {
+  const all: any[] = [];
+  const seen = new Set<string>();
+  for (const loc of HUB_LOCATIONS) {
+    for (const c of getDemoCampaignsForLocation(loc)) {
+      if (!seen.has(c.slug)) {
+        seen.add(c.slug);
+        all.push(c);
+      }
+    }
+  }
+  return all;
+}
 
 /* ───────────────────── animated section wrapper ───────────────────── */
 
@@ -86,7 +102,7 @@ function RibbonEffect() {
 
 /* ───────────────────── campaign card ───────────────────── */
 
-function CampaignCard({ campaign, index = 0 }: { campaign: DemoCampaign | any; index?: number }) {
+function CampaignCard({ campaign, index = 0 }: { campaign: any; index?: number }) {
   const progress = campaign.goalAmount > 0 ? Math.min(Math.round((campaign.raisedAmount / campaign.goalAmount) * 100), 100) : 0;
   const deadline = campaign.deadline ? new Date(campaign.deadline) : null;
   const daysLeft = deadline ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000)) : null;
@@ -461,7 +477,7 @@ export default function HomePage() {
         aria-roledescription="carousel"
         aria-label="FundOrDonate highlights"
       >
-        <div className="container-page py-8 sm:py-12 md:py-16 lg:py-20 relative z-10">
+        <div className="container-page py-4 sm:py-6 relative z-10">
           <div className="grid lg:grid-cols-[1fr_1.1fr] gap-6 lg:gap-10 items-center">
             {/* Copy — keyed to trigger re-animation on slide change */}
             <div className="max-w-xl mx-auto lg:mx-0 px-4 lg:px-6" key={slide.id}>
@@ -554,6 +570,52 @@ export default function HomePage() {
           </svg>
         </div>
       </section>
+
+      {/* ══════ UK HUB ACTIVATION ══════ */}
+      <Section className="py-10 md:py-14 bg-white">
+        <div className="container-page">
+          <div className="text-center max-w-2xl mx-auto mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium mb-4">
+              <MapPin className="w-4 h-4" />
+              UK Hub Activation Programme
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">Building Stronger High Streets Across the UK</h2>
+            <p className="text-gray-500">Connecting cities, boroughs, local areas, and high streets through community-driven funding and participation.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            <div className="rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-green-100">
+                <MapPin className="h-6 w-6 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">76+ UK Cities</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">From London to Edinburgh, cities across the UK are activating their local hubs.</p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
+                <Store className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">High Street Campaigns</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">Local businesses and residents fund campaigns that strengthen their high streets.</p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100">
+                <Users className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">Community Driven</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">Business owners and consumers work together to build stronger local communities.</p>
+            </div>
+          </div>
+          <div className="text-center mt-8">
+            <Link
+              to="/uk-hub-activation"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:from-gray-800 hover:to-gray-700 transition-all hover:shadow-xl hover:-translate-y-0.5"
+            >
+              Explore UK Hub Activation
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </Section>
 
       {/* ══════ FUND OR DONATE INTRO ══════ */}
       <Section className="py-12 md:py-16 bg-white">
@@ -688,7 +750,7 @@ export default function HomePage() {
 
       {/* ══════ CAMPAIGNS — SINGLE SECTION WITH FILTERS ══════ */}
       <CampaignSection
-        campaigns={[...apiFeatured, ...apiRecent].length > 0 ? [...apiFeatured, ...apiRecent] : DEMO_CAMPAIGNS}
+        campaigns={[...apiFeatured, ...apiRecent].length > 0 ? [...apiFeatured, ...apiRecent] : getAllHubCampaigns()}
         categories={categories}
       />
 

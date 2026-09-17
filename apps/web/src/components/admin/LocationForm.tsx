@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { HubLocation, LocationType, LocationInternalLifecycle, LocationPublicStatus } from "@/types/uk-hub";
 import { LOCATION_TYPE_META } from "@/types/uk-hub";
 
-interface LocationFormData {
+export interface LocationFormData {
   name: string;
   slug: string;
   type: LocationType;
@@ -80,7 +80,8 @@ const DEFAULT_FORM: LocationFormData = {
 export function LocationForm({ initial, allLocations, onSubmit, onCancel, isEdit = false }: LocationFormProps) {
   const [form, setForm] = useState<LocationFormData>(() => ({
     ...DEFAULT_FORM,
-    ...initial,
+    ...(initial as Record<string, unknown>),
+    parentId: initial?.parentId || "",
     latitude: initial?.latitude?.toString() || "",
     longitude: initial?.longitude?.toString() || "",
     mapZoomLevel: initial?.mapZoomLevel?.toString() || "10",
@@ -93,7 +94,7 @@ export function LocationForm({ initial, allLocations, onSubmit, onCancel, isEdit
     foundingConsumerTotal: initial?.foundingConsumerTotal?.toString() || "",
     featuredPriority: initial?.featuredPriority?.toString() || "",
     statusOverride: initial?.statusOverride || "",
-  }));
+  } as LocationFormData));
 
   const set = (key: keyof LocationFormData, val: string | boolean) => setForm(f => ({ ...f, [key]: val }));
 

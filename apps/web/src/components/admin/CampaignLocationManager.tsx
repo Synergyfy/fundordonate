@@ -25,7 +25,6 @@ interface CampaignLocationManagerProps {
 }
 
 export function CampaignLocationManager({
-  locationId,
   locationName,
   attachedCampaigns,
   allCampaigns,

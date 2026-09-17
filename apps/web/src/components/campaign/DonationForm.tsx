@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { campaignApi } from "@/services/campaign.service";
-import { PaymentMethodSelector } from "./PaymentMethodSelector";
+import { PaymentMethodSelector, type PaymentMethodType } from "./PaymentMethodSelector";
+import { ContributionDestination } from "./ContributionDestination";
 
 interface Props {
   campaignId: string;
   campaignTitle: string;
   minAmount?: number;
+  hierarchyLevel?: string | null;
+  locationName?: string;
+  contributionType?: "backer" | "founding_member";
 }
 
 const PRESET_AMOUNTS = [10, 25, 50, 100, 250, 500];
@@ -14,11 +18,11 @@ const PRESET_AMOUNTS = [10, 25, 50, 100, 250, 500];
 const formatCurrency = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(pence / 100);
 
-export function DonationForm({ campaignId, campaignTitle, minAmount = 1 }: Props) {
+export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarchyLevel, locationName, contributionType }: Props) {
   const navigate = useNavigate();
   const [amount, setAmount] = useState<string>("");
   const [customAmount, setCustomAmount] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("stripe");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [notes, setNotes] = useState("");
   const [tributeType, setTributeType] = useState("");
@@ -45,7 +49,9 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1 }: Props
         notes: notes || undefined,
         tributeType: tributeType || undefined,
         tributeTo: tributeTo || undefined,
-      });
+        contributionType: contributionType || "backer",
+        hierarchyLevel: hierarchyLevel || undefined,
+      } as any);
       navigate(`/thank-you?uid=${result.uid}&type=donation`);
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to process donation");
@@ -159,11 +165,14 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1 }: Props
 
         {/* Summary */}
         {donationAmount > 0 && (
-          <div className="rounded-lg bg-gray-50 p-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Donation Amount</span>
-              <span className="font-bold text-gray-900">{formatCurrency(donationAmount)}</span>
-            </div>
+          <div className="space-y-3">
+            <ContributionDestination
+              campaignTitle={campaignTitle}
+              hierarchyLevel={hierarchyLevel}
+              locationName={locationName}
+              amount={donationAmount}
+              showBeforePayment={true}
+            />
           </div>
         )}
 

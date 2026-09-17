@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { campaignApi } from "@/services/campaign.service";
-import { PaymentMethodSelector } from "./PaymentMethodSelector";
+import { PaymentMethodSelector, type PaymentMethodType } from "./PaymentMethodSelector";
+import { ContributionDestination } from "./ContributionDestination";
 
 interface Reward {
   id: string;
@@ -18,14 +19,17 @@ interface Props {
   campaignId: string;
   campaignTitle: string;
   rewards: Reward[];
+  hierarchyLevel?: string | null;
+  locationName?: string;
+  contributionType?: "backer" | "founding_member";
 }
 
-export function PledgeForm({ campaignId, campaignTitle, rewards }: Props) {
+export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel, locationName, contributionType }: Props) {
   const navigate = useNavigate();
   const [selectedRewardId, setSelectedRewardId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [bonusSupport, setBonusSupport] = useState<string>("0");
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("stripe");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -63,7 +67,9 @@ export function PledgeForm({ campaignId, campaignTitle, rewards }: Props) {
         bonusSupportAmount: bonusAmount,
         paymentMethod,
         notes: notes || undefined,
-      });
+        contributionType: contributionType || "backer",
+        hierarchyLevel: hierarchyLevel || undefined,
+      } as any);
       navigate(`/thank-you?uid=${result.uid}&type=pledge`);
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to process pledge");
@@ -204,23 +210,14 @@ export function PledgeForm({ campaignId, campaignTitle, rewards }: Props) {
 
         {/* Summary */}
         {pledgeAmount > 0 && (
-          <div className="rounded-lg bg-gray-50 p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Pledge Amount</span>
-              <span className="font-medium text-gray-900">{formatCurrency(pledgeAmount)}</span>
-            </div>
-            {bonusAmount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Bonus Support</span>
-                <span className="font-medium text-gray-900">{formatCurrency(bonusAmount)}</span>
-              </div>
-            )}
-            <div className="border-t border-gray-200 pt-2">
-              <div className="flex justify-between text-sm font-bold">
-                <span className="text-gray-900">Total</span>
-                <span className="text-primary-600">{formatCurrency(totalAmount)}</span>
-              </div>
-            </div>
+          <div className="space-y-3">
+            <ContributionDestination
+              campaignTitle={campaignTitle}
+              hierarchyLevel={hierarchyLevel}
+              locationName={locationName}
+              amount={totalAmount}
+              showBeforePayment={true}
+            />
           </div>
         )}
 

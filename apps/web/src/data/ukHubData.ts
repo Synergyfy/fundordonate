@@ -89,6 +89,8 @@ interface CitySeed {
   lng: number;
   hasBoroughs: boolean;
   boroughs?: string[];
+  /** Display terminology for sub-city areas: "Borough", "District", or "Local Area" */
+  areaTerminology?: string;
 }
 
 const CITY_SEEDS: CitySeed[] = [
@@ -101,7 +103,7 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 800, foundingConsAllocated: 756,
     description: "London leads the UK Hub Activation programme across 32 boroughs. The capital's diverse business and community landscape drives activation across high streets, commercial districts and local areas.",
     featured: true, featuredPriority: 1,
-    lat: 51.5074, lng: -0.1278, hasBoroughs: true,
+    lat: 51.5074, lng: -0.1278, hasBoroughs: true, areaTerminology: "Borough",
     boroughs: [
       "Westminster", "Camden", "Islington", "Hackney", "Tower Hamlets",
       "Southwark", "Lambeth", "Lewisham", "Greenwich", "Bexley",
@@ -120,7 +122,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 400, foundingConsAllocated: 341,
     description: "Manchester is a thriving UK Hub city with strong business participation and community engagement. The city's activation programme supports local high streets and commercial areas.",
     featured: true, featuredPriority: 3,
-    lat: 53.4808, lng: -2.2426, hasBoroughs: false,
+    lat: 53.4808, lng: -2.2426, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Northern Quarter", "Didsbury", "Chorlton", "Salford",
+      "Altrincham", "Stockport", "Rochdale", "Bury", "Oldham",
+    ],
   },
   {
     name: "Birmingham", slug: "birmingham", region: "West Midlands",
@@ -130,7 +136,12 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 300, foundingConsAllocated: 187,
     description: "Birmingham is making strong progress in its UK Hub Activation. Founding Membership opportunities are open for both businesses and local residents.",
     featured: true, featuredPriority: 2,
-    lat: 52.4862, lng: -1.8904, hasBoroughs: false,
+    lat: 52.4862, lng: -1.8904, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Edgbaston", "Moseley", "Kings Heath", "Sparkbrook",
+      "Handsworth", "Erdington", "Sutton Coldfield", "Solihull", "Harborne",
+      "Bournville", "Acocks Green",
+    ],
   },
   // ── MAKING PROGRESS CITIES ──
   {
@@ -141,7 +152,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 250, foundingConsAllocated: 98,
     description: "Leeds is launching its UK Hub Activation with growing business and community participation.",
     featured: false, featuredPriority: 0,
-    lat: 53.8008, lng: -1.5491, hasBoroughs: false,
+    lat: 53.8008, lng: -1.5491, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Headingley", "Chapel Allerton", "Roundhay", "Morley",
+      "Pudsey", "Wetherby", "Otley", "Armley", "Hunslet",
+    ],
   },
   {
     name: "Liverpool", slug: "liverpool", region: "North West",
@@ -151,7 +166,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 200, foundingConsAllocated: 72,
     description: "Liverpool is building its UK Hub Activation with Founding Membership now open.",
     featured: false, featuredPriority: 0,
-    lat: 53.4084, lng: -2.9916, hasBoroughs: false,
+    lat: 53.4084, lng: -2.9916, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Albert Dock", "Bold Street", "Lark Lane", "Allerton",
+      "Woolton", "Childwall", "Crosby", "Waterfront", "Baltic Triangle",
+    ],
   },
   {
     name: "Bristol", slug: "bristol", region: "South West",
@@ -161,7 +180,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 180, foundingConsAllocated: 54,
     description: "Bristol is activating its UK Hub with growing local business participation.",
     featured: false, featuredPriority: 0,
-    lat: 51.4545, lng: -2.5879, hasBoroughs: false,
+    lat: 51.4545, lng: -2.5879, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Clifton", "Harbourside", "Stokes Croft", "Bedminster",
+      "Redland", "Bishopston", "Fishponds", "Southville", "Temple Quarter",
+    ],
   },
   {
     name: "Glasgow", slug: "glasgow", region: "Scotland",
@@ -171,7 +194,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 200, foundingConsAllocated: 64,
     description: "Glasgow is building momentum in its UK Hub Activation programme.",
     featured: false, featuredPriority: 0,
-    lat: 55.8642, lng: -4.2518, hasBoroughs: false,
+    lat: 55.8642, lng: -4.2518, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Merchant City", "West End", "Southside", "Partick",
+      "Finnieston", "Govan", "Shettleston", "Dennistoun", "Woodlands",
+    ],
   },
   {
     name: "Edinburgh", slug: "edinburgh", region: "Scotland",
@@ -181,7 +208,11 @@ const CITY_SEEDS: CitySeed[] = [
     foundingConsumer: 160, foundingConsAllocated: 45,
     description: "Edinburgh is preparing its UK Hub Activation with Founding Membership opening soon.",
     featured: false, featuredPriority: 0,
-    lat: 55.9533, lng: -3.1883, hasBoroughs: false,
+    lat: 55.9533, lng: -3.1883, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Old Town", "New Town", "Leith", "Bruntsfield",
+      "Morningside", "Stockbridge", "Portobello", "Haymarket", "Tollcross",
+    ],
   },
   // ── NEEDS ACTIVATION CITIES ──
   {
@@ -196,13 +227,17 @@ const CITY_SEEDS: CitySeed[] = [
   },
   {
     name: "Sheffield", slug: "sheffield", region: "Yorkshire",
-    status: "NEEDS_ACTIVATION", lifecycle: "IDENTIFIED", activationProgress: 12,
-    fundingTarget: 250_000, fundingRaised: 30_000,
-    foundingBusiness: 60, foundingBizAllocated: 7,
-    foundingConsumer: 120, foundingConsAllocated: 14,
-    description: "Sheffield is in the early stages of UK Hub Activation planning.",
+    status: "MAKING_PROGRESS", lifecycle: "LAUNCHING", activationProgress: 40,
+    fundingTarget: 250_000, fundingRaised: 100_000,
+    foundingBusiness: 60, foundingBizAllocated: 24,
+    foundingConsumer: 120, foundingConsAllocated: 48,
+    description: "Sheffield is building its UK Hub Activation with growing local business participation.",
     featured: false, featuredPriority: 0,
-    lat: 53.3811, lng: -1.4701, hasBoroughs: false,
+    lat: 53.3811, lng: -1.4701, hasBoroughs: true, areaTerminology: "District",
+    boroughs: [
+      "City Centre", "Kelham Island", "Ecclesall", "Nether Green", "Walkley",
+      "Crookes", "Sharrow", "Heeley", "Woodseats", "Dore",
+    ],
   },
   {
     name: "Newcastle", slug: "newcastle", region: "North East",
@@ -308,16 +343,17 @@ function buildCityLocation(seed: CitySeed, index: number): HubLocation {
 function buildBoroughLocation(name: string, slug: string, cityId: string, citySlug: string, index: number): HubLocation {
   const statuses: LocationPublicStatus[] = ["MAKING_PROGRESS", "NEEDS_ACTIVATION", "ACTIVE"];
   const status = statuses[index % 3]!;
+  const cityName = citySlug.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   return {
     id: `borough-${slug}`,
     name,
     slug,
     type: "BOROUGH",
     parentId: cityId,
-    shortDescription: `${name} is a London borough participating in the UK Hub Activation programme.`,
-    description: `${name} is one of 32 London boroughs in the UK Hub Activation programme. Local businesses and residents can participate in campaigns and Founding Membership opportunities.`,
+    shortDescription: `${name} is a local area in ${cityName} participating in the UK Hub Activation programme.`,
+    description: `${name} is one of the local areas in ${cityName} in the UK Hub Activation programme. Local businesses and residents can participate in campaigns and Founding Membership opportunities.`,
     heroHeadline: `${name}`,
-    heroSupportingText: `London Borough — Part of the UK Hub Activation Programme`,
+    heroSupportingText: `Local Area — Part of ${cityName} UK Hub Activation`,
     internalLifecycle: status === "ACTIVE" ? "ACTIVE" : status === "MAKING_PROGRESS" ? "LAUNCHING" : "IDENTIFIED",
     publicStatus: status,
     statusOverride: null,
@@ -333,9 +369,6 @@ function buildBoroughLocation(name: string, slug: string, cityId: string, citySl
     isFeaturedNationally: false,
     featuredPriority: 0,
     fundingTarget: 150_000,
-    // Deterministic demo values (no Math.random): an Active or Making Progress
-    // borough is backed by paid participation, so funding and allocation must
-    // never be zero. Variation comes from the index so boroughs differ.
     fundingRaised: status === "ACTIVE"
       ? 95_000 + ((index * 7_333) % 40_000)
       : status === "MAKING_PROGRESS"
@@ -363,20 +396,83 @@ function buildBoroughLocation(name: string, slug: string, cityId: string, citySl
 const allCities = CITY_SEEDS.map((seed, i) => buildCityLocation(seed, i));
 const allBoroughs: HubLocation[] = [];
 
-// Add London boroughs
-const londonCity = allCities.find(c => c.slug === "london")!;
-const londonSeed = CITY_SEEDS.find(s => s.slug === "london")!;
-if (londonSeed.boroughs) {
-  londonSeed.boroughs.forEach((borough, i) => {
-    const slug = borough.toLowerCase().replace(/\s+and\s+/g, "-").replace(/\s+/g, "-");
-    allBoroughs.push(buildBoroughLocation(borough, slug, londonCity.id, "london", i));
-  });
+// Add boroughs for all cities that have them
+CITY_SEEDS.forEach((seed) => {
+  if (seed.boroughs && seed.boroughs.length > 0) {
+    const city = allCities.find(c => c.slug === seed.slug);
+    if (city) {
+      seed.boroughs.forEach((borough, i) => {
+        const slug = borough.toLowerCase().replace(/\s+and\s+/g, "-").replace(/\s+/g, "-");
+        allBoroughs.push(buildBoroughLocation(borough, slug, city.id, seed.slug, i));
+      });
+    }
+  }
+});
+
+// Build sub-areas for every ACTIVE / MAKING_PROGRESS borough
+const allSubAreas: HubLocation[] = [];
+
+function buildSubAreaLocation(name: string, slug: string, boroughId: string, boroughSlug: string, index: number): HubLocation {
+  const statuses: LocationPublicStatus[] = ["MAKING_PROGRESS", "ACTIVE", "MAKING_PROGRESS"];
+  const status: LocationPublicStatus = statuses[index % 3]!;
+  const boroughName = boroughSlug.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return {
+    id: `subarea-${slug}`,
+    name,
+    slug,
+    type: "LOCAL_AREA",
+    parentId: boroughId,
+    shortDescription: `${name} is a local area in ${boroughName}.`,
+    description: `${name} is one of the local areas in ${boroughName} in the UK Hub Activation programme.`,
+    heroHeadline: name,
+    heroSupportingText: `Local Area — Part of ${boroughName}`,
+    internalLifecycle: status === "ACTIVE" ? "ACTIVE" : "LAUNCHING",
+    publicStatus: status,
+    statusOverride: null,
+    isActive: status === "ACTIVE",
+    isPublic: true,
+    mapVisible: false,
+    latitude: 51.5 + (Math.random() - 0.5) * 0.2,
+    longitude: -0.1 + (Math.random() - 0.5) * 0.2,
+    mapZoomLevel: 14,
+    primaryImage: `https://images.unsplash.com/photo-${["1441986300917-64674bd600d8", "1555396273-367ea4eb4db5", "1472851290388-39f4d448d5d3"][index % 3]}?auto=format&fit=crop&w=800&h=400&q=80`,
+    secondaryImage: null,
+    fullPath: `${boroughSlug}/${slug}`,
+    isFeaturedNationally: false,
+    featuredPriority: 0,
+    fundingTarget: 50_000,
+    fundingRaised: status === "ACTIVE" ? 35_000 + ((index * 3_000) % 15_000) : 15_000 + ((index * 2_000) % 10_000),
+    activationThreshold: 80,
+    foundingBusinessTotal: 15,
+    foundingBusinessAllocated: status === "ACTIVE" ? 10 + (index % 5) : 4 + (index % 4),
+    foundingConsumerTotal: 30,
+    foundingConsumerAllocated: status === "ACTIVE" ? 20 + (index % 8) : 8 + (index % 6),
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
 }
+
+const SUB_AREA_NAMES = [
+  ["Central", "North", "South", "East", "West"],
+  ["Town Centre", "High Street", "Market Area", "Station Quarter", "Riverside"],
+  ["Old Town", "New District", "Green Area", "Park Side", "Bridge End"],
+];
+
+allBoroughs.forEach((borough, bIdx) => {
+  if (borough.publicStatus !== "ACTIVE" && borough.publicStatus !== "MAKING_PROGRESS") return;
+  const nameSet = SUB_AREA_NAMES[bIdx % SUB_AREA_NAMES.length]!;
+  nameSet.forEach((base, i) => {
+    const name = `${base} ${borough.name}`;
+    const slug = `${base.toLowerCase().replace(/\s+/g, "-")}-${borough.slug}`;
+    allSubAreas.push(buildSubAreaLocation(name, slug, borough.id, borough.slug, bIdx * 10 + i));
+  });
+});
 
 export const ALL_LOCATIONS: HubLocation[] = [
   NATIONAL_HUB,
   ...allCities,
   ...allBoroughs,
+  ...allSubAreas,
 ];
 
 // ───────────────────── Location Lookup Helpers ─────────────────────
@@ -510,6 +606,12 @@ export function getAncestors(locationId: string): HubLocation[] {
 
 export function getCities(): HubLocation[] {
   return ALL_LOCATIONS.filter(l => l.type === "CITY");
+}
+
+/** Get the area terminology for a city (e.g. "Borough" for London, "District" for Manchester, "Local Area" default) */
+export function getAreaTerminology(citySlug: string): string {
+  const seed = CITY_SEEDS.find(s => s.slug === citySlug);
+  return seed?.areaTerminology ?? "Local Area";
 }
 
 export function getCitiesByStatus(status: LocationPublicStatus): HubLocation[] {

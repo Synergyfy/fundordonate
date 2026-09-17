@@ -8,10 +8,10 @@
   "scripts": {
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:api": "npm run dev --workspace=apps/api",
-    "dev": "concurrently \"npm run dev:web\" \"npm run dev:api\"",
+    "dev": "node api.js && concurrently \"npm run dev:web\" \"npm run dev:api\"",
     "build:web": "npm run build --workspace=apps/web",
     "build:api": "npm run build --workspace=apps/api",
-    "build": "npm run build:web && npm run build:api",
+    "build": "node api.js && npm run build:web && npm run build:api",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,css,json,md}\"",

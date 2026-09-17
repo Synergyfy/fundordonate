@@ -5,12 +5,13 @@
 
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, MapPin } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { ALL_LOCATIONS } from "@/data/ukHubData";
 import { LocationHierarchyTree } from "@/components/admin/LocationHierarchyTree";
 import { LocationForm } from "@/components/admin/LocationForm";
 import { LOCATION_PUBLIC_STATUS_META } from "@/types/uk-hub";
 import type { LocationPublicStatus } from "@/types/uk-hub";
+import type { LocationFormData } from "@/components/admin/LocationForm";
 
 export function AdminLocationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,7 +27,7 @@ export function AdminLocationsPage() {
     });
   }, [searchQuery, statusFilter]);
 
-  const handleCreate = (data: Record<string, unknown>) => {
+  const handleCreate = (data: LocationFormData) => {
     console.log("Create location:", data);
     setShowCreateForm(false);
     // TODO: API call
@@ -78,7 +79,7 @@ export function AdminLocationsPage() {
           <option value="all">All Statuses</option>
           <option value="ACTIVE">Active</option>
           <option value="MAKING_PROGRESS">Making Progress</option>
-          <option value="NEEDS_ACTIVATION">Needs Activation</option>
+           <option value="NEEDS_ACTIVATION">Inactive</option>
         </select>
         <div className="flex rounded-lg border">
           <button
@@ -142,9 +143,17 @@ export function AdminLocationsPage() {
                       🏢 {l.foundingBusinessAllocated}/{l.foundingBusinessTotal}
                     </td>
                     <td className="px-4 py-3">
-                      <Link to={`/admin/hub-locations/${l.id}`} className="text-primary-600 hover:text-primary-700 text-xs font-medium">
-                        Edit →
-                      </Link>
+                      <div className="flex flex-col gap-1">
+                        <Link to={`/admin/hub-locations/${l.id}`} className="text-primary-600 hover:text-primary-700 text-xs font-medium">
+                          Edit →
+                        </Link>
+                        <Link
+                          to={`/admin/campaigns/new?locationId=${l.id}&hierarchyLevel=${l.type === "CITY" ? "city" : l.type === "BOROUGH" ? "borough" : "high_street"}&locationName=${encodeURIComponent(l.name)}`}
+                          className="text-green-600 hover:text-green-700 text-xs font-medium"
+                        >
+                          + Campaign →
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 );

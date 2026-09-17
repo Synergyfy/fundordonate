@@ -40,7 +40,7 @@ export const LOCATION_TYPE_META: Record<LocationType, { label: string; plural: s
 
 export const LOCATION_PUBLIC_STATUS_META: Record<LocationPublicStatus, { label: string; color: string; bgColor: string; borderColor: string; mapColor: string; description: string }> = {
   NEEDS_ACTIVATION: {
-    label: "Needs Activation",
+     label: "Inactive",
     color: "text-yellow-700",
     bgColor: "bg-yellow-50",
     borderColor: "border-yellow-200",

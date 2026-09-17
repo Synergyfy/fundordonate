@@ -8,10 +8,13 @@ interface Transaction {
   amount: number;
   status: string;
   createdAt: string;
-  campaign: { id: string; title: string; slug: string; featuredImage?: string };
+  campaign: { id: string; title: string; slug: string; featuredImage?: string; hierarchyLevel?: string; location?: string };
   reward?: { title: string; amount: number };
   tributeType?: string;
   tributeTo?: string;
+  contributionType?: string;
+  hierarchyLevel?: string;
+  location?: string;
 }
 
 export function ThankYouPage() {
@@ -191,6 +194,19 @@ export function ThankYouPage() {
                 <span className="text-gray-900">{transaction.reward.title}</span>
               </div>
             )}
+            {(transaction.contributionType || transaction.hierarchyLevel || transaction.campaign.hierarchyLevel) && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Participation</span>
+                <span className="text-gray-900">
+                  {transaction.contributionType === "founding_member" ? "⭐ Founding Member" : "🤝 Backer"}
+                  {transaction.campaign.hierarchyLevel && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      · {transaction.campaign.hierarchyLevel === "national" ? "🇬🇧 National" : transaction.campaign.hierarchyLevel === "city" ? "🏙️ City" : transaction.campaign.hierarchyLevel === "borough" ? "🏘️ Borough" : transaction.campaign.hierarchyLevel === "high_street" ? "🛒 High Street" : "🏢 Business"}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 border-t border-gray-100 pt-4">
@@ -209,6 +225,9 @@ export function ThankYouPage() {
                 <Link to={`/campaigns/${transaction.campaign.slug}`} className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block">
                   {transaction.campaign.title}
                 </Link>
+                {transaction.campaign.location && (
+                  <p className="text-xs text-gray-400">📍 {transaction.campaign.location}</p>
+                )}
               </div>
             </div>
           </div>

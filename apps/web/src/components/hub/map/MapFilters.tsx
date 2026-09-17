@@ -22,7 +22,7 @@ const STATUS_OPTIONS: { value: HubStatus | "all"; label: string; color: string }
   { value: "all", label: "All Statuses", color: "text-gray-600" },
   { value: "active", label: "Active", color: "text-green-600" },
   { value: "making_progress", label: "Making Progress", color: "text-blue-600" },
-  { value: "needs_activation", label: "Needs Activation", color: "text-amber-600" },
+   { value: "needs_activation", label: "Inactive", color: "text-amber-600" },
 ];
 
 const TYPE_OPTIONS: { value: MapFiltersState["type"]; label: string }[] = [

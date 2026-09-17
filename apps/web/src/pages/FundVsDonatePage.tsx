@@ -18,7 +18,7 @@ export default function FundVsDonatePage() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary-50/60 via-white to-secondary-50/30 py-16 md:py-24">
+      <section className="bg-gradient-to-br from-primary-50/60 via-white to-secondary-50/30 py-4 sm:py-6">
         <div className="container-page">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight tracking-tight mb-6">

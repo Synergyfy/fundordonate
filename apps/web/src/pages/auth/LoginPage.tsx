@@ -12,6 +12,8 @@ export default function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const demoLogin = useAuthStore((s) => s.demoLogin);
   const getPostLoginRedirect = useAuthStore((s) => s.getPostLoginRedirect);
+  const user = useAuthStore((s) => s.user);
+  const authStatus = useAuthStore((s) => s.authStatus);
   const sessionError = useAuthStore((s) => s.sessionError);
   const clearSessionError = useAuthStore((s) => s.clearSessionError);
   const centralHubEnabled = useAuthStore((s) => s.centralHubEnabled);
@@ -22,6 +24,7 @@ export default function LoginPage() {
   const location = useLocation();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || undefined;
+  const isLoggedIn = authStatus === "authenticated" && user;
 
   useEffect(() => {
     checkCentralHub();
@@ -80,6 +83,28 @@ export default function LoginPage() {
               </Link>
             </p>
           </div>
+
+          {/* Already logged in banner */}
+          {isLoggedIn && (
+            <div className="rounded-xl bg-primary-50 border border-primary-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-primary-800">
+                    Signed in as {user.firstName || user.username}
+                  </p>
+                  <p className="text-xs text-primary-600 mt-0.5">
+                    {user.userType === "admin" ? "Administrator" : user.userType === "business" ? "Business" : "Member"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate(getPostLoginRedirect(), { replace: true })}
+                  className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
+                >
+                  Continue to Dashboard
+                </button>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {sessionError && (
@@ -188,34 +213,41 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
+            {/* Admin */}
             <button
               onClick={() => handleDemoLogin("admin")}
-              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              <span className="w-2 h-2 rounded-full bg-purple-500" />
-              Admin
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
+              <div className="text-left">
+                <div className="font-semibold text-gray-900">Admin Dashboard</div>
+                <div className="text-xs text-gray-500">Platform management, campaigns, users, analytics</div>
+              </div>
             </button>
+
+            {/* Business Dashboard */}
             <button
-              onClick={() => handleDemoLogin("fundraiser")}
-              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              onClick={() => handleDemoLogin("business")}
+              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              <span className="w-2 h-2 rounded-full bg-primary-500" />
-              Fundraiser
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+              <div className="text-left">
+                <div className="font-semibold text-gray-900">Business Dashboard</div>
+                <div className="text-xs text-gray-500">Campaigns, contributions, leaderboard, rewards</div>
+              </div>
             </button>
+
+            {/* Consumer Dashboard */}
             <button
               onClick={() => handleDemoLogin("donor")}
-              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              <span className="w-2 h-2 rounded-full bg-secondary-500" />
-              Donor
-            </button>
-            <button
-              onClick={() => handleDemoLogin("backer")}
-              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              Backer
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+              <div className="text-left">
+                <div className="font-semibold text-gray-900">Consumer Dashboard</div>
+                <div className="text-xs text-gray-500">Donate, bookmark campaigns, track impact</div>
+              </div>
             </button>
           </div>
 

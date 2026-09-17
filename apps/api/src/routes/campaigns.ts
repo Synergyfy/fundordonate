@@ -30,6 +30,8 @@ campaignsRouter.get("/", optionalAuth, async (req, res, next) => {
       tag: req.query.tag as string,
       campaignTypeId: req.query.campaignTypeId as string,
       seasonId: req.query.seasonId as string,
+      hierarchyLevel: req.query.hierarchyLevel as string,
+      locationId: req.query.locationId as string,
       sortBy: req.query.sortBy as string,
       sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
     });
@@ -366,6 +368,8 @@ campaignsRouter.get("/discover", optionalAuth, async (req, res, next) => {
       sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
       // New filter params
       parentId: req.query.parentId as string,
+      hierarchyLevel: req.query.hierarchyLevel as string,
+      locationId: req.query.locationId as string,
       isEvergreen: req.query.isEvergreen === "true" ? true : req.query.isEvergreen === "false" ? false : undefined,
       isSelfFunding: req.query.isSelfFunding === "true" ? true : req.query.isSelfFunding === "false" ? false : undefined,
       selfFundingLevel: req.query.selfFundingLevel as string,

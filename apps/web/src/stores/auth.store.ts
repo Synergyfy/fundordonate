@@ -53,7 +53,7 @@ interface AuthState {
     password: string;
     firstName?: string;
     lastName?: string;
-    userType?: "donor" | "fundraiser";
+    userType?: "donor" | "fundraiser" | "business" | "consumer";
   }) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
@@ -80,12 +80,10 @@ function resolvePostLoginRoute(user: User): string {
     case "admin":
       return "/admin";
     case "business":
-      // Business users with fundraiser role go to fundraiser dashboard
-      if (user.role === "fundraiser") return "/fundraiser";
       return "/dashboard";
     case "consumer":
     default:
-      return "/dashboard";
+      return "/consumer";
   }
 }
 

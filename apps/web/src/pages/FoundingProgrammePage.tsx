@@ -165,7 +165,7 @@ export default function FoundingProgrammePage() {
 
       {/* ═══════════════ HERO ═══════════════ */}
       <section className={`relative overflow-hidden text-white ${isBusiness ? "bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900" : "bg-gradient-to-br from-green-900 via-green-800 to-green-900"}`}>
-        <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2">
               <span className="text-2xl">{isBusiness ? "🏢" : "👤"}</span>

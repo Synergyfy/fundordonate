@@ -30,7 +30,7 @@ export const authApi = {
     password: string;
     firstName?: string;
     lastName?: string;
-    userType?: "donor" | "fundraiser";
+    userType?: "donor" | "fundraiser" | "business" | "consumer";
   }): Promise<AuthResponse> {
     const res = await api.post("/auth/register", data);
     return res.data.data;
