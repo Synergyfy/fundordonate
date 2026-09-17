@@ -10,7 +10,7 @@ interface MapLegendProps {
 const LEGEND_ITEMS = [
   { color: "#22c55e", label: "Active" },
   { color: "#3b82f6", label: "Making Progress" },
-  { color: "#eab308", label: "Needs Activation" },
+   { color: "#eab308", label: "Inactive" },
 ];
 
 export function MapLegend({ className }: MapLegendProps) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
+import { Store, Users } from "lucide-react";
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -10,7 +11,7 @@ export default function RegisterPage() {
     confirmPassword: "",
     firstName: "",
     lastName: "",
-    userType: "donor" as "donor" | "fundraiser",
+    userType: "consumer" as "business" | "consumer",
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +49,12 @@ export default function RegisterPage() {
     try {
       const { confirmPassword: _, ...registerData } = formData;
       await register(registerData);
-      navigate("/");
+      // Business owners go to onboarding, consumers go to dashboard
+      if (formData.userType === "business") {
+        navigate("/business-owner/onboarding");
+      } else {
+        navigate("/");
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -92,27 +98,34 @@ export default function RegisterPage() {
               <div className="mt-1.5 grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setFormData((p) => ({ ...p, userType: "donor" }))}
+                  onClick={() => setFormData((p) => ({ ...p, userType: "consumer" }))}
                   className={`rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    formData.userType === "donor"
+                    formData.userType === "consumer"
                       ? "border-primary-600 bg-primary-50 text-primary-700"
                       : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  Donate to causes
+                  <Users className="mx-auto h-5 w-5 mb-1" />
+                  Support as a Consumer
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData((p) => ({ ...p, userType: "fundraiser" }))}
+                  onClick={() => setFormData((p) => ({ ...p, userType: "business" }))}
                   className={`rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    formData.userType === "fundraiser"
+                    formData.userType === "business"
                       ? "border-primary-600 bg-primary-50 text-primary-700"
                       : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  Fundraise for a cause
+                  <Store className="mx-auto h-5 w-5 mb-1" />
+                  Register my Business
                 </button>
               </div>
+              {formData.userType === "business" && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Business owners get access to campaign creation, in-store contributions, leaderboards, and rewards.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -261,13 +274,13 @@ export default function RegisterPage() {
       <div className="hidden w-1/2 bg-gradient-to-br from-secondary-600 to-secondary-800 lg:flex lg:items-center lg:justify-center">
         <div className="px-12 text-center">
           <h2 className="text-3xl font-bold text-white">
-            {formData.userType === "fundraiser"
-              ? "Launch your fundraiser in minutes"
+            {formData.userType === "business"
+              ? "Grow your business through community impact"
               : "Discover causes you care about"}
           </h2>
           <p className="mt-4 text-lg text-secondary-100">
-            {formData.userType === "fundraiser"
-              ? "Create your campaign, set your goal, and start sharing with the world."
+            {formData.userType === "business"
+              ? "Create campaigns, track in-store contributions, and earn rewards for supporting your local community."
               : "Browse campaigns, donate securely, and track the impact of your generosity."}
           </p>
         </div>

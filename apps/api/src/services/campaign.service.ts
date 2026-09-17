@@ -41,6 +41,9 @@ interface CreateCampaignInput {
   seasonId?: string;
   // Campaign Hierarchy
   parentId?: string;
+  // Campaign Hierarchy Level
+  hierarchyLevel?: string;
+  locationId?: string;
   // Campaign Context
   location?: string;
   isEvergreen?: boolean;
@@ -69,6 +72,9 @@ interface UpdateCampaignInput {
   tags?: string[];
   // Campaign Hierarchy
   parentId?: string | null;
+  // Campaign Hierarchy Level
+  hierarchyLevel?: string | null;
+  locationId?: string | null;
   // Campaign Context
   location?: string | null;
   isEvergreen?: boolean;
@@ -94,6 +100,8 @@ interface ListCampaignsOptions {
   tag?: string;
   campaignTypeId?: string;
   seasonId?: string;
+  hierarchyLevel?: string;
+  locationId?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   includeDeleted?: boolean;
@@ -243,6 +251,9 @@ export async function createCampaign(
       status: CampaignStatus.DRAFT,
       // Campaign Hierarchy
       parentId: data.parentId,
+      // Campaign Hierarchy Level
+      hierarchyLevel: data.hierarchyLevel,
+      locationId: data.locationId,
       // Campaign Context
       location: data.location,
       isEvergreen: data.isEvergreen || false,
@@ -328,6 +339,8 @@ export async function listCampaigns(options: ListCampaignsOptions) {
     tag,
     campaignTypeId,
     seasonId,
+    hierarchyLevel,
+    locationId,
     sortBy = "createdAt",
     sortOrder = "desc",
     includeDeleted = false,
@@ -353,6 +366,8 @@ export async function listCampaigns(options: ListCampaignsOptions) {
   if (categoryId) where.categoryId = categoryId;
   if (campaignTypeId) where.campaignTypeId = campaignTypeId;
   if (seasonId) where.seasonId = seasonId;
+  if (hierarchyLevel) where.hierarchyLevel = hierarchyLevel;
+  if (locationId) where.locationId = locationId;
 
   // Tag filtering via CampaignTag relation
   if (tag) {
@@ -429,6 +444,9 @@ export async function updateCampaign(
     slug,
     // Campaign Hierarchy
     ...(data.parentId !== undefined && { parentId: data.parentId }),
+    // Campaign Hierarchy Level
+    ...(data.hierarchyLevel !== undefined && { hierarchyLevel: data.hierarchyLevel }),
+    ...(data.locationId !== undefined && { locationId: data.locationId }),
     // Campaign Context
     ...(data.location !== undefined && { location: data.location }),
     ...(data.isEvergreen !== undefined && { isEvergreen: data.isEvergreen }),
