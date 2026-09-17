@@ -8,6 +8,11 @@
 //
 // Do NOT treat these numbers (76 / 32 / 36 / 11) as immutable business logic.
 // They represent the intended national scale and are demo values only.
+//
+// NOTE: This file defines its own HubLocation type for map visualization.
+//       The canonical HubLocation type lives in types/uk-hub.ts and is used
+//       by hierarchy/data components. Use toCanonicalLocation() to convert
+//       from this map type to the canonical type when needed.
 // =============================================================================
 
 import type { DemoCampaign } from "./demo";
@@ -81,7 +86,7 @@ export const HUB_STATUS_META: Record<
     bgClass: "bg-primary-50 border-primary-200",
   },
   needs_activation: {
-    label: "Needs Activation",
+     label: "Inactive",
     color: "#f59e0b",
     dotClass: "bg-amber-500",
     textClass: "text-amber-700",
@@ -183,9 +188,87 @@ export function getDemoCampaignsForLocation(location: HubLocation): DemoCampaign
     return DEMO_CAMPAIGNS.filter((c) => slugs.includes(c.slug));
   }
   const name = location.name.toLowerCase();
-  return DEMO_CAMPAIGNS.filter(
+  const matched = DEMO_CAMPAIGNS.filter(
     (c) => (c.location || "").toLowerCase() === name || (c.category?.name || "").toLowerCase() === name
   );
+  if (matched.length > 0) return matched;
+
+  // Generate demo campaigns for active/in-progress cities without explicit data
+  if (location.status === "active" || location.status === "making_progress") {
+    const seed = location.id.split("").reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+    const campaignCount = location.status === "active" ? 3 : 2;
+    const categories = ["Local Hub", "Business", "Community", "High Street"];
+    const modes: ("donation" | "fund" | "sponsor")[] = ["donation", "fund", "sponsor"];
+    // Category-specific relevant images
+    const categoryImages: Record<string, { featured: string; gallery: string[] }> = {
+      "Local Hub": {
+        featured: "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=800&h=400&fit=crop",
+        gallery: [
+          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&h=400&fit=crop",
+        ],
+      },
+      "Business": {
+        featured: "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=800&h=400&fit=crop",
+        gallery: [
+          "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop",
+        ],
+      },
+      "Community": {
+        featured: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=800&h=400&fit=crop",
+        gallery: [
+          "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1573497620053-ea5300f94f21?w=800&h=400&fit=crop",
+        ],
+      },
+      "High Street": {
+        featured: "https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&h=400&fit=crop",
+        gallery: [
+          "https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&h=400&fit=crop",
+          "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=400&fit=crop",
+        ],
+      },
+    };
+    const campaigns: DemoCampaign[] = [];
+    for (let i = 0; i < campaignCount; i++) {
+      const cSeed = seed + i * 37;
+      const catIdx = Math.abs(cSeed) % categories.length;
+      const modeIdx = Math.abs(cSeed >> 4) % modes.length;
+      const goalAmount = 5000 + (Math.abs(cSeed >> 8) % 20000);
+      const catName = categories[catIdx] || "Local Hub";
+      const mode = modes[modeIdx] || "donation";
+      const fallback = categoryImages["Local Hub"];
+      const images = (categoryImages[catName] ?? fallback)!;
+      campaigns.push({
+        id: `gen-${location.id}-${i}`,
+        slug: `${location.slug}-campaign-${i + 1}`,
+        title: `${catName} Fund for ${location.name}`,
+        shortDescription: `Support the ${catName.toLowerCase()} initiative in ${location.name}. Help build a stronger local community.`,
+        mode,
+        goalAmount,
+        raisedAmount: Math.floor(goalAmount * (0.2 + (Math.abs(cSeed >> 12) % 50) / 100)),
+        deadline: new Date(Date.now() + (30 + (Math.abs(cSeed >> 16) % 60)) * 24 * 60 * 60 * 1000).toISOString(),
+        featuredImage: images.featured,
+        media: [
+          { id: `gen-${location.id}-${i}-1`, type: "image" as const, url: images.featured, alt: `${catName} campaign for ${location.name}` },
+          { id: `gen-${location.id}-${i}-2`, type: "image" as const, url: images.gallery[0]!, alt: `${location.name} local area` },
+          { id: `gen-${location.id}-${i}-3`, type: "image" as const, url: images.gallery[1]!, alt: `Community in ${location.name}` },
+          { id: `gen-${location.id}-${i}-4`, type: "image" as const, url: images.gallery[2]!, alt: `Supporting ${location.name}` },
+        ],
+        category: { name: catName, slug: catName.toLowerCase().replace(/ /g, "-") },
+        author: { firstName: "Local", lastName: "Hub" },
+        location: location.name,
+        tags: ["hub-activation", location.region.toLowerCase()],
+      });
+    }
+    return campaigns;
+  }
+  return [];
 }
 
 // ───────────────────── SEED DATASET — 76 UK Cities + 32 London Boroughs ─────────────────────
@@ -351,5 +434,29 @@ export function hubLatLng(location: HubLocation): { lat: number; lng: number } {
   return {
     lat: 59 - (location.mapY / 100) * 9,
     lng: -8 + (location.mapX / 100) * 10,
+  };
+}
+
+// ───────────────────── Type Bridge ─────────────────────
+// Converts from this map-specific HubLocation to the canonical HubLocation
+// in types/uk-hub.ts. Useful when map data needs to be passed to hierarchy
+// or progress components that expect the canonical type.
+
+import type { HubLocation as CanonicalHubLocation } from "@/types/uk-hub";
+
+export function toCanonicalLocation(loc: HubLocation): Partial<CanonicalHubLocation> {
+  return {
+    id: loc.id,
+    name: loc.name,
+    slug: loc.slug,
+    shortDescription: loc.shortDescription,
+    publicStatus: loc.status === "active" ? "ACTIVE" : loc.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION",
+    internalLifecycle: loc.status === "active" ? "ACTIVE" : loc.status === "making_progress" ? "ACTIVATING" : "IDENTIFIED",
+    isActive: loc.status === "active",
+    isPublic: true,
+    mapVisible: true,
+    isFeaturedNationally: false,
+    primaryImage: loc.imageOne,
+    secondaryImage: loc.imageTwo,
   };
 }

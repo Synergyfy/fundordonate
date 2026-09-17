@@ -112,21 +112,23 @@ export function StepPreview({ formData }: Props) {
               <div key={reward.id} className="rounded-lg border border-gray-200 p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-xs text-gray-500">Tier {index + 1}</span>
+                    <span className="text-xs text-gray-500">Reward {index + 1}</span>
                     <h4 className="font-medium text-gray-900">{reward.title || "Untitled"}</h4>
                     {reward.description && (
                       <p className="mt-1 text-sm text-gray-600">{reward.description}</p>
                     )}
                   </div>
-                  <span className="text-lg font-bold text-primary-600">
-                    £{parseInt(reward.amount || "0").toLocaleString()}+
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                    {reward.triggerConfig.mode === "min" && `${reward.triggerConfig.min}+`}
+                    {reward.triggerConfig.mode === "range" && `${reward.triggerConfig.min}–${reward.triggerConfig.max}`}
+                    {reward.triggerConfig.mode === "exact" && `= ${reward.triggerConfig.exact}`}
                   </span>
                 </div>
                 <div className="mt-3 flex gap-4 text-xs text-gray-500">
-                  {reward.deliveryDate && (
-                    <span>Est. delivery: {new Date(reward.deliveryDate).toLocaleDateString()}</span>
-                  )}
-                  {reward.limit && <span>Limit: {reward.limit}</span>}
+                  {reward.quantityType === "limited" && reward.quantityLimit && <span>Limit: {reward.quantityLimit}</span>}
+                  {reward.rewardType && <span className="capitalize">{reward.rewardType}</span>}
+                  {reward.fulfilmentType && <span>Fulfilment: {reward.fulfilmentType}</span>}
+                  {reward.items.length > 0 && <span>{reward.items.length} item(s)</span>}
                 </div>
               </div>
             ))}

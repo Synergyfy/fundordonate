@@ -21,7 +21,7 @@ const STATUS_OPTIONS: { value: HubStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "making_progress", label: "Making Progress" },
-  { value: "needs_activation", label: "Needs Activation" },
+   { value: "needs_activation", label: "Inactive" },
 ];
 
 function Section({ children, className = "", id }: { children: React.ReactNode; className?: string; id?: string }) {
@@ -75,7 +75,7 @@ export default function UKHubActivationPage() {
   return (
     <>
       {/* ── HERO ── */}
-      <section className="bg-gradient-to-br from-primary-700 via-primary-800 to-secondary-700 text-white py-14 md:py-20">
+      <section className="bg-gradient-to-br from-primary-700 via-primary-800 to-secondary-700 text-white py-4 md:py-6">
         <div className="container-page">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight mb-5">

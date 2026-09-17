@@ -3,8 +3,9 @@
 // Dedicated page for Business Founding Member opportunities.
 // =============================================================================
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   getNationalHubSummary, getCitiesByStatus, getCities,
   formatCurrency,
@@ -14,10 +15,12 @@ import {
   HUB_LOCATIONS, HUB_STATUS_META, getDemoCampaignsForLocation,
   type HubLocation as MapHubLocation, type HubStatus,
 } from "@/data/hubActivation";
+import { seasonApi, type Season } from "@/services/season.service";
 import { ProgressRing } from "@/components/hub/ProgressRing";
 import { LocationStatusBadge } from "@/components/hub/HubStatusBadge";
 import { UkMap } from "@/components/hub/UkMap";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { MapPin, Calendar, Clock } from "lucide-react";
 
 // ───────────────────── Helpers ─────────────────────
 
@@ -32,14 +35,148 @@ function safePct(v: unknown, t: unknown): number {
   return Math.min(Math.round((n / d) * 100), 100);
 }
 
+// ───────────────────── Countdown Hook ─────────────────────
+
+function useCountdown(targetDate: string) {
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    const target = new Date(targetDate).getTime();
+    const tick = () => {
+      const now = Date.now();
+      const diff = Math.max(0, target - now);
+      setTimeLeft({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((diff / (1000 * 60)) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      });
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+
+  return timeLeft;
+}
+
+// ───────────────────── Season Banner ─────────────────────
+
+function SeasonBanner({ season }: { season: Season | null }) {
+  const countdown = useCountdown(season?.endDate || new Date().toISOString());
+  const fmtDate = (d: string) => {
+    const date = new Date(d);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = date.toLocaleString("en-GB", { month: "short" });
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+  const startDate = season ? fmtDate(season.startDate) : "";
+  const endDate = season ? fmtDate(season.endDate) : "";
+  const now = new Date();
+  const end = season ? new Date(season.endDate) : new Date();
+  const isActive = season?.status === "ACTIVE" && end > now;
+
+  if (!season) return null;
+
+  return (
+    <div className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 p-4 text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar className="h-4 w-4 text-blue-200" />
+            <span className="text-sm font-bold">{season.name}</span>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold">{season.status}</span>
+          </div>
+          <div className="text-xs text-blue-200">
+            {startDate} — {endDate}
+          </div>
+        </div>
+        {isActive && (
+          <div className="flex items-center gap-3">
+            <Clock className="h-4 w-4 text-blue-200" />
+            <div className="flex gap-2">
+              {[
+                { value: countdown.days, label: "Days" },
+                { value: countdown.hours, label: "Hrs" },
+                { value: countdown.minutes, label: "Min" },
+                { value: countdown.seconds, label: "Sec" },
+              ].map((item) => (
+                <div key={item.label} className="text-center">
+                  <div className="rounded-lg bg-white/20 px-2 py-1 text-sm font-bold tabular-nums min-w-[36px]">
+                    {String(item.value).padStart(2, "0")}
+                  </div>
+                  <div className="text-[9px] text-blue-200 mt-0.5">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ───────────────────── Data ─────────────────────
 
 const STATUS_TABS: { value: HubStatus | "all"; label: string; tooltip: string; color: string }[] = [
   { value: "all", label: "All", tooltip: "Show every city.", color: "#6b7280" },
   { value: "active", label: "Active", tooltip: "Cities with active business founding programmes.", color: "#22c55e" },
   { value: "making_progress", label: "Making Progress", tooltip: "Cities where business founding is growing.", color: "#3b82f6" },
-  { value: "needs_activation", label: "Needs Activation", tooltip: "Cities where business founding will open soon.", color: "#eab308" },
+   { value: "needs_activation", label: "Inactive", tooltip: "Cities where business founding will open soon.", color: "#eab308" },
 ];
+
+// Demo hierarchy data: City > Borough > High Street
+const LOCATION_HIERARCHY: Record<string, { name: string; boroughs: Record<string, { name: string; highStreets: string[] }> }> = {
+  london: {
+    name: "London",
+    boroughs: {
+      camden: { name: "Camden", highStreets: ["Camden High Street", "Chalk Farm Road", "Judd Street"] },
+      westminster: { name: "Westminster", highStreets: ["Oxford Street", "Regent Street", "Victoria Street"] },
+      islington: { name: "Islington", highStreets: ["Upper Street", "Angel Central", "Canonbury Road"] },
+    },
+  },
+  manchester: {
+    name: "Manchester",
+    boroughs: {
+      "city-centre": { name: "City Centre", highStreets: ["Market Street", "Deansgate", "Oldham Street"] },
+      salem: { name: "Salford", highStreets: ["Chapel Street", "Broad Street", "Ordsall Lane"] },
+      stockport: { name: "Stockport", highStreets: ["Merseyway", "Edgeley Road", "Great Portwood Street"] },
+    },
+  },
+  birmingham: {
+    name: "Birmingham",
+    boroughs: {
+      "city-centre": { name: "City Centre", highStreets: ["New Street", "High Street", "Corporation Street"] },
+      edgbaston: { name: "Edgbaston", highStreets: ["Harborne High Street", "Bristol Road"] },
+      solihull: { name: "Solihull", highStreets: ["High Street", "Stratford Road"] },
+    },
+  },
+  leeds: {
+    name: "Leeds",
+    boroughs: {
+      "city-centre": { name: "City Centre", highStreets: ["Briggate", "Commercial Street", "Headrow"] },
+      headingley: { name: "Headingley", highStreets: ["Otley Road", "North Lane"] },
+      horsforth: { name: "Horsforth", highStreets: ["Town Street", "New Road Side"] },
+    },
+  },
+  liverpool: {
+    name: "Liverpool",
+    boroughs: {
+      "city-centre": { name: "City Centre", highStreets: ["Church Street", "Lord Street", "Strand"] },
+      allerton: { name: "Allerton", highStreets: ["Allerton Road", "Hunters Cross"] },
+      woolton: { name: "Woolton", highStreets: ["Woolton Street", "Allerton Road"] },
+    },
+  },
+  bristol: {
+    name: "Bristol",
+    boroughs: {
+      "city-centre": { name: "City Centre", highStreets: ["Park Street", "Corn Street", "Broadmead"] },
+      clifton: { name: "Clifton", highStreets: ["Queens Road", "Gloucester Road"] },
+      bedminster: { name: "Bedminster", highStreets: ["East Street", "North Street"] },
+    },
+  },
+};
 
 const BUSINESS_BENEFITS = [
   { icon: "🚀", title: "Early Access", desc: "Be first to access new city hub features, campaigns and opportunities before public launch." },
@@ -65,7 +202,7 @@ const ACTIVATION_LIFECYCLE = [
 
 // ───────────────────── City Panel ─────────────────────
 
-function BusinessCityPanel({ location, onClose }: { location: MapHubLocation; onClose: () => void }) {
+function BusinessCityPanel({ location, onClose, season }: { location: MapHubLocation; onClose: () => void; season: Season | null }) {
   const meta = HUB_STATUS_META[location.status];
   const campaigns = getDemoCampaignsForLocation(location);
   const fin = resolveLocationFinancials(location.slug, location.name, location.type, location.status, location.activationProgress);
@@ -77,21 +214,38 @@ function BusinessCityPanel({ location, onClose }: { location: MapHubLocation; on
   const bizRemaining = Math.max(0, bizTotal - bizAllocated);
   const lifecycle = fin.internalLifecycle;
   const lifecycleMeta = ACTIVATION_LIFECYCLE.find(s => s.stage.toLowerCase() === lifecycle.toLowerCase());
+  const countdown = useCountdown(season?.endDate || new Date().toISOString());
+  const isActive = season?.status === "ACTIVE" && new Date(season.endDate) > new Date();
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-5 py-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">{location.status === "active" ? "🟢" : location.status === "making_progress" ? "🔵" : "🟡"}</span>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{location.name}</h2>
-            <div className="flex items-center gap-2">
-              <LocationStatusBadge status={location.status === "active" ? "ACTIVE" : location.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"} />
-              <span className="text-xs text-gray-400">{lifecycleMeta?.stage || lifecycle}</span>
+      <div className="sticky top-0 z-10 border-b bg-white px-5 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{location.status === "active" ? "🟢" : location.status === "making_progress" ? "🔵" : "🟡"}</span>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">{location.name}</h2>
+              <div className="flex items-center gap-2">
+                <LocationStatusBadge status={location.status === "active" ? "ACTIVE" : location.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"} />
+                <span className="text-xs text-gray-400">{lifecycleMeta?.stage || lifecycle}</span>
+              </div>
             </div>
           </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">✕</button>
         </div>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">✕</button>
+        {/* Season Countdown in City Panel */}
+        {season && isActive && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+            <Clock className="h-3.5 w-3.5 text-blue-600" />
+            <span className="text-xs font-medium text-blue-700">{season.name}</span>
+            <span className="text-[10px] text-blue-500">ends in</span>
+            <div className="flex gap-1">
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 tabular-nums">{countdown.days}d</span>
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 tabular-nums">{countdown.hours}h</span>
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 tabular-nums">{countdown.minutes}m</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 p-5 space-y-4">
@@ -177,6 +331,44 @@ function BusinessCityPanel({ location, onClose }: { location: MapHubLocation; on
           </div>
         )}
 
+        {/* Location Hierarchy Drill-Down */}
+        {LOCATION_HIERARCHY[location.slug] && (() => {
+          const hierarchy = LOCATION_HIERARCHY[location.slug];
+          if (!hierarchy) return null;
+          return (
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 mb-2">Location Hierarchy</h3>
+            <div className="rounded-xl border bg-gray-50 p-3">
+              {Object.entries(hierarchy.boroughs).map(([boroughId, borough]) => (
+                <div key={boroughId} className="mb-2 last:mb-0">
+                  <Link
+                    to={`/uk-hub-activation/${location.slug}/${boroughId}`}
+                    className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors"
+                  >
+                    <MapPin className="h-3 w-3 text-gray-400" />
+                    {borough.name}
+                  </Link>
+                  {borough.highStreets.length > 0 && (
+                    <div className="ml-5 mt-1 space-y-0.5">
+                      {borough.highStreets.map((hs) => (
+                        <Link
+                          key={hs}
+                          to={`/uk-hub-activation/${location.slug}/${boroughId}/${hs.toLowerCase().replace(/\s+/g, "-")}`}
+                          className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                        >
+                          <span className="text-gray-300">├─</span>
+                          {hs}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          );
+        })()}
+
         {location.communities && <p className="text-xs text-gray-400">📍 {location.communities}</p>}
       </div>
 
@@ -199,7 +391,7 @@ function BusinessCityPanel({ location, onClose }: { location: MapHubLocation; on
 function MapLegend() {
   return (
     <div className="absolute bottom-3 left-3 z-10 flex items-center gap-4 rounded-lg border bg-white px-3 py-2 text-xs text-gray-600 shadow-sm">
-      {[{ color: "#22c55e", label: "Active" }, { color: "#3b82f6", label: "Making Progress" }, { color: "#eab308", label: "Needs Activation" }].map(item => (
+       {[{ color: "#22c55e", label: "Active" }, { color: "#3b82f6", label: "Making Progress" }, { color: "#eab308", label: "Inactive" }].map(item => (
         <div key={item.label} className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
           <span>{item.label}</span>
@@ -216,6 +408,12 @@ export default function BusinessHubPage() {
   const allCities = getCities();
   const [activeTab, setActiveTab] = useState<HubStatus | "all">("all");
   const [selectedMapSlug, setSelectedMapSlug] = useState<string | null>(null);
+
+  const { data: currentSeason } = useQuery({
+    queryKey: ["currentSeason"],
+    queryFn: () => seasonApi.getCurrent(),
+    placeholderData: null,
+  });
 
   const selectedCity = useMemo(
     () => (selectedMapSlug ? HUB_LOCATIONS.find((l) => l.slug === selectedMapSlug) ?? null : null),
@@ -239,7 +437,7 @@ export default function BusinessHubPage() {
       {/* ═══════════════ HERO ═══════════════ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 text-white">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1920&h=800&q=80')] bg-cover bg-center opacity-20" />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <p className="text-sm font-medium uppercase tracking-wider text-blue-300">UK Hub Activation Programme</p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Business Founding Member Programme</h1>
@@ -250,6 +448,11 @@ export default function BusinessHubPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* ═══════════════ SEASON BANNER ═══════════════ */}
+      <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+        <SeasonBanner season={currentSeason ?? null} />
       </section>
 
       {/* ═══════════════ STATS ═══════════════ */}
@@ -331,7 +534,7 @@ export default function BusinessHubPage() {
           <div className="w-full lg:w-[380px] flex-shrink-0">
             {selectedCity ? (
               <div className="overflow-hidden rounded-xl border bg-white shadow-sm" style={{ height: "60vh", minHeight: 400 }}>
-                <BusinessCityPanel location={selectedCity} onClose={() => setSelectedMapSlug(null)} />
+                <BusinessCityPanel location={selectedCity} onClose={() => setSelectedMapSlug(null)} season={currentSeason ?? null} />
               </div>
             ) : (
               <div className="flex h-[60vh] min-h-[400px] items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white">

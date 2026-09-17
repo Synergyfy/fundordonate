@@ -34,6 +34,17 @@ export const DEMO_USERS: Record<string, DemoUser> = {
     userType: "admin",
     emailVerified: true,
   },
+  business: {
+    id: "demo-business-001",
+    email: "sarah.johnson@demo.fundordonate",
+    username: "sarah_johnson",
+    firstName: "Sarah",
+    lastName: "Johnson",
+    role: "fundraiser",
+    userType: "business",
+    businessId: "demo-biz-001",
+    emailVerified: true,
+  },
   fundraiser: {
     id: "demo-fundraiser-001",
     email: "james.hartley@demo.fundordonate",

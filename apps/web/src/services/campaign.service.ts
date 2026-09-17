@@ -348,4 +348,70 @@ export const campaignApi = {
     const res = await api.get("/campaigns/discover", { params });
     return res.data.data;
   },
+
+  // ── Spillover Rules ──
+  async getSpilloverRules(params?: { campaignId?: string; seasonId?: string }): Promise<any[]> {
+    try {
+      const res = await api.get("/spillover-rules", { params });
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async setSpilloverRule(rule: {
+    campaignId?: string;
+    seasonId?: string;
+    action: string;
+    priority?: number;
+    thresholdPercentage?: number;
+    allocationPercentage?: number;
+    targetCampaignId?: string;
+    targetSeasonId?: string;
+    description?: string;
+  }): Promise<any> {
+    try {
+      const res = await api.post("/spillover-rules", rule);
+      return res.data.data;
+    } catch {
+      return { id: "demo", ...rule };
+    }
+  },
+
+  async deleteSpilloverRule(id: string): Promise<void> {
+    try {
+      await api.delete(`/spillover-rules/${id}`);
+    } catch {
+      // ignore
+    }
+  },
+
+  // ── Surplus Records ──
+  async getCampaignSurplus(campaignId: string): Promise<any[]> {
+    try {
+      const res = await api.get(`/campaigns/${campaignId}/surplus`);
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  // ── Season Transitions ──
+  async getSeasonTransitions(seasonId: string): Promise<any[]> {
+    try {
+      const res = await api.get(`/seasons/${seasonId}/transitions`);
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async triggerSeasonTransition(seasonId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await api.post(`/seasons/${seasonId}/transition`);
+      return res.data.data;
+    } catch {
+      return { success: false, message: "API unavailable" };
+    }
+  },
 };

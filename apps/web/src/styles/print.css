@@ -1,0 +1,122 @@
+/* =============================================================================
+   Print Styles
+   Optimized for printing receipts, campaign details, and reports.
+   ============================================================================= */
+
+@media print {
+  /* Hide non-essential elements */
+  nav,
+  footer,
+  .no-print,
+  button,
+  [role="navigation"],
+  [role="banner"] {
+    display: none !important;
+  }
+
+  /* Reset body */
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+    background: #fff;
+  }
+
+  /* Links */
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+
+  /* Images */
+  img {
+    max-width: 100% !important;
+  }
+
+  /* Page breaks */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* Campaign card for print */
+  .campaign-card-print {
+    border: 1px solid #ccc;
+    padding: 20px;
+    margin-bottom: 20px;
+    page-break-inside: avoid;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    border: 1px solid #ccc;
+    height: 20px;
+    position: relative;
+  }
+
+  .progress-bar-fill {
+    background: #333 !important;
+    height: 100%;
+  }
+
+  /* Receipt styles */
+  .receipt {
+    max-width: 400px;
+    margin: 0 auto;
+    font-family: monospace;
+  }
+
+  .receipt-header {
+    text-align: center;
+    border-bottom: 2px dashed #000;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+
+  .receipt-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+  }
+
+  .receipt-total {
+    border-top: 2px solid #000;
+    margin-top: 10px;
+    padding-top: 10px;
+    font-weight: bold;
+  }
+
+  /* Table styles */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+  }
+
+  th {
+    background: #f5f5f5 !important;
+    font-weight: bold;
+  }
+
+  /* Stats */
+  .stat-print {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px dotted #ccc;
+  }
+}

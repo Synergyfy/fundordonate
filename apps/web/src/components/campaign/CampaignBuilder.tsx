@@ -6,6 +6,7 @@ import { StepGoalDuration } from "./steps/StepGoalDuration";
 import { StepRewards } from "./steps/StepRewards";
 import { StepAdditional } from "./steps/StepAdditional";
 import { StepPreview } from "./steps/StepPreview";
+import type { RewardFormData as RewardManagerFormData } from "./RewardManager";
 
 export interface CampaignFormData {
   // Step 1 - Basic Info
@@ -26,23 +27,21 @@ export interface CampaignFormData {
   platformFee: string;
 
   // Step 3 - Rewards
-  rewards: RewardFormData[];
+  rewards: RewardManagerFormData[];
 
   // Step 4 - Additional
   collaboratorIds: string[];
   commentSettings: "everyone" | "backers" | "disabled";
   faqs: FaqFormData[];
   socialSharing: boolean;
+
+  // Campaign Hierarchy
+  hierarchyLevel?: string | null;
+  locationId?: string | null;
+  locationName?: string;
 }
 
-export interface RewardFormData {
-  id: string;
-  title: string;
-  description: string;
-  amount: string;
-  deliveryDate: string;
-  limit: string;
-}
+export type { RewardManagerFormData as RewardFormData };
 
 export interface FaqFormData {
   id: string;
@@ -304,5 +303,7 @@ function buildPayload(formData: CampaignFormData) {
     deadline: formData.deadline,
     mode: formData.mode,
     categoryId: formData.categoryId || undefined,
+    hierarchyLevel: formData.hierarchyLevel || undefined,
+    locationId: formData.locationId || undefined,
   };
 }

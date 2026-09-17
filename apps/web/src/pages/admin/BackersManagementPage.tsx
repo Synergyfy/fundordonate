@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { backerApi } from "@/services/backer.service";
 import { BackerBadge, type BackerBadgeTier } from "@/components/hub/BackerBadge";
 import { ALL_LOCATIONS } from "@/data/ukHubData";
 
@@ -77,7 +79,30 @@ export function BackersManagementPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<BackerRecord | null>(null);
 
+  const { data: apiData } = useQuery({
+    queryKey: ["admin-backers", tierFilter, search],
+    queryFn: () => backerApi.getBackers({ page: 1, limit: 20, tier: tierFilter || undefined, search: search || undefined }),
+    placeholderData: { backers: [], total: 0, totalPages: 0 },
+  });
+
   const filtered = useMemo(() => {
+    // Use API data if available, otherwise fall back to demo
+    if (apiData && apiData.backers.length > 0) {
+      return apiData.backers.map((b) => ({
+        id: b.id,
+        firstName: "Backer",
+        lastName: "",
+        email: "",
+        tier: (b.statusType || "BACKER") as BackerBadgeTier,
+        cityHub: b.locationName || "N/A",
+        funnelCode: `UKH-${b.id.slice(-6)}`,
+        totalContributed: 0,
+        contributionsCount: 0,
+        badges: [],
+        joinedAt: b.grantedAt,
+      }));
+    }
+    // Demo fallback
     let list = ALL_BACKERS;
     if (tierFilter) list = list.filter((b) => b.tier === tierFilter);
     if (search) {
@@ -91,7 +116,7 @@ export function BackersManagementPage() {
       );
     }
     return list;
-  }, [tierFilter, search]);
+  }, [apiData, tierFilter, search]);
 
   const tierCounts = useMemo(() => {
     const c: Record<string, number> = { BACKER: 0, CITY: 0, NATIONAL: 0 };
