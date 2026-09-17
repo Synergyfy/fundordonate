@@ -38,7 +38,7 @@ const STATUS_TABS: { value: HubStatus | "all"; label: string; tooltip: string; c
   { value: "all", label: "All", tooltip: "Show every city.", color: "#6b7280" },
   { value: "active", label: "Active", tooltip: "Cities with active consumer founding programmes.", color: "#22c55e" },
   { value: "making_progress", label: "Making Progress", tooltip: "Cities where consumer founding is growing.", color: "#3b82f6" },
-  { value: "needs_activation", label: "Needs Activation", tooltip: "Cities where consumer founding will open soon.", color: "#eab308" },
+   { value: "needs_activation", label: "Inactive", tooltip: "Cities where consumer founding will open soon.", color: "#eab308" },
 ];
 
 const CONSUMER_BENEFITS = [
@@ -210,7 +210,7 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
 function MapLegend() {
   return (
     <div className="absolute bottom-3 left-3 z-10 flex items-center gap-4 rounded-lg border bg-white px-3 py-2 text-xs text-gray-600 shadow-sm">
-      {[{ color: "#22c55e", label: "Active" }, { color: "#3b82f6", label: "Making Progress" }, { color: "#eab308", label: "Needs Activation" }].map(item => (
+       {[{ color: "#22c55e", label: "Active" }, { color: "#3b82f6", label: "Making Progress" }, { color: "#eab308", label: "Inactive" }].map(item => (
         <div key={item.label} className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
           <span>{item.label}</span>
@@ -250,7 +250,7 @@ export default function ConsumerHubPage() {
       {/* ═══════════════ HERO ═══════════════ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-green-900 via-green-800 to-green-900 text-white">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=1920&h=800&q=80')] bg-cover bg-center opacity-20" />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <p className="text-sm font-medium uppercase tracking-wider text-green-300">UK Hub Activation Programme</p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Consumer Founding Member Programme</h1>

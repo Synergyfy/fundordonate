@@ -12,6 +12,14 @@ interface SupporterItem {
   user?: { id: string; firstName?: string; avatar?: string; username?: string };
   reward?: { title: string; amount: number };
   notes?: string;
+  /** Backer tier if user has backer status */
+  backerTier?: string;
+  /** Whether user is a founding member */
+  isFoundingMember?: boolean;
+  /** Whether user is an original founding member */
+  isOriginalFounding?: boolean;
+  /** Contribution type: backer or founding_member */
+  contributionType?: string;
 }
 
 interface Props {
@@ -114,6 +122,21 @@ export function SupporterList({ campaignId, mode }: Props) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-900 truncate">{name}</span>
+                  {s.isOriginalFounding && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+                      ⭐ Original
+                    </span>
+                  )}
+                  {s.isFoundingMember && !s.isOriginalFounding && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold text-green-700">
+                      {s.contributionType === "founding_member" ? "⭐" : "🤝"} Founding
+                    </span>
+                  )}
+                  {s.backerTier && s.backerTier !== "BACKER" && !s.isFoundingMember && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-700">
+                      {s.backerTier === "NATIONAL" ? "🇬🇧" : "🏙️"} {s.backerTier}
+                    </span>
+                  )}
                   {s.type === "pledge" && s.reward && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                       <Gift className="h-3 w-3" />

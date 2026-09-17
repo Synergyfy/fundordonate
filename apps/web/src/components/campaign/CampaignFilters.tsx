@@ -15,6 +15,8 @@ export interface CampaignFilters {
   evergreen: string;
   campaignType: string;
   season: string;
+  hierarchyLevel: string;
+  audience: string;
 }
 
 interface Props {
@@ -79,10 +81,27 @@ const CAMPAIGN_TYPE_OPTIONS = [
 
 const SEASON_OPTIONS = [
   { value: "", label: "All Seasons" },
-  { value: "spring", label: "Spring" },
-  { value: "summer", label: "Summer" },
-  { value: "autumn", label: "Autumn" },
-  { value: "winter", label: "Winter" },
+  { value: "spring", label: "🌸 Spring" },
+  { value: "summer", label: "☀️ Summer" },
+  { value: "autumn", label: "🍂 Autumn" },
+  { value: "winter", label: "❄️ Winter" },
+  { value: "evergreen", label: "🌿 Evergreen" },
+];
+
+const HIERARCHY_LEVEL_OPTIONS = [
+  { value: "", label: "All Levels", icon: "" },
+  { value: "national", label: "National", icon: "🇬🇧" },
+  { value: "city", label: "City", icon: "🏙️" },
+  { value: "borough", label: "Borough", icon: "🏘️" },
+  { value: "high_street", label: "High Street", icon: "🛒" },
+  { value: "business", label: "Business", icon: "🏢" },
+];
+
+const AUDIENCE_OPTIONS = [
+  { value: "", label: "All Audiences" },
+  { value: "consumers", label: "Consumers" },
+  { value: "business_owners", label: "Business Owners" },
+  { value: "both", label: "Both" },
 ];
 
 export function CampaignFilters({ filters, onChange, categories }: Props) {
@@ -103,6 +122,8 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
     filters.evergreen,
     filters.campaignType,
     filters.season,
+    filters.hierarchyLevel,
+    filters.audience,
   ].filter(Boolean).length;
 
   const clearAll = () => {
@@ -119,6 +140,8 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
       evergreen: "",
       campaignType: "",
       season: "",
+      hierarchyLevel: "",
+      audience: "",
     });
   };
 
@@ -277,6 +300,18 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
               onRemove={() => update("season", "")}
             />
           )}
+          {filters.hierarchyLevel && (
+            <FilterChip
+              label={HIERARCHY_LEVEL_OPTIONS.find((l) => l.value === filters.hierarchyLevel)?.label || filters.hierarchyLevel}
+              onRemove={() => update("hierarchyLevel", "")}
+            />
+          )}
+          {filters.audience && (
+            <FilterChip
+              label={AUDIENCE_OPTIONS.find((a) => a.value === filters.audience)?.label || filters.audience}
+              onRemove={() => update("audience", "")}
+            />
+          )}
           <button
             onClick={clearAll}
             className="text-xs font-medium text-primary-600 hover:text-primary-700 ml-1"
@@ -430,6 +465,38 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
               >
                 {SEASON_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Hierarchy Level */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Hierarchy Level</label>
+              <select
+                value={filters.hierarchyLevel}
+                onChange={(e) => update("hierarchyLevel", e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
+              >
+                {HIERARCHY_LEVEL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.icon ? `${opt.icon} ${opt.label}` : opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Audience */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Audience</label>
+              <select
+                value={filters.audience}
+                onChange={(e) => update("audience", e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
+              >
+                {AUDIENCE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>

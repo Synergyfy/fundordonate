@@ -12,7 +12,7 @@ export function ActivationOverview() {
     { label: "Cities", value: summary.totalCities, sublabel: "in programme" },
     { label: "Active", value: summary.active, sublabel: "cities active" },
     { label: "Making Progress", value: summary.makingProgress, sublabel: "cities progressing" },
-    { label: "Needs Activation", value: summary.needsActivation, sublabel: "cities identified" },
+     { label: "Inactive", value: summary.needsActivation, sublabel: "cities identified" },
   ];
 
   return (

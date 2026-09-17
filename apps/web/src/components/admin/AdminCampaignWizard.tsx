@@ -8,17 +8,14 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminApi } from "@/services/admin.service";
 import { getSplitDestinations } from "@/data/ukHubData";
+import {
+  RewardManager,
+  RewardFormData,
+} from "@/components/campaign/RewardManager";
 
 // ───────────────────── Types ─────────────────────
 
-interface RewardRow {
-  id: string;
-  title: string;
-  description: string;
-  amount: string;
-  deliveryDate: string;
-  limit: string;
-}
+type RewardRow = RewardFormData;
 
 interface FaqRow {
   id: string;
@@ -45,6 +42,8 @@ interface CampaignFormData {
   videoUrl: string;
   // Step 4 — Location & Season
   locationSlug: string;
+  locationId: string;
+  hierarchyLevel: "" | "national" | "city" | "borough" | "high_street" | "business";
   season: "" | "spring" | "summer" | "autumn" | "winter" | "evergreen";
   // Step 5 — Campaign Type & Hierarchy
   campaignType: string;
@@ -63,6 +62,7 @@ interface CampaignFormData {
   participationTypes: string[];
   // Step 8 — Rewards
   rewards: RewardRow[];
+  qualificationMode: "highest" | "cumulative";
   // Step 9 — Settings
   commentSettings: "everyone" | "backers" | "disabled";
   socialSharing: boolean;
@@ -75,12 +75,13 @@ const INITIAL_FORM: CampaignFormData = {
   mode: "donation", categoryId: "", tags: [],
   goalAmount: "", currency: "GBP", deadline: "", platformFee: "0", isEvergreen: false,
   featuredImagePreview: "", videoUrl: "",
-  locationSlug: "", season: "",
+  locationSlug: "", locationId: "", hierarchyLevel: "", season: "",
   campaignType: "", parentCampaignId: "", isOpportunity: false,
   isSelfFunding: false, selfFundingLevel: "", ownerContribution: "", campaignTarget: "",
   isFeatured: false, isVisible: true, backerTiersEnabled: false, recurringEnabled: false,
   participationTypes: [],
   rewards: [],
+  qualificationMode: "highest",
   commentSettings: "everyone", socialSharing: true, faqs: [], status: "draft",
 };
 
@@ -120,7 +121,14 @@ const SELF_FUNDING_LEVELS = [
 
 const PARTICIPATION_OPTIONS = ["donation", "fund", "sponsor"];
 
-let rewardCounter = 0;
+const HIERARCHY_LEVELS = [
+  { value: "national", label: "National", icon: "🇬🇧", desc: "UK-wide programme campaign" },
+  { value: "city", label: "City", icon: "🏙️", desc: "City activation campaign" },
+  { value: "borough", label: "Borough / Local Area", icon: "🏘️", desc: "Borough or district campaign" },
+  { value: "high_street", label: "High Street", icon: "🛒", desc: "High street business community" },
+  { value: "business", label: "Business", icon: "🏢", desc: "Individual business campaign" },
+] as const;
+
 let faqCounter = 0;
 
 // ───────────────────── Component ─────────────────────
@@ -165,6 +173,8 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
           featuredImagePreview: c.featuredImage || "",
           videoUrl: c.videoUrl || "",
           locationSlug: c.location || "",
+          locationId: c.locationId || "",
+          hierarchyLevel: (c.hierarchyLevel as any) || "",
           season: (c.season as any) || "",
           campaignType: typeof c.campaignType === "object" ? c.campaignType?.slug || "" : c.campaignType || "",
           parentCampaignId: c.parentId || "",
@@ -182,10 +192,32 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
             id: r.id || `r-${Date.now()}`,
             title: r.title || "",
             description: r.description || "",
-            amount: r.amount ? String(r.amount / 100) : "",
-            deliveryDate: r.deliveryDate ? new Date(r.deliveryDate).toISOString().split("T")[0] : "",
-            limit: r.limit ? String(r.limit) : "",
+            order: r.order || 0,
+            triggerType: r.triggerType || "contribution",
+            triggerConfig: r.triggerConfig || { mode: "min", min: "", max: "", exact: "" },
+            audience: (r.audience as any) || "both",
+            quantityType: (r.quantityType as any) || "unlimited",
+            quantityLimit: r.quantityLimit ? String(r.quantityLimit) : "",
+            availableFrom: r.availableFrom ? new Date(r.availableFrom).toISOString().slice(0, 16) : "",
+            availableUntil: r.availableUntil ? new Date(r.availableUntil).toISOString().slice(0, 16) : "",
+            claimDeadlineDays: r.claimDeadlineDays ? String(r.claimDeadlineDays) : "30",
+            fulfilmentType: r.fulfilmentType || "manual",
+            fulfilmentConfig: r.fulfilmentConfig || { type: "manual", url: "", webhookUrl: "", instructions: "" },
+            image: r.image || "",
+            rewardType: r.rewardType || "standard",
+            items: r.items?.map((ri: any) => ({
+              id: ri.id || `item-${Date.now()}`,
+              title: ri.title || "",
+              description: ri.description || "",
+              physicalType: (ri.physicalType as any) || "digital",
+              assetType: ri.assetType || "",
+              assetUrl: ri.assetUrl || "",
+              assetFileName: ri.assetFileName || "",
+              quantity: ri.quantity ? String(ri.quantity) : "1",
+              order: ri.order || 0,
+            })) || [],
           })) || [],
+          qualificationMode: (c.qualificationMode as any) || "highest",
           commentSettings: (() => {
             try { return JSON.parse(c.settings || "{}").commentSettings || "everyone"; }
             catch { return "everyone"; }
@@ -257,6 +289,8 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
         tags: form.tags,
         videoUrl: form.videoUrl || undefined,
         location: form.locationSlug || undefined,
+        locationId: form.locationId || undefined,
+        hierarchyLevel: form.hierarchyLevel || undefined,
         season: form.season || undefined,
         isEvergreen: form.isEvergreen,
         isFeatured: form.isFeatured,
@@ -273,13 +307,38 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
         isOpportunity: form.isOpportunity,
         settings,
         status: statusOverride || form.status,
+        qualificationMode: form.qualificationMode,
         rewards: form.mode === "crowdfunding" ? form.rewards.map((r, i) => ({
           title: r.title,
           description: r.description,
-          amount: Math.round(Number(r.amount) * 100),
-          deliveryDate: r.deliveryDate || undefined,
-          limit: r.limit ? Number(r.limit) : undefined,
           order: i,
+          triggerType: r.triggerType,
+          triggerConfig: {
+            mode: r.triggerConfig.mode,
+            min: r.triggerConfig.min ? Math.round(Number(r.triggerConfig.min) * 100) : undefined,
+            max: r.triggerConfig.max ? Math.round(Number(r.triggerConfig.max) * 100) : undefined,
+            exact: r.triggerConfig.exact ? Math.round(Number(r.triggerConfig.exact) * 100) : undefined,
+          },
+          audience: r.audience,
+          quantityType: r.quantityType,
+          quantityLimit: r.quantityType === "limited" ? Number(r.quantityLimit) || undefined : undefined,
+          availableFrom: r.availableFrom || undefined,
+          availableUntil: r.availableUntil || undefined,
+          claimDeadlineDays: Number(r.claimDeadlineDays) || 30,
+          fulfilmentType: r.fulfilmentType,
+          fulfilmentConfig: r.fulfilmentConfig,
+          image: r.image || undefined,
+          rewardType: r.rewardType,
+          items: r.items.map(item => ({
+            title: item.title,
+            description: item.description || undefined,
+            physicalType: item.physicalType,
+            assetType: item.assetType || undefined,
+            assetUrl: item.assetUrl || undefined,
+            assetFileName: item.assetFileName || undefined,
+            quantity: Number(item.quantity) || 1,
+            order: item.order,
+          })),
         })) : [],
       };
 
@@ -502,8 +561,24 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
           <div className="space-y-5">
             <div>
               <label className={labelCls}>Bind to Location</label>
-              <select value={form.locationSlug} onChange={e => patch({ locationSlug: e.target.value })} className={inputCls}>
+              <select value={form.locationSlug} onChange={e => {
+                const slug = e.target.value;
+                // Auto-detect hierarchy level from location group
+                const group = dest.cities.some(c => c.slug === slug) ? "city"
+                  : dest.boroughs.some(b => b.slug === slug) ? "borough"
+                  : dest.highStreets.some(h => h.slug === slug) ? "high_street"
+                  : "";
+                // Find the locationId from the destination data
+                const cityMatch = dest.cities.find(c => c.slug === slug);
+                const boroughMatch = dest.boroughs.find(b => b.slug === slug);
+                const hsMatch = dest.highStreets.find(h => h.slug === slug);
+                const locId = (cityMatch as any)?.id || (boroughMatch as any)?.id || (hsMatch as any)?.id || "";
+                patch({ locationSlug: slug, locationId: locId, hierarchyLevel: group as any });
+              }} className={inputCls}>
                 <option value="">No location binding (shows everywhere)</option>
+                <optgroup label="National">
+                  <option value="united-kingdom">🇬🇧 United Kingdom (National)</option>
+                </optgroup>
                 <optgroup label="Cities">
                   {dest.cities.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
                 </optgroup>
@@ -516,6 +591,43 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
               </select>
               <p className={hintCls}>Campaigns bound to a location appear on that city/borough/high-street hub page.</p>
             </div>
+
+            {/* Hierarchy Level */}
+            <div>
+              <label className={labelCls}>Campaign Hierarchy Level</label>
+              <div className="grid grid-cols-2 gap-2">
+                {HIERARCHY_LEVELS.map(l => (
+                  <button key={l.value} type="button" onClick={() => patch({ hierarchyLevel: l.value as any })}
+                    className={`rounded-lg border-2 p-3 text-left transition-all ${form.hierarchyLevel === l.value ? "border-primary-500 bg-primary-50" : "border-gray-200 hover:border-gray-300"}`}>
+                    <span className="block text-lg">{l.icon}</span>
+                    <span className="block text-sm font-bold text-gray-900">{l.label}</span>
+                    <span className="text-xs text-gray-500">{l.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <p className={hintCls}>Determines where this campaign sits in the hierarchy. Auto-detected from location above.</p>
+            </div>
+
+            {/* Hierarchy Info Panel */}
+            {form.hierarchyLevel && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <p className="text-sm font-semibold text-blue-800">
+                  {HIERARCHY_LEVELS.find(l => l.value === form.hierarchyLevel)?.icon}{" "}
+                  This is a <span className="uppercase">{form.hierarchyLevel.replace("_", " ")}</span> campaign
+                  {form.locationSlug && (
+                    <> for <span className="font-bold">{dest.cities.find(c => c.slug === form.locationSlug)?.name || dest.boroughs.find(b => b.slug === form.locationSlug)?.name || dest.highStreets.find(h => h.slug === form.locationSlug)?.name || form.locationSlug}</span></>
+                  )}
+                </p>
+                <p className="mt-1 text-xs text-blue-600">
+                  {form.hierarchyLevel === "national" && "This campaign supports the wider UK programme and appears on the National Hub."}
+                  {form.hierarchyLevel === "city" && "When this campaign reaches its target, the city can progress to local area activation."}
+                  {form.hierarchyLevel === "borough" && "This campaign activates a specific borough or local area within a city."}
+                  {form.hierarchyLevel === "high_street" && "This campaign supports businesses and community on a specific high street."}
+                  {form.hierarchyLevel === "business" && "This is an individual business campaign connected to its high street."}
+                </p>
+              </div>
+            )}
+
             <div>
               <label className={labelCls}>Seasonal Tag</label>
               <div className="grid grid-cols-3 gap-2">
@@ -658,41 +770,15 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-500">Define reward tiers backers receive when pledging at each level.</p>
-                {form.rewards.map((r, i) => (
-                  <div key={r.id} className="rounded-xl border bg-white p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-gray-900">Tier {i + 1}</span>
-                      <button type="button" onClick={() => patch({ rewards: form.rewards.filter(x => x.id !== r.id) })} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                    </div>
-                    <input value={r.title} onChange={e => {
-                      const rr = [...form.rewards]; rr[i] = { id: r.id, title: e.target.value, description: r.description, amount: r.amount, deliveryDate: r.deliveryDate, limit: r.limit }; patch({ rewards: rr });
-                    }} placeholder="Tier title" className={inputCls} />
-                    <textarea value={r.description} onChange={e => {
-                      const rr = [...form.rewards]; rr[i] = { id: r.id, title: r.title, description: e.target.value, amount: r.amount, deliveryDate: r.deliveryDate, limit: r.limit }; patch({ rewards: rr });
-                    }} placeholder="What backers receive" rows={2} className={`${inputCls} resize-none`} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500">Pledge amount (£)</label>
-                        <input type="number" min="1" value={r.amount} onChange={e => {
-                          const rr = [...form.rewards]; rr[i] = { id: r.id, title: r.title, description: r.description, amount: e.target.value, deliveryDate: r.deliveryDate, limit: r.limit }; patch({ rewards: rr });
-                        }} placeholder="25" className={`${inputCls} mt-1`} />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500">Limit (0 = unlimited)</label>
-                        <input type="number" min="0" value={r.limit} onChange={e => {
-                          const rr = [...form.rewards]; rr[i] = { id: r.id, title: r.title, description: r.description, amount: r.amount, deliveryDate: r.deliveryDate, limit: e.target.value }; patch({ rewards: rr });
-                        }} placeholder="0" className={`${inputCls} mt-1`} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button type="button" onClick={() => {
-                  rewardCounter++;
-                  patch({ rewards: [...form.rewards, { id: `r-${rewardCounter}-${Date.now()}`, title: "", description: "", amount: "", deliveryDate: "", limit: "" }] });
-                }} className="w-full rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm font-medium text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors">
-                  + Add Reward Tier
-                </button>
+                <p className="text-sm text-gray-500">
+                  Define trigger-based rewards. IF a participant qualifies → THEN they earn the reward.
+                </p>
+                <RewardManager
+                  rewards={form.rewards}
+                  onChangeRewards={rewards => patch({ rewards })}
+                  qualificationMode={form.qualificationMode}
+                  onChangeQualificationMode={mode => patch({ qualificationMode: mode })}
+                />
               </>
             )}
           </div>
@@ -773,6 +859,7 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
                 <div><span className="text-gray-500">Mode:</span> <span className="font-medium capitalize">{form.mode}</span></div>
                 <div><span className="text-gray-500">Goal:</span> <span className="font-medium">{fmt(form.goalAmount)}</span></div>
                 <div><span className="text-gray-500">Deadline:</span> <span className="font-medium">{form.deadline || "Open-ended"}</span></div>
+                <div><span className="text-gray-500">Hierarchy:</span> <span className="font-medium">{form.hierarchyLevel ? HIERARCHY_LEVELS.find(l => l.value === form.hierarchyLevel)?.icon + " " + HIERARCHY_LEVELS.find(l => l.value === form.hierarchyLevel)?.label : "None"}</span></div>
                 <div><span className="text-gray-500">Location:</span> <span className="font-medium">{form.locationSlug || "None"}</span></div>
                 <div><span className="text-gray-500">Season:</span> <span className="font-medium capitalize">{form.season || "None"}</span></div>
                 <div><span className="text-gray-500">Featured:</span> <span className="font-medium">{form.isFeatured ? "Yes" : "No"}</span></div>

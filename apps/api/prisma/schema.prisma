@@ -40,7 +40,7 @@ model User {
   wallet                Wallet?
   withdrawalRequests    WithdrawalRequest[]
   collaborators         CampaignCollaborator[]
-  rewardItemDownloads   RewardItemDownload[]
+  rewardEntitlements    RewardEntitlement[]
   refreshTokens         RefreshToken[]
   passwordResetTokens   PasswordResetToken[]
   verificationTokens    EmailVerificationToken[]
@@ -135,8 +135,12 @@ model Campaign {
   parent          Campaign?  @relation("CampaignHierarchy", fields: [parentId], references: [id])
   children        Campaign[] @relation("CampaignHierarchy")
 
+  // Campaign Hierarchy Level
+  hierarchyLevel  String?  // national, city, borough, high_street, business
+  locationId      String?  // FK to HubLocation — binds campaign to a specific location in the hierarchy
+
   // Campaign Context
-  location        String?  // city, borough, high street, or UK location name
+  locationName    String?  // city, borough, high street, or UK location name (string label)
   isEvergreen     Boolean  @default(false) // evergreen (always available) vs seasonal
 
   // Participation Configuration
@@ -154,6 +158,10 @@ model Campaign {
   // Taxonomy & Classification
   campaignTypeId  String?
   seasonId        String?
+
+  // ── Reward Configuration ──
+  qualificationMode String @default("highest") // highest | cumulative — how rewards are granted
+  hasRewards        Boolean @default(false)
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -180,6 +188,7 @@ model Campaign {
   tags                CampaignTag[]
   collaborators       CampaignCollaborator[]
   rewards             Reward[]
+  rewardEntitlements  RewardEntitlement[]
   donations           Donation[]
   pledges             Pledge[]
   bookmarks           Bookmark[]
@@ -195,6 +204,7 @@ model Campaign {
   foundingProgrammes  FoundingProgramme[]
   foundingMemberships FoundingMembership[]
   backerStatuses      BackerStatus[]
+  location            HubLocation?  @relation("CampaignLocationHierarchy", fields: [locationId], references: [id])
 
   @@index([authorId])
   @@index([fundraiserId])
@@ -204,6 +214,8 @@ model Campaign {
   @@index([seasonId])
   @@index([membershipPlanId])
   @@index([parentId])
+  @@index([locationId])
+  @@index([hierarchyLevel])
   @@index([status])
   @@index([mode])
   @@index([deadline])
@@ -345,6 +357,66 @@ model CampaignSeason {
   @@index([status])
   @@index([startDate, endDate])
   @@map("campaign_seasons")
+}
+
+model SpilloverRule {
+  id                    String   @id @default(uuid())
+  campaignId            String?
+  seasonId              String?
+  action                String   // redistribute_next, hold_for_next_season, refund_to_donors, donate_to_pool, release_to_owner
+  priority              Int      @default(0) // lower = higher priority
+  thresholdPercentage   Float    @default(100) // % of target reached before spillover activates
+  allocationPercentage  Float    @default(100) // % of surplus this rule applies to
+  targetCampaignId      String?
+  targetSeasonId        String?
+  isEnabled             Boolean  @default(true)
+  description           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  season   CampaignSeason? @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([seasonId])
+  @@index([isEnabled, priority])
+  @@map("spillover_rules")
+}
+
+model SurplusRecord {
+  id                  String   @id @default(uuid())
+  campaignId          String
+  goalAmount          Int      // pence
+  raisedAmount        Int      // pence
+  surplusAmount       Int      // pence (raised - goal)
+  action              String   // redistribute_next, hold_for_next_season, refund_to_donors, donate_to_pool, release_to_owner
+  targetId            String?  // target campaign/season ID
+  redistributedAmount Int      @default(0) // pence
+  status              String   @default("pending") // pending, completed, failed
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([status])
+  @@map("surplus_records")
+}
+
+model SeasonTransitionLog {
+  id                    String   @id @default(uuid())
+  seasonId              String
+  trigger               String   // date_based, campaign_completion, manual
+  affectedCampaignCount Int      @default(0)
+  totalSurplusDistributed Int    @default(0) // pence
+  actions               String   @default("[]") // JSON array of actions taken
+  initiatedBy           String?
+  createdAt             DateTime @default(now())
+
+  season CampaignSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId])
+  @@map("season_transition_logs")
 }
 
 model CampaignGroup {
@@ -564,38 +636,53 @@ model CampaignTag {
 }
 
 // =============================================================================
-// REWARDS (Crowdfunding Mode)
+// REWARDS — Trigger-based reward system
 // =============================================================================
 
 model Reward {
-  id           String   @id @default(uuid())
-  title        String
-  description  String?
-  amount       Int
-  deliveryDate DateTime?
-  limit        Int?
-  status       String   @default("active") // active, inactive
-  order        Int      @default(0)
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  campaignId  String
+  order       Int      @default(0)
 
-  // Reward Type & E-card Fields
-  rewardType    String   @default("standard") // standard, ecard, cashback, points, discount
-  statedValue   Int      @default(0) // face/stated value in cents (e.g. E-card £10 = 1000)
-  benefitValue  Int      @default(0) // actual benefit value in cents
-  currency      String   @default("GBP")
-  eligibility   String   @default("{}") // JSON: membership, contribution rules
-  conversionRule String  @default("{}") // JSON: contribution-to-reward conversion config
+  // ── Trigger ──
+  triggerType   String   @default("contribution") // contribution (phase 1)
+  triggerConfig Json     @default("{}") // { mode: "min"|"range"|"exact", min: 5000, max: 9999 }
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  // ── Audience ──
+  audience String @default("both") // business | consumer | both
 
-  campaignId String
-  campaign   Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  pledges    Pledge[]
-  items      RewardItem[]
+  // ── Availability ──
+  quantityType      String   @default("unlimited") // unlimited | limited
+  quantityLimit     Int?
+  quantityClaimed   Int      @default(0)
+  availableFrom     DateTime?
+  availableUntil    DateTime?
+  claimDeadlineDays Int      @default(30)
+
+  // ── Fulfilment ──
+  fulfilmentType   String  @default("manual") // internal | mcom_vcard | external_link | webhook | manual | instruction
+  fulfilmentConfig Json?   // { url?, webhookUrl?, instructions? }
+
+  // ── Display & Type ──
+  image      String?
+  rewardType String @default("standard") // standard | ecard | cashback | points | discount
+  currency   String @default("GBP")
+
+  // ── Status ──
+  status    String   @default("active") // active | inactive
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ──
+  campaign     Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  pledges      Pledge[]
+  items        RewardItem[]
+  entitlements RewardEntitlement[]
 
   @@index([campaignId])
-  @@index([amount])
-  @@index([rewardType])
+  @@index([triggerType])
   @@map("rewards")
 }
 
@@ -603,33 +690,64 @@ model RewardItem {
   id          String   @id @default(uuid())
   title       String
   description String?
-  quantity    Int      @default(0)
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  image       String?
 
+  // ── Item Type ──
+  physicalType String @default("digital") // physical | digital
+
+  // ── Digital Asset ──
+  assetType     String? // file | url
+  assetUrl      String?
+  assetFileName String?
+
+  // ── Quantity & Order ──
+  quantity Int @default(1)
+  order    Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ──
   rewardId String
-  reward   Reward             @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  downloads RewardItemDownload[]
+  reward   Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
 
   @@index([rewardId])
   @@map("reward_items")
 }
 
-model RewardItemDownload {
-  id        String   @id @default(uuid())
-  fileName  String
-  fileUrl   String
+model RewardEntitlement {
+  id     String @id @default(uuid())
+  userId String
+  rewardId String
+  campaignId String
+
+  // ── Trigger Context ──
+  triggerValue Json // { contributionAmount: 5000, pledgeId: "...", triggeredAt: "..." }
+
+  // ── Lifecycle ──
+  status     String    @default("earned") // earned | claimed | fulfilled | expired
+  earnedAt   DateTime  @default(now())
+  claimedAt  DateTime?
+  fulfilledAt DateTime?
+  expiresAt  DateTime?
+
+  // ── Fulfilment Reference ──
+  claimReference String? // external reference after fulfilment
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  rewardItemId String
-  rewardItem   RewardItem @relation(fields: [rewardItemId], references: [id], onDelete: Cascade)
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
+  // ── Relations ──
+  user     User     @relation(fields: [userId], references: [id])
+  reward   Reward   @relation(fields: [rewardId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
 
-  @@index([rewardItemId])
+  @@unique([userId, rewardId]) // one entitlement per user per reward
   @@index([userId])
-  @@map("reward_item_downloads")
+  @@index([rewardId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("reward_entitlements")
 }
 
 // =============================================================================
@@ -683,6 +801,11 @@ model Donation {
   contributionType      String   @default("external") // owner, external
   currency              String   @default("GBP")
 
+  // Hierarchy Attribution
+  hierarchyLevel        String?  // national, city, borough, high_street, business
+  locationId            String?  // FK to HubLocation
+  parentCampaignId      String?  // FK to Campaign — the campaign one level up
+
   createdAt              DateTime @default(now())
   createdBy              String?
   updatedAt              DateTime @updatedAt
@@ -705,6 +828,8 @@ model Donation {
   @@index([userId])
   @@index([status])
   @@index([transactionId])
+  @@index([hierarchyLevel])
+  @@index([locationId])
   @@index([createdAt])
   @@index([campaignId, status]) // compound: campaign donations by status
   @@index([userId, createdAt]) // compound: user donation history
@@ -738,6 +863,11 @@ model Pledge {
   updatedAt          DateTime @updatedAt
   updatedBy          String?
 
+  // Hierarchy Attribution
+  hierarchyLevel     String?  // national, city, borough, high_street, business
+  locationId         String?  // FK to HubLocation
+  parentCampaignId   String?  // FK to Campaign — the campaign one level up
+
   // Foreign Keys
   campaignId String
   userId     String?
@@ -755,6 +885,8 @@ model Pledge {
   @@index([rewardId])
   @@index([status])
   @@index([transactionId])
+  @@index([hierarchyLevel])
+  @@index([locationId])
   @@index([createdAt])
   @@index([campaignId, status]) // compound: campaign pledges by status
   @@index([userId, createdAt]) // compound: user pledge history
@@ -962,6 +1094,7 @@ model HubLocation {
   updatedAt       DateTime @updatedAt
 
   campaigns           CampaignLocation[]
+  campaignHierarchy   Campaign[]          @relation("CampaignLocationHierarchy")
   foundingProgrammes  FoundingProgramme[]
   foundingMemberships FoundingMembership[]
   backerStatuses      BackerStatus[]

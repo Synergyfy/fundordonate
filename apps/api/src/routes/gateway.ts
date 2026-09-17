@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import * as gatewayService from "../services/gateway.service";
+import { evaluateRewardTriggers } from "../services/reward-engine";
 import { authenticate, authorize, type AuthRequest } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import { logger } from "../lib/logger";
@@ -100,7 +101,30 @@ gatewayRouter.post(
         return;
       }
 
-      res.json({ status: "success", data: response });
+      // ── Reward Engine: evaluate triggers after successful pledge ──
+      let rewardEntitlements: Awaited<ReturnType<typeof evaluateRewardTriggers>> | null = null;
+
+      if (chargeData.type === "pledge" && req.userId && chargeData.campaignId) {
+        try {
+          rewardEntitlements = await evaluateRewardTriggers(
+            req.userId,
+            chargeData.campaignId,
+            chargeData.amount,
+            response.transactionId
+          );
+        } catch (err) {
+          // Don't fail the payment if reward evaluation fails
+          logger.error("Reward engine error (non-fatal)", { error: String(err) });
+        }
+      }
+
+      res.json({
+        status: "success",
+        data: {
+          ...response,
+          rewardEntitlements: rewardEntitlements?.entitlements || [],
+        },
+      });
     } catch (error) {
       next(error);
     }
@@ -291,7 +315,36 @@ gatewayRouter.post(
         res.status(400).json({ status: "error", message: result.error });
         return;
       }
-      res.json({ status: "success", data: { status: result.status } });
+
+      // ── Reward Engine: fetch PI details and evaluate triggers ──
+      let rewardEntitlements: Awaited<ReturnType<typeof evaluateRewardTriggers>> | null = null;
+
+      if (req.userId) {
+        try {
+          const piDetails = await stripe.getPaymentIntent(req.params.piId as string);
+          const piMetadata = (piDetails as any)?.metadata;
+          const piAmount = Number((piDetails as any)?.amount) || 0;
+
+          if (piMetadata?.campaignId && piMetadata?.type === "pledge" && piAmount > 0) {
+            rewardEntitlements = await evaluateRewardTriggers(
+              req.userId,
+              piMetadata.campaignId,
+              piAmount,
+              req.params.piId as string
+            );
+          }
+        } catch (err) {
+          logger.error("Reward engine error (non-fatal)", { error: String(err) });
+        }
+      }
+
+      res.json({
+        status: "success",
+        data: {
+          status: result.status,
+          rewardEntitlements: rewardEntitlements?.entitlements || [],
+        },
+      });
     } catch (error) {
       next(error);
     }
@@ -564,7 +617,30 @@ gatewayRouter.post(
         res.status(400).json({ status: "error", message: response.error });
         return;
       }
-      res.json({ status: "success", data: response });
+
+      // ── Reward Engine: evaluate triggers after successful pledge ──
+      let rewardEntitlements: Awaited<ReturnType<typeof evaluateRewardTriggers>> | null = null;
+
+      if (req.body.type === "pledge" && req.userId && req.body.campaignId) {
+        try {
+          rewardEntitlements = await evaluateRewardTriggers(
+            req.userId,
+            req.body.campaignId,
+            req.body.amount,
+            response.transactionId
+          );
+        } catch (err) {
+          logger.error("Reward engine error (non-fatal)", { error: String(err) });
+        }
+      }
+
+      res.json({
+        status: "success",
+        data: {
+          ...response,
+          rewardEntitlements: rewardEntitlements?.entitlements || [],
+        },
+      });
     } catch (error) {
       next(error);
     }
