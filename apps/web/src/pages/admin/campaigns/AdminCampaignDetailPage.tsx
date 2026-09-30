@@ -9,21 +9,37 @@ import {
   ArrowLeft, MapPin, Gift, Pause, Play, Archive, Eye,
   Send, CheckCircle2, AlertTriangle, XCircle, Calendar,
   Users, BarChart3, Settings, Trophy, Target, TrendingUp,
-  Clock, Star, ChevronRight, Edit3, Globe,
+  Clock, Star, Edit3, Globe, Plus, Search,
   Coins, Award, Hash, RefreshCw, X, Check,
 } from "lucide-react";
+import {
+  getAdminCampaignById,
+  getAdminCampaignPublicPath,
+  updateAdminCampaignCoverage,
+  updateAdminCampaignStatus,
+  applyCampaignLifecycleAction,
+  summarizeCoverage,
+  type AdminCampaignStatus,
+  type CampaignCoverage,
+  type CampaignLifecycleAction,
+} from "@/data/adminCampaigns";
+import { syncBusinessCampaign } from "@/data/campaignTemplateStore";
+import { getCities } from "@/data/ukHubData";
+import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
 
 // ───────────────────── Types ─────────────────────
 
 type CampaignStatus =
   | "DRAFT"
+  | "CHANGES_REQUIRED"
   | "PENDING_REVIEW"
+  | "APPROVED"
   | "SCHEDULED"
   | "ACTIVE"
   | "PAUSED"
   | "COMPLETED"
-  | "ARCHIVED"
-  | "CHANGES_REQUIRED";
+  | "CLOSED"
+  | "ARCHIVED";
 
 type TabId =
   | "overview"
@@ -70,19 +86,6 @@ const DEMO_CAMPAIGN = {
   createdAt: "2026-08-15",
   updatedAt: "2026-09-08",
 };
-
-const DEMO_AVAILABLE_LOCATIONS = [
-  { name: "Manchester", area: "Greater Manchester", type: "area" },
-  { name: "City Centre", area: "Central Manchester", type: "area" },
-  { name: "Salford", area: "Greater Manchester", type: "area" },
-  { name: "Levenshulme", area: "South Manchester", type: "high_street" },
-  { name: "Didsbury", area: "South Manchester", type: "high_street" },
-  { name: "Stockport", area: "Greater Manchester", type: "area" },
-  { name: "Bury", area: "Greater Manchester", type: "area" },
-  { name: "Altrincham", area: "Trafford", type: "high_street" },
-  { name: "Prestwich", area: "North Manchester", type: "high_street" },
-  { name: "Chorlton", area: "South Manchester", type: "high_street" },
-];
 
 const DEMO_REWARDS = [
   { id: "r1", name: "Community Supporter", threshold: 1000, items: ["Digital Badge", "Newsletter"], quantity: 500, claimed: 342, fulfilled: 280, redeemed: 210, expired: 12, status: "active" },
@@ -139,13 +142,15 @@ const AUDIENCE_META: Record<string, { label: string; color: string; bg: string }
 
 const STATUS_META: Record<CampaignStatus, { label: string; color: string; bg: string }> = {
   DRAFT: { label: "Draft", color: "text-gray-700", bg: "bg-gray-100" },
+  CHANGES_REQUIRED: { label: "Changes Required", color: "text-orange-700", bg: "bg-orange-100" },
   PENDING_REVIEW: { label: "Pending Review", color: "text-amber-700", bg: "bg-amber-100" },
+  APPROVED: { label: "Approved", color: "text-emerald-700", bg: "bg-emerald-100" },
   SCHEDULED: { label: "Scheduled", color: "text-blue-700", bg: "bg-blue-100" },
   ACTIVE: { label: "Active", color: "text-green-700", bg: "bg-green-100" },
   PAUSED: { label: "Paused", color: "text-amber-700", bg: "bg-amber-100" },
   COMPLETED: { label: "Completed", color: "text-purple-700", bg: "bg-purple-100" },
+  CLOSED: { label: "Closed", color: "text-orange-700", bg: "bg-orange-100" },
   ARCHIVED: { label: "Archived", color: "text-gray-700", bg: "bg-gray-100" },
-  CHANGES_REQUIRED: { label: "Changes Required", color: "text-red-700", bg: "bg-red-100" },
 };
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -164,20 +169,96 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
 // ───────────────────── Page ─────────────────────
 
 export default function AdminCampaignDetailPage() {
-  useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [status, setStatus] = useState<CampaignStatus>("ACTIVE");
+  const found = id ? getAdminCampaignById(id) : undefined;
+
+  const STATUS_BY_KEY: Record<AdminCampaignStatus, CampaignStatus> = {
+    draft: "DRAFT",
+    changes_required: "CHANGES_REQUIRED",
+    pending_review: "PENDING_REVIEW",
+    approved: "APPROVED",
+    scheduled: "SCHEDULED",
+    active: "ACTIVE",
+    paused: "PAUSED",
+    completed: "COMPLETED",
+    closed: "CLOSED",
+    archived: "ARCHIVED",
+  };
+
+  const consumerSplit = found ? Math.round(found.raisedAmount * 0.6) : 0;
+  const contributorSplit = found ? Math.round(found.backers * 0.6) : 0;
+
+  const base = found
+    ? {
+        ...DEMO_CAMPAIGN,
+        id: found.id,
+        title: found.title,
+        description: found.description,
+        season: found.season,
+        audience: found.audience,
+        hierarchyLevel: found.scope,
+        locations: [
+          { name: found.cityName, area: `${found.areaName}, ${found.cityName}`, streetTrees: 0 },
+        ],
+        target: found.targetAmount,
+        raised: found.raisedAmount,
+        startingAmount: 0,
+        stretchTarget: Math.round(found.targetAmount * 1.25),
+        startDate: found.startDate || "2026-10-01",
+        endDate: found.endDate || "2026-12-31",
+        totalContributors: found.backers,
+        consumerContributors: contributorSplit,
+        businessOwnerContributors: found.backers - contributorSplit,
+        consumerRaised: consumerSplit,
+        businessOwnerRaised: found.raisedAmount - consumerSplit,
+        backers: found.backers,
+        foundingMembers: Math.round(found.backers * 0.2),
+        rewardsGranted: Math.round(found.backers * 0.5),
+        createdAt: found.createdAt,
+        updatedAt: found.createdAt,
+      }
+    : DEMO_CAMPAIGN;
+
+  const [status, setStatus] = useState<CampaignStatus>(
+    found ? STATUS_BY_KEY[found.status] : "ACTIVE"
+  );
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [changeFeedback, setChangeFeedback] = useState("");
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [selectedLocations, setSelectedLocations] = useState<string[]>(
-    DEMO_CAMPAIGN.locations.map((l) => l.name)
-  );
+  const [coverage, setCoverage] = useState<CampaignCoverage | null>(found?.coverage ?? null);
+  const [draftCoverage, setDraftCoverage] = useState<CampaignCoverage | null>(null);
+  const [coverageSearch, setCoverageSearch] = useState("");
+  const [postcodeInput, setPostcodeInput] = useState("");
   const [locationToast, setLocationToast] = useState(false);
 
-  const campaign = { ...DEMO_CAMPAIGN, status };
+  if (id && !found) {
+    return (
+      <div className="space-y-6">
+        <Link
+          to="/admin/campaigns"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Campaigns
+        </Link>
+        <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
+          <Target className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+          <h2 className="text-xl font-bold text-gray-900">Campaign not found</h2>
+          <p className="mt-2 text-sm text-gray-500">The campaign "{id}" could not be found.</p>
+          <Link
+            to="/admin/campaigns"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            View all campaigns
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const campaign = { ...base, status };
   const progress =
     campaign.target > 0
       ? Math.min(Math.round((campaign.raised / campaign.target) * 100), 100)
@@ -192,28 +273,39 @@ export default function AdminCampaignDetailPage() {
     )
   );
 
-  // ── Status actions ──
+  // ── Status actions (persisted to the admin campaigns store) ──
 
-  const handleSubmitForReview = () => setStatus("PENDING_REVIEW");
-
-  const handleApprove = () => {
-    const today = new Date().toISOString().split("T")[0] ?? "";
-    setStatus(campaign.startDate <= today ? "ACTIVE" : "SCHEDULED");
+  const applyAction = (action: CampaignLifecycleAction, note?: string) => {
+    if (!found) return;
+    const next = applyCampaignLifecycleAction(found, action);
+    if (!next) return;
+    updateAdminCampaignStatus(found.id, next);
+    setStatus(STATUS_BY_KEY[next]);
+    if (found.businessCampaignId) {
+      syncBusinessCampaign(found.businessCampaignId, next, note);
+    }
   };
 
+  const handleSubmitForReview = () => applyAction("submit");
+  const handleApprove = () => applyAction("approve");
   const handleRequestChanges = () => setShowFeedbackInput(true);
 
   const submitChangesRequest = () => {
     if (changeFeedback.trim()) {
-      setStatus("CHANGES_REQUIRED");
+      applyAction("request_changes", changeFeedback.trim());
       setShowFeedbackInput(false);
+      setChangeFeedback("");
     }
   };
 
-  const handlePause = () => setStatus("PAUSED");
-  const handleResume = () => setStatus("ACTIVE");
-  const handleArchive = () => setStatus("ARCHIVED");
-  const handleUnpublish = () => setStatus("DRAFT");
+  const handlePublish = () => applyAction("publish");
+  const handleUnpublish = () => applyAction("unpublish");
+  const handlePause = () => applyAction("pause");
+  const handleResume = () => applyAction("resume");
+  const handleClose = () => applyAction("close");
+  const handleReopen = () => applyAction("reopen");
+  const handleArchive = () => applyAction("archive");
+  const handleRestore = () => applyAction("restore");
 
   // ── Tab content renderers ──
 
@@ -271,110 +363,242 @@ export default function AdminCampaignDetailPage() {
     </div>
   );
 
-  const renderLocations = () => (
-    <div className="rounded-xl border bg-white overflow-hidden">
-      <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
-        <button
-          onClick={() => setShowLocationModal(true)}
-          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
-        >
-          <MapPin className="h-3.5 w-3.5" /> Add Location
-        </button>
-      </div>
-      <div className="divide-y">
-        {DEMO_CAMPAIGN.locations.map((loc, i) => (
-          <div key={i} className="flex items-center justify-between px-4 py-4 hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
-                <MapPin className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{loc.name}</div>
-                <div className="text-xs text-gray-500">{loc.area}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">{loc.streetTrees.toLocaleString()}</div>
-                <div className="text-[10px] text-gray-400">street trees</div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </div>
-          </div>
-        ))}
-      </div>
+  const renderLocations = () => {
+    const cov = coverage;
+    const tc = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    const cityLabel = (slug: string) => getCities().find((c) => c.slug === slug)?.name ?? tc(slug);
+    const areaLabel = (citySlug: string, areaSlug: string) =>
+      getLocalAreasForCity(citySlug).find((a) => a.slug === areaSlug)?.name ?? tc(areaSlug);
+    const streetLabel = (citySlug: string, areaSlug: string, streetSlug: string) =>
+      getHighStreetsForArea(citySlug, areaSlug).find((s) => s.slug === streetSlug)?.name ?? tc(streetSlug);
 
-      {/* Location Toast */}
-      {locationToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
-          <CheckCircle2 className="h-4 w-4" />
-          Locations updated successfully
+    if (!cov || !found) {
+      return (
+        <div className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">
+          Location coverage is unavailable for this campaign.
         </div>
-      )}
+      );
+    }
 
-      {/* Manage Locations Modal */}
-      {showLocationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-sm font-bold text-gray-900">Manage Locations</h3>
-              <button onClick={() => setShowLocationModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1 space-y-3">
-              {DEMO_AVAILABLE_LOCATIONS.map((loc, i) => {
-                const isSelected = selectedLocations.includes(loc.name);
-                return (
-                  <label
-                    key={i}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isSelected ? "border-primary-300 bg-primary-50" : "border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        setSelectedLocations((prev) =>
-                          isSelected ? prev.filter((n) => n !== loc.name) : [...prev, loc.name]
-                        );
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{loc.name}</div>
-                      <div className="text-xs text-gray-500">{loc.area} · {loc.type === "high_street" ? "High Street" : "Area"}</div>
-                    </div>
-                    {isSelected && <Check className="h-4 w-4 text-primary-600" />}
-                  </label>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-end gap-2 p-4 border-t">
-              <button
-                onClick={() => setShowLocationModal(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowLocationModal(false);
-                  setLocationToast(true);
-                  setTimeout(() => setLocationToast(false), 2500);
-                }}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-xs font-medium text-white hover:bg-primary-700"
-              >
-                Apply ({selectedLocations.length} locations)
-              </button>
-            </div>
+    const commitCoverage = (next: CampaignCoverage) => {
+      const updated = updateAdminCampaignCoverage(found.id, next);
+      if (updated) setCoverage(updated.coverage);
+      setLocationToast(true);
+      setTimeout(() => setLocationToast(false), 2000);
+    };
+
+    const removeCity = (slug: string) =>
+      commitCoverage({
+        ...cov,
+        cities: cov.cities.filter((x) => x !== slug),
+        localAreas: cov.localAreas.filter((a) => a.citySlug !== slug),
+        highStreets: cov.highStreets.filter((s) => s.citySlug !== slug),
+      });
+    const removeArea = (citySlug: string, areaSlug: string) =>
+      commitCoverage({
+        ...cov,
+        localAreas: cov.localAreas.filter((a) => !(a.citySlug === citySlug && a.areaSlug === areaSlug)),
+        highStreets: cov.highStreets.filter((s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug)),
+      });
+    const removeStreet = (citySlug: string, areaSlug: string, streetSlug: string) =>
+      commitCoverage({
+        ...cov,
+        highStreets: cov.highStreets.filter(
+          (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug)
+        ),
+      });
+    const removePostcode = (pc: string) =>
+      commitCoverage({ ...cov, postcodes: cov.postcodes.filter((p) => p !== pc) });
+
+    const openEditor = () => {
+      setDraftCoverage({
+        national: cov.national,
+        cities: [...cov.cities],
+        localAreas: cov.localAreas.map((a) => ({ ...a })),
+        highStreets: cov.highStreets.map((s) => ({ ...s })),
+        postcodes: [...cov.postcodes],
+      });
+      setCoverageSearch("");
+      setPostcodeInput("");
+      setShowLocationModal(true);
+    };
+
+    const chip = (
+      key: string,
+      label: string,
+      sub: string,
+      onRemove: (() => void) | undefined,
+      icon: React.ReactNode = <MapPin className="h-4 w-4 text-primary-600" />
+    ) => (
+      <div key={key} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100">{icon}</div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-gray-900">{label}</div>
+            <div className="truncate text-xs text-gray-500">{sub}</div>
           </div>
         </div>
-      )}
-    </div>
-  );
+        {onRemove ? (
+          <button
+            onClick={onRemove}
+            title="Remove from coverage"
+            className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : (
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            Primary
+          </span>
+        )}
+      </div>
+    );
+
+    const section = (title: string, count: number, rows: React.ReactNode) => (
+      <div className="rounded-xl border bg-white overflow-hidden">
+        <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">{title}</h4>
+          <span className="text-xs text-gray-400">{count}</span>
+        </div>
+        <div className="divide-y">
+          {count === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-gray-400">Nothing covered at this level yet.</div>
+          ) : (
+            rows
+          )}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="space-y-4">
+        {/* Coverage summary */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
+              <MapPin className="h-5 w-5 text-primary-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
+              <p className="text-xs text-gray-500">{summarizeCoverage({ ...found, coverage: cov })}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {cov.national && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                <Globe className="h-3.5 w-3.5" /> Nationwide
+              </span>
+            )}
+            <button
+              onClick={openEditor}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-700"
+            >
+              <MapPin className="h-3.5 w-3.5" /> Expand coverage
+            </button>
+          </div>
+        </div>
+
+        {/* Cities */}
+        {section(
+          "Cities covered",
+          cov.cities.length,
+          <>
+            {cov.cities.map((slug) =>
+              chip(
+                `city-${slug}`,
+                cityLabel(slug),
+                "City hub",
+                slug === found.citySlug ? undefined : () => removeCity(slug),
+                <Globe className="h-4 w-4 text-primary-600" />
+              )
+            )}
+          </>
+        )}
+
+        {/* Local areas */}
+        {section(
+          "Local areas",
+          cov.localAreas.length,
+          <>
+            {cov.localAreas.map((a) =>
+              chip(
+                `area-${a.citySlug}-${a.areaSlug}`,
+                areaLabel(a.citySlug, a.areaSlug),
+                `${cityLabel(a.citySlug)} · local area`,
+                a.citySlug === found.citySlug && a.areaSlug === found.areaSlug
+                  ? undefined
+                  : () => removeArea(a.citySlug, a.areaSlug)
+              )
+            )}
+          </>
+        )}
+
+        {/* High streets */}
+        {section(
+          "High streets",
+          cov.highStreets.length,
+          <>
+            {cov.highStreets.map((s) =>
+              chip(
+                `street-${s.citySlug}-${s.areaSlug}-${s.streetSlug}`,
+                streetLabel(s.citySlug, s.areaSlug, s.streetSlug),
+                `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`,
+                s.citySlug === found.citySlug &&
+                s.areaSlug === found.areaSlug &&
+                s.streetSlug === found.streetSlug
+                  ? undefined
+                  : () => removeStreet(s.citySlug, s.areaSlug, s.streetSlug)
+              )
+            )}
+          </>
+        )}
+
+        {/* Postcodes */}
+        {section(
+          "Postcodes",
+          cov.postcodes.length,
+          <>
+            {cov.postcodes.map((pc) =>
+              chip(
+                `pc-${pc}`,
+                pc,
+                "Postcode district",
+                () => removePostcode(pc),
+                <Hash className="h-4 w-4 text-primary-600" />
+              )
+            )}
+          </>
+        )}
+
+        {/* Location Toast */}
+        {locationToast && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+            <CheckCircle2 className="h-4 w-4" />
+            Location coverage updated
+          </div>
+        )}
+
+        {/* Expand Coverage Modal */}
+        {showLocationModal && draftCoverage && (
+          <CoverageEditorModal
+            draft={draftCoverage}
+            search={coverageSearch}
+            postcodeInput={postcodeInput}
+            onSearch={setCoverageSearch}
+            onPostcodeInput={setPostcodeInput}
+            onSetDraft={(next) => setDraftCoverage(next)}
+            onClose={() => setShowLocationModal(false)}
+            onApply={() => {
+              commitCoverage(draftCoverage);
+              setShowLocationModal(false);
+            }}
+            cityLabel={cityLabel}
+            areaLabel={areaLabel}
+          />
+        )}
+      </div>
+    );
+  };
 
   const renderRewards = () => (
     <div className="rounded-xl border bg-white overflow-hidden">
@@ -861,9 +1085,14 @@ export default function AdminCampaignDetailPage() {
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
           <div>
             <div className="text-sm font-medium text-gray-900">Locations</div>
-            <div className="text-xs text-gray-500">{campaign.locations.map((l) => l.name).join(", ")}</div>
+            <div className="text-xs text-gray-500">
+              {found && coverage ? summarizeCoverage({ ...found, coverage }) : "—"}
+            </div>
           </div>
-          <button className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab("locations")}
+            className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+          >
             <Edit3 className="h-3.5 w-3.5" /> Edit
           </button>
         </div>
@@ -923,12 +1152,20 @@ export default function AdminCampaignDetailPage() {
         {/* Status Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {status === "DRAFT" && (
-            <button
-              onClick={handleSubmitForReview}
-              className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
-            >
-              <Send className="h-3.5 w-3.5" /> Submit for Review
-            </button>
+            <>
+              <button
+                onClick={handleSubmitForReview}
+                className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
+              >
+                <Send className="h-3.5 w-3.5" /> Submit for Review
+              </button>
+              <Link
+                to={`/admin/campaigns/${campaign.id}/edit`}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Edit3 className="h-3.5 w-3.5" /> Edit
+              </Link>
+            </>
           )}
 
           {status === "PENDING_REVIEW" && (
@@ -948,8 +1185,31 @@ export default function AdminCampaignDetailPage() {
             </>
           )}
 
+          {status === "APPROVED" && (
+            <>
+              <button
+                onClick={handlePublish}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <Globe className="h-3.5 w-3.5" /> Publish
+              </button>
+              <button
+                onClick={handleUnpublish}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Unpublish
+              </button>
+            </>
+          )}
+
           {status === "SCHEDULED" && (
             <>
+              <button
+                onClick={handlePublish}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <Globe className="h-3.5 w-3.5" /> Publish Now
+              </button>
               <button
                 onClick={handleUnpublish}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -973,6 +1233,12 @@ export default function AdminCampaignDetailPage() {
               >
                 <Pause className="h-3.5 w-3.5" /> Pause
               </button>
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 hover:bg-orange-100"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Close
+              </button>
               <Link
                 to={`/admin/campaigns/${campaign.id}/edit`}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -990,6 +1256,12 @@ export default function AdminCampaignDetailPage() {
               >
                 <Play className="h-3.5 w-3.5" /> Resume
               </button>
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 hover:bg-orange-100"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Close
+              </button>
               <Link
                 to={`/admin/campaigns/${campaign.id}/edit`}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -999,12 +1271,38 @@ export default function AdminCampaignDetailPage() {
             </>
           )}
 
+          {status === "CLOSED" && (
+            <>
+              <button
+                onClick={handleReopen}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Reopen
+              </button>
+              <button
+                onClick={handleArchive}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Archive className="h-3.5 w-3.5" /> Archive
+              </button>
+            </>
+          )}
+
           {status === "COMPLETED" && (
             <button
               onClick={handleArchive}
               className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
             >
               <Archive className="h-3.5 w-3.5" /> Archive
+            </button>
+          )}
+
+          {status === "ARCHIVED" && (
+            <button
+              onClick={handleRestore}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Restore to Draft
             </button>
           )}
 
@@ -1018,7 +1316,7 @@ export default function AdminCampaignDetailPage() {
           )}
 
           <Link
-            to={`/campaigns/${campaign.id}`}
+            to={found ? getAdminCampaignPublicPath(found) : `/campaigns/${campaign.id}`}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             <Eye className="h-3.5 w-3.5" /> Public View
@@ -1125,6 +1423,318 @@ export default function AdminCampaignDetailPage() {
 
       {/* Tab Content */}
       <div className="mb-8">{tabRenderers[activeTab]()}</div>
+    </div>
+  );
+}
+
+// ───────────────────── Coverage editor modal ─────────────────────
+
+interface CoverageEditorModalProps {
+  draft: CampaignCoverage;
+  search: string;
+  postcodeInput: string;
+  onSearch: (v: string) => void;
+  onPostcodeInput: (v: string) => void;
+  onSetDraft: (next: CampaignCoverage) => void;
+  onClose: () => void;
+  onApply: () => void;
+  cityLabel: (slug: string) => string;
+  areaLabel: (citySlug: string, areaSlug: string) => string;
+}
+
+function CoverageEditorModal({
+  draft,
+  search,
+  postcodeInput,
+  onSearch,
+  onPostcodeInput,
+  onSetDraft,
+  onClose,
+  onApply,
+  cityLabel,
+  areaLabel,
+}: CoverageEditorModalProps) {
+  const q = search.trim().toLowerCase();
+  const match = (name: string) => !q || name.toLowerCase().includes(q);
+
+  const setDraft = (fn: (d: CampaignCoverage) => CampaignCoverage) => onSetDraft(fn(draft));
+
+  const toggleCity = (slug: string) =>
+    setDraft((d) =>
+      d.cities.includes(slug)
+        ? {
+            ...d,
+            cities: d.cities.filter((x) => x !== slug),
+            localAreas: d.localAreas.filter((a) => a.citySlug !== slug),
+            highStreets: d.highStreets.filter((s) => s.citySlug !== slug),
+          }
+        : { ...d, cities: [...d.cities, slug] }
+    );
+
+  const toggleArea = (citySlug: string, areaSlug: string) =>
+    setDraft((d) =>
+      d.localAreas.some((a) => a.citySlug === citySlug && a.areaSlug === areaSlug)
+        ? {
+            ...d,
+            localAreas: d.localAreas.filter((a) => !(a.citySlug === citySlug && a.areaSlug === areaSlug)),
+            highStreets: d.highStreets.filter(
+              (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug)
+            ),
+          }
+        : { ...d, localAreas: [...d.localAreas, { citySlug, areaSlug }] }
+    );
+
+  const toggleStreet = (citySlug: string, areaSlug: string, streetSlug: string) =>
+    setDraft((d) =>
+      d.highStreets.some(
+        (s) => s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug
+      )
+        ? {
+            ...d,
+            highStreets: d.highStreets.filter(
+              (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug)
+            ),
+          }
+        : { ...d, highStreets: [...d.highStreets, { citySlug, areaSlug, streetSlug }] }
+    );
+
+  const addPostcode = () => {
+    const pc = postcodeInput.trim().toUpperCase();
+    if (!pc) return;
+    if (!draft.postcodes.includes(pc)) setDraft((d) => ({ ...d, postcodes: [...d.postcodes, pc] }));
+    onPostcodeInput("");
+  };
+
+  const filteredCities = getCities().filter((c) => match(c.name));
+  const areaOptions = draft.cities.flatMap((citySlug) =>
+    getLocalAreasForCity(citySlug)
+      .filter((a) => match(a.name))
+      .map((a) => ({ citySlug, slug: a.slug, name: a.name }))
+  );
+  const streetOptions = draft.localAreas.flatMap(({ citySlug, areaSlug }) =>
+    getHighStreetsForArea(citySlug, areaSlug)
+      .filter((s) => match(s.name))
+      .map((s) => ({ citySlug, areaSlug, slug: s.slug, name: s.name }))
+  );
+
+  const optionRow = (
+    key: string,
+    checked: boolean,
+    onChange: () => void,
+    label: string,
+    sub?: string
+  ) => (
+    <label
+      key={key}
+      className={`flex cursor-pointer items-center gap-3 px-3 py-2 ${
+        checked ? "bg-primary-50" : "hover:bg-gray-50"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+      />
+      <span className="flex-1 text-sm text-gray-900">{label}</span>
+      {sub && <span className="text-[10px] text-gray-400">{sub}</span>}
+      {checked && <Check className="h-4 w-4 text-primary-600" />}
+    </label>
+  );
+
+  const block = (title: string, count: number, body: React.ReactNode) => (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">{title}</h4>
+        <span className="text-xs text-gray-400">{count} selected</span>
+      </div>
+      <div className="max-h-44 divide-y overflow-y-auto rounded-lg border">{body}</div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="mx-4 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b p-4">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Expand Location Coverage</h3>
+            <p className="text-xs text-gray-500">
+              Add cities, local areas, high streets and postcodes — without creating a new campaign.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-4">
+          {/* Nationwide */}
+          <label
+            className={`flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-3 ${
+              draft.national ? "border-primary-300 bg-primary-50" : "border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                <Globe className="h-4 w-4 text-primary-600" /> Nationwide coverage
+              </div>
+              <div className="text-xs text-gray-500">
+                Covers every city, local area and high street — the other selections below are then
+                implied.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draft.national}
+              onChange={() => setDraft((d) => ({ ...d, national: !d.national }))}
+              className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </label>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search cities, local areas, high streets..."
+              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Cities */}
+          {block(
+            "Cities",
+            draft.cities.length,
+            filteredCities.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching cities.</div>
+            ) : (
+              <>
+                {filteredCities.map((c) =>
+                  optionRow(`c-${c.slug}`, draft.cities.includes(c.slug), () => toggleCity(c.slug), c.name, "City hub")
+                )}
+              </>
+            )
+          )}
+
+          {/* Local areas */}
+          {block(
+            "Local areas",
+            draft.localAreas.length,
+            draft.cities.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">
+                Select a city first to add its local areas.
+              </div>
+            ) : areaOptions.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching local areas.</div>
+            ) : (
+              <>
+                {areaOptions.map((a) =>
+                  optionRow(
+                    `a-${a.citySlug}-${a.slug}`,
+                    draft.localAreas.some((x) => x.citySlug === a.citySlug && x.areaSlug === a.slug),
+                    () => toggleArea(a.citySlug, a.slug),
+                    a.name,
+                    cityLabel(a.citySlug)
+                  )
+                )}
+              </>
+            )
+          )}
+
+          {/* High streets */}
+          {block(
+            "High streets",
+            draft.highStreets.length,
+            draft.localAreas.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">
+                Select a local area first to add its high streets.
+              </div>
+            ) : streetOptions.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching high streets.</div>
+            ) : (
+              <>
+                {streetOptions.map((s) =>
+                  optionRow(
+                    `s-${s.citySlug}-${s.areaSlug}-${s.slug}`,
+                    draft.highStreets.some(
+                      (x) =>
+                        x.citySlug === s.citySlug && x.areaSlug === s.areaSlug && x.streetSlug === s.slug
+                    ),
+                    () => toggleStreet(s.citySlug, s.areaSlug, s.slug),
+                    s.name,
+                    `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`
+                  )
+                )}
+              </>
+            )
+          )}
+
+          {/* Postcodes */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">Postcodes</h4>
+              <span className="text-xs text-gray-400">{draft.postcodes.length} selected</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={postcodeInput}
+                onChange={(e) => onPostcodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addPostcode();
+                  }
+                }}
+                placeholder="e.g. M1"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <button
+                onClick={addPostcode}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Plus className="h-4 w-4" /> Add
+              </button>
+            </div>
+            {draft.postcodes.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {draft.postcodes.map((pc) => (
+                  <span
+                    key={pc}
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700"
+                  >
+                    <Hash className="h-3 w-3" />
+                    {pc}
+                    <button
+                      onClick={() =>
+                        setDraft((d) => ({ ...d, postcodes: d.postcodes.filter((p) => p !== pc) }))
+                      }
+                      className="text-gray-400 hover:text-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t p-4">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onApply}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-xs font-medium text-white hover:bg-primary-700"
+          >
+            Apply coverage
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

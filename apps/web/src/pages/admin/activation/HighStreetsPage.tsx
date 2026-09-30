@@ -1,11 +1,22 @@
 // =============================================================================
 // High Streets — Admin Activation
 // High street activation management with Consumer/Business Owner audience split.
+// Rows are built from real location data + the confirmation registry: geographic
+// data only SUGGESTS streets; they are Official once the admin confirms them.
 // =============================================================================
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, ChevronRight, Users, Building2, Globe, Store, Plus, X, CheckCircle2, Check } from "lucide-react";
+import { Search, ChevronRight, Users, Building2, Globe, Store, Plus, X, CheckCircle2, Check, ShieldCheck } from "lucide-react";
+import { getCities } from "@/data/ukHubData";
+import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import { getCitySetup, streetState, setStreetState, type LayerState } from "@/data/locationRegistry";
+import {
+  getAdminCampaigns,
+  getAdminCampaignsForLocation,
+  summarizeCoverage,
+  type AdminCampaign,
+} from "@/data/adminCampaigns";
 
 type Audience = "all" | "consumers" | "business_owners";
 
@@ -15,63 +26,75 @@ const AUDIENCE_TABS: { id: Audience; label: string; icon: React.ReactNode }[] = 
   { id: "business_owners", label: "Business Owners", icon: <Building2 className="h-3.5 w-3.5" /> },
 ];
 
-interface HighStreetData {
-  id: string; name: string; localAreaName: string; cityName: string; cityId: string; localAreaId: string;
-  status: string; businesses: number;
+interface StreetRow {
+  id: string;
+  name: string;
+  slug: string;
+  cityName: string;
+  citySlug: string;
+  localAreaName: string;
+  localAreaSlug: string;
+  layerState: LayerState;
+  status: string;
+  businesses: number;
   consumer: { raised: number; target: number; participants: number; campaigns: number };
   business: { raised: number; target: number; participants: number; campaigns: number; businessesParticipating?: number };
 }
 
-const DEMO_HIGH_STREETS: HighStreetData[] = [
-  {
-    id: "camden-high-st", name: "Camden High Street", localAreaName: "Camden", cityName: "London", cityId: "london", localAreaId: "camden",
-    status: "ACTIVE", businesses: 18,
-    consumer: { raised: 280000, target: 350000, participants: 160, campaigns: 1 },
-    business: { raised: 210000, target: 280000, participants: 55, campaigns: 1, businessesParticipating: 12 },
-  },
-  {
-    id: "covent-garden", name: "Covent Garden", localAreaName: "Westminster", cityName: "London", cityId: "london", localAreaId: "westminster",
-    status: "ACTIVE", businesses: 22,
-    consumer: { raised: 320000, target: 400000, participants: 180, campaigns: 1 },
-    business: { raised: 250000, target: 320000, participants: 65, campaigns: 1, businessesParticipating: 15 },
-  },
-  {
-    id: "oxford-street", name: "Oxford Street", localAreaName: "Westminster", cityName: "London", cityId: "london", localAreaId: "westminster",
-    status: "ACTIVE", businesses: 35,
-    consumer: { raised: 420000, target: 500000, participants: 240, campaigns: 2 },
-    business: { raised: 340000, target: 420000, participants: 85, campaigns: 1, businessesParticipating: 22 },
-  },
-  {
-    id: "islington-high-st", name: "Islington High Street", localAreaName: "Islington", cityName: "London", cityId: "london", localAreaId: "islington",
-    status: "ACTIVE", businesses: 14,
-    consumer: { raised: 180000, target: 250000, participants: 100, campaigns: 1 },
-    business: { raised: 130000, target: 180000, participants: 35, campaigns: 1, businessesParticipating: 8 },
-  },
-  {
-    id: "shoreditch-high-st", name: "Shoreditch High Street", localAreaName: "Hackney", cityName: "London", cityId: "london", localAreaId: "hackney",
-    status: "PREPARING", businesses: 12,
-    consumer: { raised: 95000, target: 200000, participants: 55, campaigns: 0 },
-    business: { raised: 70000, target: 140000, participants: 20, campaigns: 0, businessesParticipating: 4 },
-  },
-  {
-    id: "deansgate", name: "Deansgate", localAreaName: "Manchester City Centre", cityName: "Manchester", cityId: "manchester", localAreaId: "city-centre",
-    status: "ACTIVE", businesses: 20,
-    consumer: { raised: 310000, target: 400000, participants: 170, campaigns: 1 },
-    business: { raised: 230000, target: 300000, participants: 60, campaigns: 1, businessesParticipating: 14 },
-  },
-  {
-    id: "market-street-mcr", name: "Market Street", localAreaName: "Manchester City Centre", cityName: "Manchester", cityId: "manchester", localAreaId: "city-centre",
-    status: "ACTIVE", businesses: 15,
-    consumer: { raised: 240000, target: 320000, participants: 130, campaigns: 1 },
-    business: { raised: 180000, target: 240000, participants: 45, campaigns: 1, businessesParticipating: 10 },
-  },
-  {
-    id: "bull-ring", name: "Bull Ring", localAreaName: "Dudley", cityName: "Birmingham", cityId: "birmingham", localAreaId: "dudley",
-    status: "ACTIVE", businesses: 16,
-    consumer: { raised: 190000, target: 260000, participants: 100, campaigns: 1 },
-    business: { raised: 140000, target: 200000, participants: 35, campaigns: 1, businessesParticipating: 8 },
-  },
-];
+const STATUS_LABEL: Record<string, string> = {
+  active: "ACTIVE",
+  making_progress: "PREPARING",
+  needs_activation: "NEEDS_ACTIVATION",
+  coming_soon: "PREPARING",
+};
+
+/** Real rows: every city's local areas → high streets + confirmation state. */
+function buildStreetRows(): StreetRow[] {
+  const rows: StreetRow[] = [];
+  for (const city of getCities()) {
+    const setup = getCitySetup(city.slug);
+    for (const area of getLocalAreasForCity(city.slug)) {
+      for (const street of getHighStreetsForArea(city.slug, area.slug)) {
+        const consumerRaised = Math.round(street.fundingRaised * 0.6);
+        const consumerTarget = Math.round(street.fundingTarget * 0.6);
+        rows.push({
+          id: `${city.slug}:${area.slug}:${street.slug}`,
+          name: street.name,
+          slug: street.slug,
+          cityName: city.name,
+          citySlug: city.slug,
+          localAreaName: area.name,
+          localAreaSlug: area.slug,
+          layerState: streetState(setup, street.slug),
+          status: STATUS_LABEL[street.status] ?? "NEEDS_ACTIVATION",
+          businesses: street.totalBusinesses,
+          consumer: {
+            raised: consumerRaised,
+            target: consumerTarget,
+            participants: Math.round(street.totalBusinesses * 2),
+            campaigns: Math.min(street.campaigns, Math.ceil(street.campaigns / 2)),
+          },
+          business: {
+            raised: street.fundingRaised - consumerRaised,
+            target: street.fundingTarget - consumerTarget,
+            participants: Math.max(1, Math.round(street.totalBusinesses / 3)),
+            campaigns: street.campaigns - Math.min(street.campaigns, Math.ceil(street.campaigns / 2)),
+            businessesParticipating: street.participatingBusinesses,
+          },
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+const LAYER_BADGE: Record<LayerState, { label: string; className: string }> = {
+  confirmed: { label: "Official", className: "bg-green-100 text-green-700" },
+  suggested: { label: "Suggested", className: "bg-amber-100 text-amber-700" },
+  rejected: { label: "Rejected", className: "bg-gray-100 text-gray-500" },
+};
+
+const MAX_ROWS = 60;
 
 const fmt = (p: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
@@ -81,32 +104,56 @@ const STATUS_COLORS: Record<string, string> = {
   NEEDS_ACTIVATION: "bg-amber-100 text-amber-700",
 };
 
-const DEMO_CAMPAIGNS = [
-  { id: "camp-1", title: "London Spring Community Campaign", status: "ACTIVE", cityName: "London" },
-  { id: "camp-2", title: "Manchester Autumn Business Drive", status: "ACTIVE", cityName: "Manchester" },
-  { id: "camp-3", title: "Birmingham Winter High Streets Revival", status: "PREPARING", cityName: "Birmingham" },
-  { id: "camp-4", title: "London Summer Consumer Rewards", status: "COMPLETED", cityName: "London" },
-];
-
-export function HighStreetsPage() {
+export function HighStreetsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [audience, setAudience] = useState<Audience>("all");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [, setSelectedStreetId] = useState<string | null>(null);
+  const [selectedStreet, setSelectedStreet] = useState<StreetRow | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
   const [applyToast, setApplyToast] = useState(false);
+  const [confirmToast, setConfirmToast] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const cities = [...new Set(DEMO_HIGH_STREETS.map((h) => h.cityName))];
+  // Rebuilt after every confirmation so badges update immediately.
+  const allStreets = useMemo(() => buildStreetRows(), [refreshKey]);
 
-  const filtered = DEMO_HIGH_STREETS.filter((h) => {
-    if (search && !h.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (cityFilter !== "all" && h.cityName !== cityFilter) return false;
-    return true;
-  });
+  const cities = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of allStreets) map.set(s.citySlug, s.cityName);
+    return Array.from(map.entries()).map(([slug, name]) => ({ slug, name }));
+  }, [allStreets]);
 
-  const getStreetData = (street: typeof DEMO_HIGH_STREETS[0]) => {
+  const filtered = useMemo(
+    () =>
+      allStreets.filter((s) => {
+        if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+        if (cityFilter !== "all" && s.citySlug !== cityFilter) return false;
+        return true;
+      }),
+    [allStreets, search, cityFilter]
+  );
+  const visible = filtered.slice(0, MAX_ROWS);
+
+  const campaignOptions: AdminCampaign[] = useMemo(() => {
+    if (!selectedStreet) return getAdminCampaigns();
+    const covering = getAdminCampaignsForLocation(
+      selectedStreet.citySlug,
+      selectedStreet.localAreaSlug,
+      selectedStreet.slug
+    );
+    return covering.length > 0 ? covering : getAdminCampaigns();
+  }, [selectedStreet]);
+
+  const confirmStreet = (street: StreetRow) => {
+    setStreetState(street.citySlug, street.slug, "confirmed");
+    setRefreshKey((k) => k + 1);
+    setConfirmToast(true);
+    setTimeout(() => setConfirmToast(false), 2000);
+  };
+
+  const getStreetData = (street: StreetRow) => {
     if (audience === "consumers") return street.consumer;
     if (audience === "business_owners") return street.business;
     return {
@@ -121,20 +168,22 @@ export function HighStreetsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link to="/admin" className="hover:text-gray-700">Admin</Link>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <Link to="/admin/cities" className="hover:text-gray-700">Cities</Link>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <span className="text-gray-900 font-medium">High Streets</span>
+        {!embedded && (
+          <div>
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+              <Link to="/admin" className="hover:text-gray-700">Admin</Link>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <Link to="/admin/cities" className="hover:text-gray-700">Cities</Link>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-gray-900 font-medium">High Streets</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">High Streets</h1>
+            <p className="text-sm text-gray-500">High streets and commercial districts across the programme</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">High Streets</h1>
-          <p className="text-sm text-gray-500">High streets and commercial districts across the programme</p>
-        </div>
+        )}
         <button
           onClick={() => navigate("/admin/cities/new")}
-          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          className="ml-auto flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
         >
           <Plus className="h-4 w-4" />
           Add High Street
@@ -178,7 +227,7 @@ export function HighStreetsPage() {
         >
           <option value="all">All Cities</option>
           {cities.map((c) => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c.slug} value={c.slug}>{c.name}</option>
           ))}
         </select>
       </div>
@@ -186,25 +235,30 @@ export function HighStreetsPage() {
       {/* High Street List */}
       <div className="rounded-xl bg-white border">
         <div className="divide-y divide-gray-100">
-          {filtered.map((street) => {
+          {visible.map((street) => {
             const data = getStreetData(street);
             const progress = data.target > 0 ? Math.round((data.raised / data.target) * 100) : 0;
+            const layerBadge = LAYER_BADGE[street.layerState];
             return (
               <div key={street.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors">
                 <Link
-                  to={`/admin/cities/${street.cityId}`}
+                  to={`/admin/cities/${street.citySlug}`}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 flex-shrink-0"
                 >
                   <Store className="h-4 w-4 text-primary-600" />
                 </Link>
                 <Link
-                  to={`/admin/cities/${street.cityId}`}
+                  to={`/admin/cities/${street.citySlug}`}
                   className="flex-1 min-w-0"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-900">{street.name}</span>
                     <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[street.status] || "bg-gray-100 text-gray-500"}`}>
                       {street.status.replace(/_/g, " ")}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${layerBadge.className}`}>
+                      {street.layerState === "confirmed" && <ShieldCheck className="h-3 w-3" />}
+                      {layerBadge.label}
                     </span>
                   </div>
                   <div className="text-xs text-gray-400 mt-0.5">{street.localAreaName} · {street.cityName}</div>
@@ -229,9 +283,18 @@ export function HighStreetsPage() {
                   <div className="text-sm font-bold text-gray-900">{fmt(data.raised)}</div>
                   <div className="text-xs text-gray-400">of {fmt(data.target)}</div>
                 </div>
+                {street.layerState === "suggested" && (
+                  <button
+                    onClick={() => confirmStreet(street)}
+                    title="Geographic data suggested this high street — confirm to make it official"
+                    className="ml-2 flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-[11px] font-medium text-green-700 hover:bg-green-100 flex-shrink-0"
+                  >
+                    <Check className="h-3.5 w-3.5" /> Confirm
+                  </button>
+                )}
                 <button
                   onClick={() => {
-                    setSelectedStreetId(street.id);
+                    setSelectedStreet(street);
                     setSelectedCampaignId("");
                     setShowCampaignModal(true);
                   }}
@@ -244,6 +307,11 @@ export function HighStreetsPage() {
             );
           })}
         </div>
+        {filtered.length > MAX_ROWS && (
+          <div className="border-t px-5 py-3 text-center text-xs text-gray-400">
+            Showing {MAX_ROWS} of {filtered.length} high streets — refine the search or city filter to narrow down.
+          </div>
+        )}
       </div>
 
       {filtered.length === 0 && (
@@ -261,18 +329,33 @@ export function HighStreetsPage() {
         </div>
       )}
 
+      {/* Confirm Toast */}
+      {confirmToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+          <ShieldCheck className="h-4 w-4" />
+          High street confirmed as official
+        </div>
+      )}
+
       {/* Apply Campaign Modal */}
       {showCampaignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-sm font-bold text-gray-900">Apply Existing Campaign</h3>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Apply Existing Campaign</h3>
+                {selectedStreet && (
+                  <p className="text-xs text-gray-500">
+                    Campaigns covering {selectedStreet.name}, {selectedStreet.cityName}
+                  </p>
+                )}
+              </div>
               <button onClick={() => setShowCampaignModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="p-4 space-y-2">
-              {DEMO_CAMPAIGNS.map((camp) => (
+              {campaignOptions.map((camp) => (
                 <label
                   key={camp.id}
                   className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -288,7 +371,8 @@ export function HighStreetsPage() {
                   />
                   <div className="flex-1">
                     <div className="text-sm font-medium text-gray-900">{camp.title}</div>
-                    <div className="text-xs text-gray-500">{camp.cityName} · {camp.status}</div>
+                    <div className="text-xs text-gray-500">{camp.cityName} · {camp.status.replace(/_/g, " ").toUpperCase()}</div>
+                    <div className="text-[10px] text-gray-400">{summarizeCoverage(camp)}</div>
                   </div>
                   {selectedCampaignId === camp.id && <Check className="h-4 w-4 text-primary-600" />}
                 </label>

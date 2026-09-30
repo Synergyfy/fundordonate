@@ -12,6 +12,7 @@ import {
   Home, ArrowLeft, Search, Heart, TrendingUp, Calendar, Clock,
 } from "lucide-react";
 import { Tooltip, TOOLTIPS } from "@/components/ui/Tooltip";
+import { RecommendHighStreetButton } from "@/components/RecommendHighStreetButton";
 import { getHighStreetsForArea, hasHighStreetData, getLocalAreaData, isCityNeedsActivation } from "@/data/highStreetData";
 
 const fmt = (p: number) =>
@@ -43,6 +44,7 @@ export default function BusinessHighStreetSelectPage() {
   };
 
   const localAreaName = areaData?.name ?? (localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area");
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "City";
 
   // Convert to format expected by the component
   const highStreets = useMemo(() => {
@@ -142,7 +144,16 @@ export default function BusinessHighStreetSelectPage() {
         </div>
 
         {/* High Streets */}
-        <h2 className="text-lg font-bold text-gray-900 mb-4 sm:text-xl">High Streets in {localAreaName}</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-6">
+          <h2 className="text-lg font-bold text-gray-900 sm:text-xl">High Streets in {localAreaName}</h2>
+          <RecommendHighStreetButton
+            role="business"
+            citySlug={citySlug || ""}
+            cityName={cityName}
+            areaSlug={localAreaSlug || ""}
+            areaName={localAreaName}
+          />
+        </div>
 
         {cityNeedsActivation && !cityHasData ? (
           <div className="rounded-xl bg-white p-6 text-center border sm:p-8">
@@ -167,6 +178,16 @@ export default function BusinessHighStreetSelectPage() {
             <Home className="mx-auto h-10 w-10 text-gray-300 sm:h-12 sm:w-12" />
             <h3 className="mt-2 text-base font-bold text-gray-900 sm:text-lg">No High Streets Found</h3>
             <p className="mt-1 text-sm text-gray-500">No high streets are configured for this area yet.</p>
+            <div className="mt-4 flex justify-center">
+              <RecommendHighStreetButton
+                role="business"
+                citySlug={citySlug || ""}
+                cityName={cityName}
+                areaSlug={localAreaSlug || ""}
+                areaName={localAreaName}
+                label="Can't see your high street? Recommend it"
+              />
+            </div>
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">

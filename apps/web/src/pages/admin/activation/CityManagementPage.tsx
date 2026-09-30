@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ChevronRight, MapPin, Globe, Store, Users, TrendingUp,
   BarChart3, Target, Search,
@@ -25,6 +25,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; bo
 
 export function CityManagementPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<CityTab>("overview");
   const [drill, setDrill] = useState<DrillView>({ type: "city" });
   const [search, setSearch] = useState("");
@@ -51,8 +52,8 @@ export function CityManagementPage() {
   if (!city) {
     return (
       <div className="space-y-6">
-        <Link to="/admin/cities" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-          <ArrowLeft className="h-4 w-4" /> Back to Cities
+        <Link to="/admin/hub-locations" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft className="h-4 w-4" /> Back to UK Activation
         </Link>
         <div className="text-center py-12">
           <h2 className="text-xl font-bold text-gray-900">City not found</h2>
@@ -81,7 +82,7 @@ export function CityManagementPage() {
 
   // ── Breadcrumb ──
   const breadcrumbs = [
-    { label: "Cities", path: "/admin/cities" },
+    { label: "UK Activation", path: "/admin/hub-locations" },
     { label: city.name, path: `/admin/cities/${city.slug}` },
   ];
   if (drill.type === "local-area" && currentArea) {
@@ -132,6 +133,23 @@ export function CityManagementPage() {
                 <span className="text-sm text-gray-500">Season: {(city as any).currentSeason || "None"}</span>
               </div>
             </div>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <label className="text-xs font-medium text-gray-500" htmlFor="city-switcher">
+              Open another city
+            </label>
+            <select
+              id="city-switcher"
+              value={city.slug}
+              onChange={(e) => navigate(`/admin/cities/${e.target.value}`)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-primary-100"
+            >
+              {cities.map((c) => (
+                <option key={c.id} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

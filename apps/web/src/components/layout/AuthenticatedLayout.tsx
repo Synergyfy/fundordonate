@@ -112,6 +112,31 @@ function AdminSidebarGroup({
     );
   }
 
+  // Single-item groups render as a flat link (no accordion dropdown).
+  const singleItem = group.items.length === 1 ? group.items[0] : undefined;
+  if (singleItem) {
+    const isActive =
+      pathname === singleItem.path ||
+      (!singleItem.exact && pathname.startsWith(singleItem.path + "/"));
+    return (
+      <Link
+        to={singleItem.path}
+        onClick={onNavigate}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+          isActive
+            ? "bg-primary-50 text-primary-700"
+            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        }`}
+        aria-current={isActive ? "page" : undefined}
+      >
+        <span className={`flex-shrink-0 ${isActive ? "text-primary-500" : "text-gray-400"}`}>
+          {singleItem.icon}
+        </span>
+        <span className="flex-1 text-left">{singleItem.label}</span>
+      </Link>
+    );
+  }
+
   return (
     <div className="mb-0.5">
       <button

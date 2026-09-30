@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Calendar, Play, CheckCircle, AlertTriangle } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import api from "@/lib/api";
 
 interface Season {
@@ -240,8 +241,7 @@ export function AdminSeasonManagement() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Start Date</label>
-              <input
-                type="date"
+              <DatePicker
                 value={form.startDate}
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                 className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary-100"
@@ -249,8 +249,7 @@ export function AdminSeasonManagement() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
-              <input
-                type="date"
+              <DatePicker
                 value={form.endDate}
                 onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                 className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary-100"

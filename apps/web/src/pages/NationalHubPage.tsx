@@ -21,7 +21,7 @@ import { UkMap } from "@/components/hub/UkMap";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   Calendar, Clock, Store, Users, MapPin, Megaphone,
-  ArrowRight, Info, ChevronDown, ChevronUp, Search,
+  ArrowRight, Info, ChevronDown, ChevronUp, Search, Globe,
 } from "lucide-react";
 
 // ───────────────────── Helpers ─────────────────────
@@ -530,6 +530,41 @@ export default function NationalHubPage() {
               >
                 Learn more →
               </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════ NATIONAL HUB COMMUNITY ═══════════════ */}
+      <section className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+        <div className="rounded-xl border bg-gradient-to-br from-primary-50/70 to-secondary-50/50 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-white p-2 shadow-sm flex-shrink-0">
+              <Globe className="h-4 w-4 text-primary-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-bold text-gray-900">National Hub Community</h2>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                The National Hub connects every City Hub into one national community — from
+                national scale right down to your local high street. Businesses, residents and
+                backers all take part through the hubs in their area.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  { icon: Globe, label: "National programme" },
+                  { icon: MapPin, label: "City Hubs" },
+                  { icon: Store, label: "Local high streets" },
+                  { icon: Users, label: "Businesses & residents" },
+                ].map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm"
+                  >
+                    <chip.icon className="h-3 w-3 text-primary-600" />
+                    {chip.label}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>

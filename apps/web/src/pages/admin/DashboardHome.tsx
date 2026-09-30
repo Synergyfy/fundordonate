@@ -5,8 +5,11 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Globe, Users, Building2 } from "lucide-react";
+import { Globe, Users, Building2, ClipboardCheck, FileEdit, MapPin, Banknote } from "lucide-react";
 import { adminApi } from "@/services/admin.service";
+import { getAdminCampaigns } from "@/data/adminCampaigns";
+import { getLocationRecommendationCounts } from "@/data/locationRecommendations";
+import { getPendingWithdrawalCount } from "@/data/adminFunding";
 
 type Audience = "all" | "consumers" | "business_owners";
 
@@ -138,6 +141,47 @@ export function DashboardHome() {
 
   const metrics = getOverviewMetrics();
 
+  // Pending work — items waiting on an admin decision
+  const allCampaigns = getAdminCampaigns();
+  const pendingWork = [
+    {
+      label: "Campaigns awaiting review",
+      count: allCampaigns.filter((c) => c.status === "pending_review").length,
+      to: "/admin/campaigns/pending-review",
+      icon: <ClipboardCheck className="h-4 w-4" />,
+      tone: "bg-amber-50 text-amber-700 border-amber-100",
+    },
+    {
+      label: "Changes requested",
+      count: allCampaigns.filter((c) => c.status === "changes_required").length,
+      to: "/admin/campaigns?status=changes_required",
+      icon: <FileEdit className="h-4 w-4" />,
+      tone: "bg-orange-50 text-orange-700 border-orange-100",
+    },
+    {
+      label: "Draft campaigns",
+      count: allCampaigns.filter((c) => c.status === "draft").length,
+      to: "/admin/campaigns?status=draft",
+      icon: <FileEdit className="h-4 w-4" />,
+      tone: "bg-gray-50 text-gray-600 border-gray-100",
+    },
+    {
+      label: "Location recommendations",
+      count: getLocationRecommendationCounts().pending,
+      to: "/admin/locations/recommendations",
+      icon: <MapPin className="h-4 w-4" />,
+      tone: "bg-blue-50 text-blue-700 border-blue-100",
+    },
+    {
+      label: "Withdrawal requests",
+      count: getPendingWithdrawalCount(),
+      to: "/admin/funding/withdrawals",
+      icon: <Banknote className="h-4 w-4" />,
+      tone: "bg-green-50 text-green-700 border-green-100",
+    },
+  ];
+  const pendingTotal = pendingWork.reduce((s, w) => s + w.count, 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -205,12 +249,43 @@ export function DashboardHome() {
         ))}
       </div>
 
+      {/* Pending Work */}
+      <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Pending Work
+            {pendingTotal > 0 && (
+              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+                {pendingTotal}
+              </span>
+            )}
+          </h2>
+          <span className="text-xs text-gray-400">Needs an admin decision</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {pendingWork.map((w) => (
+            <Link
+              key={w.label}
+              to={w.to}
+              className={`rounded-lg border p-3 transition-colors hover:opacity-80 ${w.tone}`}
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                {w.icon}
+                {w.label}
+              </div>
+              <div className="mt-1 text-xl font-bold">{w.count}</div>
+              {w.count === 0 && <div className="text-[10px] opacity-70">All clear</div>}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent Contributions */}
         <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Recent Contributions</h2>
-            <Link to="/admin/donations" className="text-sm text-primary-600 hover:text-primary-700">View all</Link>
+            <Link to="/admin/funding/contributions" className="text-sm text-primary-600 hover:text-primary-700">View all</Link>
           </div>
           <div className="space-y-3">
             {recent.length === 0 && <p className="text-sm text-gray-400">No contributions yet.</p>}
@@ -264,9 +339,9 @@ export function DashboardHome() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Link to="/admin/campaigns" className="rounded-lg bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100">Manage Campaigns</Link>
-          <Link to="/admin/donations" className="rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100">View Donations</Link>
-          <Link to="/admin/business-owners" className="rounded-lg bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100">Business Owners</Link>
-          <Link to="/admin/consumer-overview" className="rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">Consumers</Link>
+          <Link to="/admin/funding" className="rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100">Funding</Link>
+          <Link to="/admin/businesses/directory" className="rounded-lg bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100">Businesses</Link>
+          <Link to="/admin/consumers/list" className="rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">Consumers</Link>
           <Link to="/admin/hub-locations" className="rounded-lg bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 hover:bg-teal-100">UK Activation</Link>
           <Link to="/admin/seasons" className="rounded-lg bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">Seasons</Link>
           <Link to="/admin/settings" className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Settings</Link>

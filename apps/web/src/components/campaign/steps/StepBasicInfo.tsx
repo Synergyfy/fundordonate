@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { CampaignFormData } from "../CampaignBuilder";
+import { FileUpload } from "@/components/ui/FileUpload";
 
 interface Props {
   formData: CampaignFormData;
@@ -7,26 +8,7 @@ interface Props {
 }
 
 export function StepBasicInfo({ formData, onUpdate }: Props) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [tagInput, setTagInput] = useState("");
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Image must be less than 10MB");
-      return;
-    }
-
-    const preview = URL.createObjectURL(file);
-    onUpdate({ featuredImage: file, featuredImagePreview: preview });
-  };
-
-  const handleRemoveImage = () => {
-    onUpdate({ featuredImage: null, featuredImagePreview: "" });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
   const handleAddTag = () => {
     const tag = tagInput.trim();
@@ -155,46 +137,13 @@ export function StepBasicInfo({ formData, onUpdate }: Props) {
 
       {/* Featured Image */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">Featured Image</label>
-        <div className="mt-1.5">
-          {formData.featuredImagePreview ? (
-            <div className="relative inline-block">
-              <img
-                src={formData.featuredImagePreview}
-                alt="Featured"
-                className="h-48 w-full rounded-lg object-cover"
-              />
-              <button
-                type="button"
-                onClick={handleRemoveImage}
-                className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white hover:bg-red-700"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex h-48 w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100"
-            >
-              <svg className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span className="mt-2 text-sm text-gray-500">Click to upload image</span>
-              <span className="text-xs text-gray-400">PNG, JPG, WebP up to 10MB</span>
-            </button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-        </div>
+        <FileUpload
+          value={formData.featuredImagePreview || ""}
+          onChange={(url) => onUpdate({ featuredImagePreview: url })}
+          label="Featured Image"
+          accept="image/*"
+          placeholder="https://example.com/image.jpg"
+        />
       </div>
 
       {/* Video URL */}

@@ -6,10 +6,24 @@
 
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight, Globe, Users, Building2, AlertTriangle, TrendingUp, Target, MapPin } from "lucide-react";
+import { ChevronRight, Globe, Users, Building2, AlertTriangle, TrendingUp, Target, MapPin, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { getCities, getNationalHubSummary } from "@/data/ukHubData";
+import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import {
+  getConfirmationChecklist,
+  type ConfirmationChecklist,
+} from "@/data/locationRegistry";
+import { getLocationRecommendationCounts } from "@/data/locationRecommendations";
 
 type Audience = "all" | "consumers" | "business_owners";
+
+/** Per-city establishment checklist (boundary / local areas / high streets). */
+function computeCityLayers(citySlug: string): ConfirmationChecklist {
+  const areas = getLocalAreasForCity(citySlug);
+  let streetsTotal = 0;
+  for (const area of areas) streetsTotal += getHighStreetsForArea(citySlug, area.slug).length;
+  return getConfirmationChecklist(citySlug, { detectedAreas: areas.length, detectedStreets: streetsTotal });
+}
 
 const AUDIENCE_TABS: { id: Audience; label: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All", icon: <Globe className="h-3.5 w-3.5" /> },
@@ -27,28 +41,68 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; bo
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
-export function ActivationProgressPage() {
+export function ActivationProgressPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [audience, setAudience] = useState<Audience>("all");
 
   const cities = useMemo(() => getCities(), []);
   const summary = useMemo(() => getNationalHubSummary(), []);
 
+  // Confirmation checklists per city (only CONFIRMED layers are official)
+  const cityLayers = useMemo(() => {
+    const map = new Map<string, ConfirmationChecklist>();
+    for (const city of cities) map.set(city.slug, computeCityLayers(city.slug));
+    return map;
+  }, [cities]);
+
+  const establishment = useMemo(() => {
+    let boundaries = 0;
+    let areasDone = 0;
+    let streetsDone = 0;
+    let fullyConfirmed = 0;
+    for (const city of cities) {
+      const c = cityLayers.get(city.slug);
+      if (!c) continue;
+      if (c.boundaryDone) boundaries++;
+      if (c.areas.done) areasDone++;
+      if (c.streets.done) streetsDone++;
+      if (c.allDone) fullyConfirmed++;
+    }
+    return { boundaries, areasDone, streetsDone, fullyConfirmed, total: cities.length };
+  }, [cities, cityLayers]);
+
   const activeCities = cities.filter(c => c.publicStatus === "ACTIVE");
   const progressCities = cities.filter(c => c.publicStatus === "MAKING_PROGRESS");
   const inactiveCities = cities.filter(c => c.publicStatus === "NEEDS_ACTIVATION");
+  const pendingRecommendations = getLocationRecommendationCounts().pending;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-          <Link to="/admin" className="hover:text-gray-700">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-gray-900 font-medium">Activation Progress</span>
+      {!embedded && (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+              <Link to="/admin" className="hover:text-gray-700">Admin</Link>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-gray-900 font-medium">Activation Progress</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">UK Activation Progress</h1>
+            <p className="text-sm text-gray-500">Monitor activation across all UK cities</p>
+          </div>
+          <Link
+            to="/admin/locations/recommendations"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100 transition-colors"
+          >
+            <MapPin className="h-4 w-4" />
+            Location recommendations
+            {pendingRecommendations > 0 && (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                {pendingRecommendations} pending
+              </span>
+            )}
+          </Link>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">UK Activation Progress</h1>
-        <p className="text-sm text-gray-500">Monitor activation across all UK cities</p>
-      </div>
+      )}
 
       {/* Audience Filter */}
       <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 w-fit">
@@ -118,6 +172,37 @@ export function ActivationProgressPage() {
         )}
       </div>
 
+      {/* Location Establishment — per-layer confirmation checklist */}
+      <div className="rounded-xl bg-white border p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary-600" />
+            <h3 className="text-base font-bold text-gray-900">Location Establishment</h3>
+          </div>
+          <span className="text-xs text-gray-500">
+            Geographic data only suggests locations — layers count here once Admin confirms them
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-green-50 p-3 text-center">
+            <div className="text-lg font-bold text-green-700">{establishment.boundaries}<span className="text-sm text-green-600">/{establishment.total}</span></div>
+            <div className="text-[10px] text-green-600">Operating areas confirmed</div>
+          </div>
+          <div className="rounded-lg bg-blue-50 p-3 text-center">
+            <div className="text-lg font-bold text-blue-700">{establishment.areasDone}<span className="text-sm text-blue-600">/{establishment.total}</span></div>
+            <div className="text-[10px] text-blue-600">Cities with all local areas confirmed</div>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3 text-center">
+            <div className="text-lg font-bold text-amber-700">{establishment.streetsDone}<span className="text-sm text-amber-600">/{establishment.total}</span></div>
+            <div className="text-[10px] text-amber-600">Cities with all high streets confirmed</div>
+          </div>
+          <div className="rounded-lg bg-primary-50 p-3 text-center">
+            <div className="text-lg font-bold text-primary-700">{establishment.fullyConfirmed}<span className="text-sm text-primary-600">/{establishment.total}</span></div>
+            <div className="text-[10px] text-primary-600">Fully confirmed city setups</div>
+          </div>
+        </div>
+      </div>
+
       {/* City Progress Table */}
       <div className="rounded-xl bg-white border">
         <div className="px-5 py-4 border-b border-gray-100">
@@ -132,6 +217,7 @@ export function ActivationProgressPage() {
                 <th className="px-5 py-3 text-center font-medium">Status</th>
                 <th className="px-5 py-3 text-center font-medium hidden md:table-cell">Local Areas</th>
                 <th className="px-5 py-3 text-center font-medium hidden md:table-cell">High Streets</th>
+                <th className="px-5 py-3 text-center font-medium">Confirmations</th>
                 <th className="px-5 py-3 text-right font-medium hidden lg:table-cell">Funding</th>
                 <th className="px-5 py-3 text-center font-medium">Action</th>
               </tr>
@@ -140,8 +226,20 @@ export function ActivationProgressPage() {
               {cities.map((city) => {
                 const status = STATUS_META[city.publicStatus] || STATUS_META.NOT_ACTIVATED;
                 const progress = (city as any).activationProgress || 0;
+                const layers = cityLayers.get(city.slug);
                 const fmtCurrency = (p: number) =>
                   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
+                const layerChip = (done: boolean, label: string, title: string) => (
+                  <span
+                    title={title}
+                    className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+                      done ? "border-green-200 bg-green-50 text-green-700" : "border-amber-200 bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                    {label}
+                  </span>
+                );
                 return (
                   <tr key={city.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-4">
@@ -176,10 +274,23 @@ export function ActivationProgressPage() {
                       )}
                     </td>
                     <td className="px-5 py-4 text-center hidden md:table-cell">
-                      <span className="text-sm font-medium text-gray-700">{(city as any).localAreaCount || 0}</span>
+                      <span className={`text-sm font-medium ${layers?.areas.done ? "text-green-700" : "text-gray-700"}`}>
+                        {layers ? `${layers.areas.confirmed} / ${layers.areas.total}` : "—"}
+                      </span>
                     </td>
                     <td className="px-5 py-4 text-center hidden md:table-cell">
-                      <span className="text-sm font-medium text-gray-700">{(city as any).highStreetCount || 0}</span>
+                      <span className={`text-sm font-medium ${layers?.streets.done ? "text-green-700" : "text-gray-700"}`}>
+                        {layers ? `${layers.streets.confirmed} / ${layers.streets.total}` : "—"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      {layers && (
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          {layerChip(layers.boundaryDone, "Boundary", layers.boundaryDone ? "Operating area confirmed" : "Operating area not confirmed yet")}
+                          {layerChip(layers.areas.done, "Areas", layers.areas.done ? "All local areas confirmed" : `${layers.areas.confirmed} of ${layers.areas.total} local areas confirmed`)}
+                          {layerChip(layers.streets.done, "Streets", layers.streets.done ? "All high streets confirmed" : `${layers.streets.confirmed} of ${layers.streets.total} high streets confirmed`)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-right hidden lg:table-cell">
                       <span className="text-sm font-medium text-gray-700">{fmtCurrency(city.fundingRaised || 0)}</span>

@@ -8,6 +8,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season.service";
 import { getDemoCampaignsForHighStreet } from "@/data/highStreetData";
+import { getAdminCampaignsForLocation, adminCampaignToHubCampaign } from "@/data/adminCampaigns";
 import { getAreaTerminology } from "@/data/ukHubData";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import type { BreadcrumbItem } from "@/types/uk-hub";
@@ -37,10 +38,22 @@ export default function ConsumerCampaignListPage() {
   const areaName = (localAreaSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   const streetName = (highStreetSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 
-  const allCampaigns = useMemo(
-    () => getDemoCampaignsForHighStreet(citySlug || "", localAreaSlug || "", highStreetSlug || ""),
-    [citySlug, localAreaSlug, highStreetSlug],
-  );
+  // Campaigns covering this high street — admin campaigns via their coverage
+  // set (city/area/street cascade), plus the street's demo campaigns.
+  const allCampaigns = useMemo(() => {
+    const covered = getAdminCampaignsForLocation(
+      citySlug || "",
+      localAreaSlug || "",
+      highStreetSlug || "",
+    ).map((c) => adminCampaignToHubCampaign(c));
+    const demo = getDemoCampaignsForHighStreet(citySlug || "", localAreaSlug || "", highStreetSlug || "");
+    const seen = new Set<string>();
+    return [...covered, ...demo].filter((c) => {
+      if (seen.has(c.slug)) return false;
+      seen.add(c.slug);
+      return true;
+    });
+  }, [citySlug, localAreaSlug, highStreetSlug]);
 
   const campaigns = useMemo(
     () => allCampaigns.filter(c => c.targetAudience === "consumer" || c.targetAudience === "both"),

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Plus } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { DEMO_HUB_EVENTS } from "@/data/ukHubData";
 import { ALL_LOCATIONS } from "@/data/ukHubData";
 import type { HubEvent } from "@/types/uk-hub";
@@ -253,8 +254,7 @@ export function EventsManagementPage() {
               )}
               <div>
                 <label className="label">Date</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={formData.eventDate}
                   onChange={(e) => setFormData((f) => ({ ...f, eventDate: e.target.value }))}
                   className="input-field w-full"

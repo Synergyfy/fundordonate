@@ -12,6 +12,16 @@ import {
   TrendingUp, AlertCircle,
 } from "lucide-react";
 import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import {
+  getCitySetup,
+  setAreaTerminology,
+  setBoundary,
+  setAreaState,
+  setStreetState,
+  addHighStreet,
+  addLocalArea,
+  type LocationOrigin,
+} from "@/data/locationRegistry";
 
 // ───────────────────── Types ─────────────────────
 
@@ -199,6 +209,82 @@ export function AddCityWizard() {
     }
   };
 
+  /**
+   * Persist the admin's confirmations into the location registry.
+   * Geographic data only suggests layers — nothing here becomes official
+   * unless the admin walked through the wizard and confirmed it.
+   */
+  const persistConfirmations = () => {
+    const cityName = (data.cityName || data.selectedCity || "").trim();
+    if (!cityName) return;
+    const citySlug = cityName.toLowerCase().replace(/\s+/g, "-");
+
+    // City-specific naming (Borough / District / Local Area / ...)
+    setAreaTerminology(citySlug, data.areaTerminology || "Local Area");
+
+    // Operating area (boundary) — confirmed on the review step
+    setBoundary(citySlug, {
+      mode: data.boundaryMode,
+      radiusMiles: data.radiusMiles,
+      confirmed: true,
+    });
+
+    // Local areas — included = confirmed, excluded = rejected.
+    // Empty list means the step was never touched → leave the seeded defaults.
+    for (const area of data.localAreas) {
+      if (area.included) {
+        if (getCitySetup(citySlug).addedAreas.some((a) => a.slug === area.slug)) {
+          setAreaState(citySlug, area.slug, "confirmed");
+        } else if (area.source === "Admin added") {
+          addLocalArea({
+            citySlug,
+            name: area.name,
+            type: area.type,
+            source: "manual",
+            state: "confirmed",
+          });
+          setAreaState(citySlug, area.slug, "confirmed");
+        } else {
+          setAreaState(citySlug, area.slug, "confirmed");
+        }
+      } else {
+        setAreaState(citySlug, area.slug, "rejected");
+      }
+    }
+
+    // High streets — only reviewed streets get an explicit state; untouched
+    // ones stay "suggested" (geographic data is never official on its own).
+    const originFor = (suggestedBy: string): LocationOrigin =>
+      suggestedBy.startsWith("Community")
+        ? "recommendation"
+        : suggestedBy === "Geographic data"
+        ? "geographic data"
+        : "manual";
+
+    for (const hs of data.highStreets) {
+      const state =
+        hs.status === "REJECTED" ? "rejected" : hs.confirmed ? "confirmed" : "suggested";
+      const inGeography = getHighStreetsForArea(citySlug, hs.localAreaSlug).some(
+        (s) => s.slug === hs.slug
+      );
+      const setup = getCitySetup(citySlug);
+      const alreadyAdded = setup.addedStreets.some((s) => s.slug === hs.slug);
+      if (inGeography || alreadyAdded) {
+        setStreetState(citySlug, hs.slug, state);
+      } else {
+        addHighStreet({
+          citySlug,
+          areaSlug: hs.localAreaSlug,
+          name: hs.name,
+          postcodes: hs.postcodes,
+          source: originFor(hs.suggestedBy),
+          suggestedBy: hs.suggestedBy,
+          state,
+        });
+      }
+    }
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 0: return <StepLocation data={data} update={update} />;
@@ -312,6 +398,7 @@ export function AddCityWizard() {
             )}
             <button
               onClick={isLastStep ? () => {
+                persistConfirmations();
                 navigate(`/admin/cities/${data.cityName?.toLowerCase().replace(/\s+/g, "-") || "new"}`);
               } : goNext}
               className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
@@ -1123,6 +1210,7 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
   const [selectedStreet, setSelectedStreet] = useState<HighStreetSetup | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRecsPanel, setShowRecsPanel] = useState(false);
+  const [acceptedRecIds, setAcceptedRecIds] = useState<string[]>([]);
   const [newStreet, setNewStreet] = useState({ name: "", localArea: "", postcode: "" });
   const [newPostcode, setNewPostcode] = useState("");
 
@@ -1219,6 +1307,37 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     setShowAddModal(false);
   };
 
+  // Accepting a community recommendation never creates an official location —
+  // it enters the wizard list as SUGGESTED for the admin to confirm below.
+  const pendingRecs = DEMO_RECOMMENDATIONS.filter((r) => !acceptedRecIds.includes(r.id));
+
+  const acceptRecommendation = (rec: HighStreetRecommendation) => {
+    const slug = rec.name.toLowerCase().replace(/\s+/g, "-");
+    const list = data.highStreets.length > 0 ? data.highStreets : allHighStreets;
+    if (!list.some((hs) => hs.slug === slug)) {
+      const areaSlug =
+        data.localAreas.find((a) => a.name.toLowerCase() === rec.localArea.toLowerCase())?.slug ??
+        data.localAreas.find((a) => a.included)?.slug ??
+        "";
+      update({
+        highStreets: [
+          ...list,
+          {
+            name: rec.name,
+            slug,
+            localAreaSlug: areaSlug,
+            confirmed: false,
+            suggested: true,
+            status: "SUGGESTED",
+            suggestedBy: `Community recommendation (${rec.businessCount} business, ${rec.consumerCount} consumer)`,
+            postcodes: rec.postcode ? [rec.postcode] : [],
+          },
+        ],
+      });
+    }
+    setAcceptedRecIds((prev) => [...prev, rec.id]);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1243,7 +1362,7 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Users className="h-3.5 w-3.5" />
-            Recommendations ({DEMO_RECOMMENDATIONS.length})
+            Recommendations ({pendingRecs.length})
           </button>
           <button onClick={confirmAll} className="text-xs font-medium text-primary-600 hover:text-primary-700">
             Confirm All
@@ -1340,14 +1459,19 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-sm font-bold text-gray-900">High Street Recommendations</h4>
-              <p className="text-xs text-gray-500">From Business Owners and Consumers</p>
+              <p className="text-xs text-gray-500">From Business Owners and Consumers — accepted streets enter as Suggested until you confirm them</p>
             </div>
             <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-              {DEMO_RECOMMENDATIONS.length} new
+              {pendingRecs.length} new
             </span>
           </div>
           <div className="space-y-2">
-            {DEMO_RECOMMENDATIONS.map((rec) => (
+            {pendingRecs.length === 0 && (
+              <div className="rounded-lg border border-dashed border-amber-300 bg-white/60 p-4 text-center text-xs text-gray-500">
+                All recommendations reviewed.
+              </div>
+            )}
+            {pendingRecs.map((rec) => (
               <div key={rec.id} className="rounded-lg bg-white border border-gray-200 p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1357,8 +1481,11 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
                       Business Owners: {rec.businessCount} · Consumers: {rec.consumerCount}
                     </div>
                   </div>
-                  <button className="rounded bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 transition-colors">
-                    Review
+                  <button
+                    onClick={() => acceptRecommendation(rec)}
+                    className="rounded bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 transition-colors"
+                  >
+                    Accept as Suggested
                   </button>
                 </div>
               </div>

@@ -34,10 +34,10 @@ export default function BusinessOwnerCampaignsPage() {
           <p className="text-sm text-gray-500">Manage your campaigns and track their progress.</p>
         </div>
         <Link
-          to="/admin/campaigns/new"
+          to="/dashboard/campaign-centre"
           className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
         >
-          <Plus className="h-4 w-4" /> New Campaign
+          <Plus className="h-4 w-4" /> Claim Campaign
         </Link>
       </div>
 

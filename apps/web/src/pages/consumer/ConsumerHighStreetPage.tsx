@@ -13,6 +13,7 @@ import { seasonApi, type Season } from "@/services/season.service";
 import { useCountdown } from "@/hooks/useCountdown";
 import { getHighStreetsForArea } from "@/data/highStreetData";
 import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
+import { RecommendHighStreetButton } from "@/components/RecommendHighStreetButton";
 
 export default function ConsumerHighStreetPage() {
   const { citySlug, localAreaSlug } = useParams<{
@@ -100,9 +101,18 @@ export default function ConsumerHighStreetPage() {
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:py-12 sm:px-6 lg:px-8">
         {/* High Streets List */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">High Streets in {localAreaName}</h2>
-          <p className="text-sm text-gray-500">Select a high street to see campaigns and community activity.</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">High Streets in {localAreaName}</h2>
+            <p className="text-sm text-gray-500">Select a high street to see campaigns and community activity.</p>
+          </div>
+          <RecommendHighStreetButton
+            role="consumer"
+            citySlug={citySlug || ""}
+            cityName={cityName}
+            areaSlug={localAreaSlug || ""}
+            areaName={localAreaName}
+          />
         </div>
 
         {highStreets.length === 0 ? (
@@ -112,6 +122,15 @@ export default function ConsumerHighStreetPage() {
             <p className="text-sm text-gray-500">
               High streets for {localAreaName} are being set up. Check back soon.
             </p>
+            <div className="mt-4 flex justify-center">
+              <RecommendHighStreetButton
+                role="consumer"
+                citySlug={citySlug || ""}
+                cityName={cityName}
+                areaSlug={localAreaSlug || ""}
+                areaName={localAreaName}
+              />
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { campaignApi } from "@/services/campaign.service";
 import { useAuthStore } from "@/stores/auth.store";
 import { DEMO_CAMPAIGNS } from "@/data/demo";
 import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
+import { getAdminCampaignBySlug, getAdminCampaignPublicPath } from "@/data/adminCampaigns";
 import { CampaignImageGallery } from "@/components/campaign/CampaignImageGallery";
 import { CampaignTabs } from "@/components/campaign/CampaignTabs";
 import { SocialShare } from "@/components/campaign/SocialShare";
@@ -84,6 +85,7 @@ export function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
+  const [adminPath, setAdminPath] = useState<string | null>(null);
 
   // Hooks must be called unconditionally — before any early returns
   const countdown = useCountdown(campaign?.deadline || new Date().toISOString());
@@ -91,6 +93,16 @@ export function CampaignDetailPage() {
 
   useEffect(() => {
     if (!slug) return;
+
+    // Admin-created campaigns live on the rich hub campaign page.
+    const adminCampaign = getAdminCampaignBySlug(slug);
+    if (adminCampaign) {
+      setAdminPath(getAdminCampaignPublicPath(adminCampaign));
+      setLoading(false);
+      return;
+    }
+
+    setAdminPath(null);
     setLoading(true);
     setError(null);
 
@@ -191,6 +203,10 @@ export function CampaignDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [slug]);
+
+  if (adminPath) {
+    return <Navigate to={adminPath} replace />;
+  }
 
   if (loading) {
     return (

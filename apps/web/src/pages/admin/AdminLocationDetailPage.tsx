@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react";
 import { ALL_LOCATIONS, DEMO_FOUNDING_PROGRAMMES } from "@/data/ukHubData";
 import { LOCATION_PUBLIC_STATUS_META } from "@/types/uk-hub";
 import { CampaignLocationManager } from "@/components/admin/CampaignLocationManager";
+import { FileUpload } from "@/components/ui/FileUpload";
 
 type Tab = "details" | "activation" | "funding" | "campaigns" | "resources";
 
@@ -129,8 +130,13 @@ export function AdminLocationDetailPage() {
             <textarea rows={2} value={heroSupporting} onChange={e => setHeroSupporting(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Primary Image URL</label>
-            <input type="url" value={primaryImage} onChange={e => setPrimaryImage(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100" />
+            <FileUpload
+              value={primaryImage}
+              onChange={setPrimaryImage}
+              label="Primary Image"
+              accept="image/*"
+              placeholder="https://..."
+            />
           </div>
           <div className="flex gap-6">
             <label className="flex items-center gap-2">

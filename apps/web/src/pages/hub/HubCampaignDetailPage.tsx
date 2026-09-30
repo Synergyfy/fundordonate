@@ -9,6 +9,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season.service";
 import { getDemoCampaignsForHighStreet } from "@/data/highStreetData";
+import { getAdminCampaignBySlug, adminCampaignToHubCampaign } from "@/data/adminCampaigns";
 import { getDemoRewardsForCampaign, simulateRewardEvaluation } from "@/data/demoRewards";
 import { PostPaymentRewardCard } from "@/components/campaign/PostPaymentRewardCard";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
@@ -69,14 +70,21 @@ export default function HubCampaignDetailPage() {
     [citySlug, localAreaSlug, highStreetSlug],
   );
 
+  const adminCampaign = useMemo(
+    () => getAdminCampaignBySlug(campaignSlug || ""),
+    [campaignSlug],
+  );
+
   const campaign = useMemo(
-    () => allCampaigns.find(c => {
-      if (c.slug !== campaignSlug) return false;
-      if (audienceType === "business") return c.targetAudience === "business";
-      if (audienceType === "consumer") return c.targetAudience === "consumer";
-      return true;
-    }) ?? null,
-    [allCampaigns, campaignSlug, audienceType],
+    () => adminCampaign
+      ? adminCampaignToHubCampaign(adminCampaign)
+      : allCampaigns.find(c => {
+          if (c.slug !== campaignSlug) return false;
+          if (audienceType === "business") return c.targetAudience === "business";
+          if (audienceType === "consumer") return c.targetAudience === "consumer";
+          return true;
+        }) ?? null,
+    [adminCampaign, allCampaigns, campaignSlug, audienceType],
   );
 
   // Campaign rewards (demo data)

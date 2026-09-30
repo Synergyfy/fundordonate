@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Clock, Users } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 interface Props {
   quantityType: "unlimited" | "limited";
@@ -84,7 +85,7 @@ export function RewardAvailability({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-[10px] text-gray-400 mb-0.5">From</label>
-            <input
+            <DatePicker
               type="datetime-local"
               value={availableFrom}
               onChange={e => onChange({ availableFrom: e.target.value })}
@@ -93,7 +94,7 @@ export function RewardAvailability({
           </div>
           <div>
             <label className="block text-[10px] text-gray-400 mb-0.5">Until</label>
-            <input
+            <DatePicker
               type="datetime-local"
               value={availableUntil}
               onChange={e => onChange({ availableUntil: e.target.value })}

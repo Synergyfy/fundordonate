@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { seasonApi } from "@/services/season.service";
 import { ArrowLeft, Check } from "lucide-react";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 export default function SeasonWizardPage() {
   const navigate = useNavigate();
@@ -90,8 +91,7 @@ export default function SeasonWizardPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-            <input
-              type="date"
+            <DatePicker
               value={data.startDate}
               onChange={(e) => update({ startDate: e.target.value })}
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary-100"
@@ -99,8 +99,7 @@ export default function SeasonWizardPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-            <input
-              type="date"
+            <DatePicker
               value={data.endDate}
               onChange={(e) => update({ endDate: e.target.value })}
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary-100"

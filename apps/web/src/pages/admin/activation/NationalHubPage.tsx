@@ -9,8 +9,21 @@ import { Link } from "react-router-dom";
 import { Users, Building2, ChevronRight, Globe, MapPin, Store, Target, TrendingUp } from "lucide-react";
 import { getCities, getNationalHubSummary } from "@/data/ukHubData";
 import { getLocalAreasForCity, getHighStreetsForCity } from "@/data/highStreetData";
+import { CitiesPage } from "./CitiesPage";
+import { LocalAreasPage } from "./LocalAreasPage";
+import { HighStreetsPage } from "./HighStreetsPage";
+import { ActivationProgressPage } from "./ActivationProgressPage";
 
 type Audience = "all" | "consumers" | "business_owners";
+type Section = "overview" | "cities" | "local-areas" | "high-streets" | "progress";
+
+const SECTION_TABS: { id: Section; label: string; icon: React.ReactNode }[] = [
+  { id: "overview", label: "Hub Overview", icon: <Globe className="h-3.5 w-3.5" /> },
+  { id: "cities", label: "Cities", icon: <MapPin className="h-3.5 w-3.5" /> },
+  { id: "local-areas", label: "Local Areas", icon: <Building2 className="h-3.5 w-3.5" /> },
+  { id: "high-streets", label: "High Streets", icon: <Store className="h-3.5 w-3.5" /> },
+  { id: "progress", label: "Activation Progress", icon: <TrendingUp className="h-3.5 w-3.5" /> },
+];
 
 const AUDIENCE_TABS: { id: Audience; label: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All", icon: <Globe className="h-3.5 w-3.5" /> },
@@ -27,6 +40,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; bo
 
 export function NationalHubPage() {
   const [audience, setAudience] = useState<Audience>("all");
+  const [section, setSection] = useState<Section>("overview");
 
   const cities = useMemo(() => getCities(), []);
   const summary = useMemo(() => getNationalHubSummary(), []);
@@ -58,12 +72,32 @@ export function NationalHubPage() {
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
           <Link to="/admin" className="hover:text-gray-700">Admin</Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-gray-900 font-medium">National Hub</span>
+          <span className="text-gray-900 font-medium">UK Activation</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">UK National Hub</h1>
+        <h1 className="text-2xl font-bold text-gray-900">UK Activation Hub</h1>
         <p className="text-sm text-gray-500">Aggregated activation overview across the entire UK network</p>
       </div>
 
+      {/* Section Tabs */}
+      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+        {SECTION_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSection(tab.id)}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              section === tab.id
+                ? "bg-primary-50 text-primary-700"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "overview" && (
+        <>
       {/* Audience Filter */}
       <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 w-fit">
         {AUDIENCE_TABS.map((tab) => (
@@ -208,6 +242,13 @@ export function NationalHubPage() {
           })}
         </div>
       </div>
+        </>
+      )}
+
+      {section === "cities" && <CitiesPage embedded />}
+      {section === "local-areas" && <LocalAreasPage embedded />}
+      {section === "high-streets" && <HighStreetsPage embedded />}
+      {section === "progress" && <ActivationProgressPage embedded />}
     </div>
   );
 }

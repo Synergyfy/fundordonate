@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Megaphone, Star, Image, Calendar } from "lucide-react";
 import { NATIONAL_HUB, getFeaturedCities, DEMO_HUB_EVENTS, ALL_LOCATIONS } from "@/data/ukHubData";
+import { FileUpload } from "@/components/ui/FileUpload";
 
 interface Announcement {
   id: string;
@@ -88,12 +89,12 @@ export function AdminHubContentPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Background Image URL</label>
-              <input
-                type="url"
+              <FileUpload
                 value={heroImage}
-                onChange={e => setHeroImage(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
+                onChange={setHeroImage}
+                label="Background Image"
+                accept="image/*"
+                placeholder="https://..."
               />
             </div>
             <button className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">

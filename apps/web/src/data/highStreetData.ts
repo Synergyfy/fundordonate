@@ -2,7 +2,17 @@
 // High Street Demo Data
 // Unified data source for all high street information across the platform.
 // Admin can control this data. This is PRESENTATION / TEST data.
+//
+// Confirmed registry locations (see locationRegistry.ts) are merged into the
+// public hierarchy: only layers the admin has CONFIRMED become official.
 // =============================================================================
+
+import {
+  getConfirmedAreaAdditions,
+  getConfirmedStreetAdditions,
+  type RegistryHighStreet,
+  type RegistryLocalArea,
+} from "./locationRegistry";
 
 export interface HighStreetData {
   name: string;
@@ -1433,7 +1443,7 @@ export function getCityStats(citySlug: string): {
   };
 }
 
-export function getLocalAreasForCity(citySlug: string): LocalAreaData[] {
+function detectLocalAreasForCity(citySlug: string): LocalAreaData[] {
   const cityData = CITY_DATA_MAP[citySlug];
   if (cityData) return cityData.localAreas;
 
@@ -1466,6 +1476,53 @@ export function getLocalAreasForCity(citySlug: string): LocalAreaData[] {
       highStreetsList: generateHighStreets(citySlug, areaName, highStreetCount, areaSeed),
     };
   });
+}
+
+/** Newly confirmed registry street → public HighStreetData shape. */
+function registryStreetToData(street: RegistryHighStreet): HighStreetData {
+  return {
+    name: street.name,
+    slug: street.slug,
+    activationPct: 0,
+    status: "coming_soon",
+    totalBusinesses: 0,
+    participatingBusinesses: 0,
+    campaigns: 0,
+    fundingRaised: 0,
+    fundingTarget: 0,
+    communityActivities: 0,
+    description: `${street.name} — newly confirmed by admin review${
+      street.source === "recommendation" ? " on a community recommendation" : ""
+    }.`,
+    rewards: [],
+  };
+}
+
+/** Newly confirmed registry local area → public LocalAreaData shape. */
+function registryAreaToData(citySlug: string, area: RegistryLocalArea): LocalAreaData {
+  const streets = getConfirmedStreetAdditions(citySlug, area.slug).map(registryStreetToData);
+  return {
+    name: area.name,
+    slug: area.slug,
+    activationPct: 0,
+    status: "coming_soon",
+    businesses: 0,
+    highStreets: streets.length,
+    campaigns: 0,
+    fundingRaised: 0,
+    fundingTarget: 0,
+    description: `${area.name} — newly confirmed ${area.type} (source: ${area.source}).`,
+    highStreetsList: streets,
+  };
+}
+
+/** Detected local areas + admin-confirmed registry additions. */
+export function getLocalAreasForCity(citySlug: string): LocalAreaData[] {
+  const detected = detectLocalAreasForCity(citySlug);
+  const additions = getConfirmedAreaAdditions(citySlug)
+    .filter((a) => !detected.some((d) => d.slug === a.slug))
+    .map((a) => registryAreaToData(citySlug, a));
+  return additions.length > 0 ? [...detected, ...additions] : detected;
 }
 
 function generateAreaNames(citySlug: string, count: number): string[] {
@@ -1511,7 +1568,7 @@ function generateHighStreets(_citySlug: string, areaName: string, count: number,
   return streets;
 }
 
-export function getHighStreetsForArea(citySlug: string, areaSlug: string): HighStreetData[] {
+function detectHighStreetsForArea(citySlug: string, areaSlug: string): HighStreetData[] {
   // Try the area's own data first (boroughs have their own CITY_DATA_MAP entry)
   if (citySlug !== areaSlug) {
     const ownArea = getLocalAreaData(areaSlug, areaSlug);
@@ -1535,6 +1592,15 @@ export function getHighStreetsForArea(citySlug: string, areaSlug: string): HighS
 
   // Fallback: generate generic high streets
   return generateGenericHighStreets(citySlug, areaSlug, areaSlug.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()));
+}
+
+/** Detected high streets + admin-confirmed registry additions. */
+export function getHighStreetsForArea(citySlug: string, areaSlug: string): HighStreetData[] {
+  const detected = detectHighStreetsForArea(citySlug, areaSlug);
+  const additions = getConfirmedStreetAdditions(citySlug, areaSlug)
+    .filter((s) => !detected.some((d) => d.slug === s.slug))
+    .map(registryStreetToData);
+  return additions.length > 0 ? [...detected, ...additions] : detected;
 }
 
 // ───────────────────── Active/In-Progress Cities ─────────────────────

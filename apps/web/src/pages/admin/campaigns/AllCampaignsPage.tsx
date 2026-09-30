@@ -5,47 +5,31 @@
 
 import { useState, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Search, ChevronRight, Target, Plus, Calendar, MapPin, Copy } from "lucide-react";
+import { Search, ChevronRight, Target, Plus, Calendar, MapPin, Copy, Globe } from "lucide-react";
 import { CampaignStatusBadge } from "@/components/ui/CampaignStatusBadge";
+import {
+  getAdminCampaigns,
+  summarizeCoverage,
+  type AdminCampaign,
+  type AdminCampaignStatus,
+} from "@/data/adminCampaigns";
 
-type StatusTab = "all" | "draft" | "pending_review" | "scheduled" | "active" | "completed" | "archived";
+type StatusTab = "all" | AdminCampaignStatus;
 
-interface Campaign {
-  id: string;
-  title: string;
-  scope: "city" | "independent";
-  cityName: string;
-  audience: "business" | "consumer" | "both";
-  status: string;
-  raisedAmount: number;
-  targetAmount: number;
-  backers: number;
-  startDate: string;
-  endDate: string;
-  season: string;
-  createdAt: string;
-}
+type Campaign = AdminCampaign;
 
 const STATUS_TABS: { id: StatusTab; label: string; count?: number }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Drafts" },
+  { id: "changes_required", label: "Changes" },
   { id: "pending_review", label: "Pending Review" },
+  { id: "approved", label: "Approved" },
   { id: "scheduled", label: "Scheduled" },
   { id: "active", label: "Active" },
+  { id: "paused", label: "Paused" },
   { id: "completed", label: "Completed" },
+  { id: "closed", label: "Closed" },
   { id: "archived", label: "Archived" },
-];
-
-const DEMO_CAMPAIGNS: Campaign[] = [
-  { id: "c1", title: "Manchester Tech Hub Launch", scope: "city", cityName: "Manchester", audience: "business", status: "active", raisedAmount: 420000, targetAmount: 500000, backers: 180, startDate: "2026-10-01", endDate: "2026-12-31", season: "Autumn 2026", createdAt: "2026-09-01" },
-  { id: "c2", title: "Birmingham Green Initiative", scope: "city", cityName: "Birmingham", audience: "both", status: "active", raisedAmount: 280000, targetAmount: 350000, backers: 120, startDate: "2026-10-01", endDate: "2026-12-31", season: "Autumn 2026", createdAt: "2026-09-01" },
-  { id: "c3", title: "London Community Garden", scope: "city", cityName: "London", audience: "consumer", status: "active", raisedAmount: 85000, targetAmount: 100000, backers: 420, startDate: "2026-10-01", endDate: "2026-12-31", season: "Autumn 2026", createdAt: "2026-09-01" },
-  { id: "c4", title: "Leeds Digital Skills Programme", scope: "city", cityName: "Leeds", audience: "both", status: "draft", raisedAmount: 0, targetAmount: 200000, backers: 0, startDate: "", endDate: "", season: "Autumn 2026", createdAt: "2026-09-10" },
-  { id: "c5", title: "Liverpool Youth Fund", scope: "city", cityName: "Liverpool", audience: "consumer", status: "pending_review", raisedAmount: 0, targetAmount: 80000, backers: 0, startDate: "", endDate: "", season: "Autumn 2026", createdAt: "2026-09-12" },
-  { id: "c6", title: "Bristol Arts Centre", scope: "city", cityName: "Bristol", audience: "consumer", status: "completed", raisedAmount: 60000, targetAmount: 60000, backers: 150, startDate: "2026-07-01", endDate: "2026-09-15", season: "Summer 2026", createdAt: "2026-06-15" },
-  { id: "c7", title: "Birmingham Food Bank Network", scope: "city", cityName: "Birmingham", audience: "both", status: "scheduled", raisedAmount: 0, targetAmount: 50000, backers: 0, startDate: "2026-10-15", endDate: "2026-12-15", season: "Autumn 2026", createdAt: "2026-09-08" },
-  { id: "c8", title: "London Tech Startup Fund", scope: "city", cityName: "London", audience: "business", status: "active", raisedAmount: 650000, targetAmount: 800000, backers: 290, startDate: "2026-10-01", endDate: "2026-12-31", season: "Autumn 2026", createdAt: "2026-08-20" },
-  { id: "c9", title: "Independent Bristol Makers", scope: "independent", cityName: "Bristol", audience: "consumer", status: "archived", raisedAmount: 15000, targetAmount: 20000, backers: 80, startDate: "2026-04-01", endDate: "2026-06-30", season: "Spring 2026", createdAt: "2026-03-15" },
 ];
 
 const SCOPE_LABELS: Record<string, string> = {
@@ -62,32 +46,52 @@ const AUDIENCE_LABELS: Record<string, string> = {
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
-export function AllCampaignsPage() {
+interface AllCampaignsPageProps {
+  /** Restrict the list to one audience (business / consumer campaigns menu views). */
+  audience?: "business" | "consumer";
+  /** Lock the status filter (e.g. the "Pending Review" menu view). */
+  forceStatus?: Exclude<StatusTab, "all">;
+}
+
+export function AllCampaignsPage({ audience, forceStatus }: AllCampaignsPageProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const initialStatus = (searchParams.get("status") as StatusTab) || "all";
+  const initialStatus: StatusTab =
+    forceStatus ?? ((searchParams.get("status") as StatusTab) || "all");
   const [activeTab, setActiveTab] = useState<StatusTab>(initialStatus);
   const [search, setSearch] = useState("");
 
-  // Count campaigns per status
+  const campaigns = useMemo(() => getAdminCampaigns(), []);
+
+  // Audience scope (both-audience campaigns appear in both views)
+  const scoped = useMemo(() => {
+    if (!audience) return campaigns;
+    return campaigns.filter((c) => c.audience === audience || c.audience === "both");
+  }, [campaigns, audience]);
+
+  // Count campaigns per status (within the audience scope)
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: DEMO_CAMPAIGNS.length };
-    for (const c of DEMO_CAMPAIGNS) {
+    const counts: Record<string, number> = { all: scoped.length };
+    for (const c of scoped) {
       counts[c.status] = (counts[c.status] || 0) + 1;
     }
     return counts;
-  }, []);
+  }, [scoped]);
 
   // Filter campaigns
   const filtered = useMemo(() => {
-    return DEMO_CAMPAIGNS.filter((c) => {
+    return scoped.filter((c) => {
       // Status tab
       if (activeTab !== "all" && c.status !== activeTab) return false;
-      // Search
-      if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
+      // Search — title, city and coverage set (areas, streets, postcodes)
+      if (search) {
+        const q = search.toLowerCase();
+        const haystack = `${c.title} ${c.cityName} ${summarizeCoverage(c)}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       return true;
     });
-  }, [activeTab, search]);
+  }, [scoped, activeTab, search]);
 
   const handleDuplicate = (campaign: Campaign) => {
     const copyId = `${campaign.id}-copy`;
@@ -104,6 +108,17 @@ export function AllCampaignsPage() {
     setSearchParams(searchParams);
   };
 
+  const viewTitle =
+    audience === "business"
+      ? "Business Campaigns"
+      : audience === "consumer"
+        ? "Consumer Campaigns"
+        : forceStatus === "pending_review"
+          ? "Pending Review"
+          : forceStatus
+            ? STATUS_TABS.find((t) => t.id === forceStatus)?.label ?? "All Campaigns"
+            : "All Campaigns";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -112,11 +127,21 @@ export function AllCampaignsPage() {
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
             <Link to="/admin" className="hover:text-gray-700">Admin</Link>
             <ChevronRight className="h-3.5 w-3.5" />
-            <span className="text-gray-900 font-medium">Campaigns</span>
+            <Link to="/admin/campaigns" className="hover:text-gray-700">Campaigns</Link>
+            {(audience || forceStatus) && (
+              <>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-gray-900 font-medium">{viewTitle}</span>
+              </>
+            )}
+            {!audience && !forceStatus && (
+              <span className="text-gray-900 font-medium">Campaigns</span>
+            )}
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">All Campaigns</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{viewTitle}</h1>
           <p className="text-sm text-gray-500">
-            {DEMO_CAMPAIGNS.length} campaigns across all statuses
+            {filtered.length} of {scoped.length} campaigns
+            {audience ? ` · ${audience === "business" ? "Business" : "Consumer"} audience (incl. both)` : " across all statuses"}
           </p>
         </div>
         <Link
@@ -129,35 +154,46 @@ export function AllCampaignsPage() {
       </div>
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 pb-px scrollbar-hide">
-        {STATUS_TABS.map((tab) => {
-          const count = statusCounts[tab.id] ?? 0;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? "border-primary-600 text-primary-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {tab.label}
-              {count > 0 && (
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    activeTab === tab.id
-                      ? "bg-primary-100 text-primary-700"
-                      : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {!forceStatus ? (
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 pb-px scrollbar-hide">
+          {STATUS_TABS.map((tab) => {
+            const count = statusCounts[tab.id] ?? 0;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "border-primary-600 text-primary-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      activeTab === tab.id
+                        ? "bg-primary-100 text-primary-700"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 w-fit">
+          <span className="text-xs font-semibold text-amber-700">
+            Filtered: {STATUS_TABS.find((t) => t.id === forceStatus)?.label ?? forceStatus}
+          </span>
+          <Link to="/admin/campaigns" className="text-xs font-medium text-amber-700 underline hover:text-amber-900">
+            View all campaigns
+          </Link>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -195,6 +231,7 @@ export function AllCampaignsPage() {
                 <th className="px-5 py-3">Campaign</th>
                 <th className="px-5 py-3">Scope</th>
                 <th className="px-5 py-3">City</th>
+                <th className="px-5 py-3">Coverage</th>
                 <th className="px-5 py-3">Audience</th>
                 <th className="px-5 py-3">Status</th>
                 <th className="px-5 py-3 text-right">Progress</th>
@@ -242,6 +279,19 @@ export function AllCampaignsPage() {
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
                       )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-start gap-1.5">
+                        {campaign.coverage.national && (
+                          <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                        )}
+                        <span
+                          className="max-w-[220px] text-xs leading-relaxed text-gray-600"
+                          title={summarizeCoverage(campaign)}
+                        >
+                          {summarizeCoverage(campaign)}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <span className="rounded-full bg-pink-100 px-2 py-0.5 text-xs font-medium text-pink-700">
@@ -298,7 +348,7 @@ export function AllCampaignsPage() {
       {/* Summary */}
       {filtered.length > 0 && (
         <div className="text-center text-xs text-gray-400">
-          Showing {filtered.length} of {DEMO_CAMPAIGNS.length} campaigns
+          Showing {filtered.length} of {scoped.length} campaigns
         </div>
       )}
     </div>

@@ -28,10 +28,10 @@ const RECENT_CAMPAIGNS = [
 ];
 
 const QUICK_ACTIONS = [
-  { label: "Create Campaign", href: "/admin/campaigns/new", icon: Target, color: "text-blue-600 bg-blue-50" },
-  { label: "View Leaderboard", href: "/business-owner/leaderboard", icon: BarChart3, color: "text-green-600 bg-green-50" },
-  { label: "My Rewards", href: "/business-owner/rewards", icon: Award, color: "text-yellow-600 bg-yellow-50" },
-  { label: "My Business", href: "/business-owner/my-business", icon: Store, color: "text-purple-600 bg-purple-50" },
+  { label: "Campaign Centre", href: "/dashboard/campaign-centre", icon: Target, color: "text-blue-600 bg-blue-50" },
+  { label: "View Leaderboard", href: "/dashboard/leaderboard", icon: BarChart3, color: "text-green-600 bg-green-50" },
+  { label: "My Rewards", href: "/dashboard/rewards", icon: Award, color: "text-yellow-600 bg-yellow-50" },
+  { label: "My Business", href: "/dashboard/my-business", icon: Store, color: "text-purple-600 bg-purple-50" },
 ];
 
 export default function BusinessOwnerOverviewPage() {
@@ -50,7 +50,23 @@ export default function BusinessOwnerOverviewPage() {
         </div>
       </div>
 
-      {/* KPI Grid */}
+      {/* Campaign Available Teaser */}
+      <Link
+        to="/dashboard/campaign-centre"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 hover:bg-primary-100 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-white p-2"><Target className="h-5 w-5 text-primary-600" /></div>
+          <div>
+            <p className="text-sm font-bold text-primary-900">A campaign template is available to you</p>
+            <p className="text-xs text-primary-700">Winter High Street Funding Campaign — claim it and the campaign is prepared for you.</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1 text-sm font-semibold text-primary-700">
+          Open Campaign Centre <ArrowRight className="h-4 w-4" />
+        </span>
+      </Link>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="rounded-xl bg-white p-4 shadow-sm border">
           <div className="flex items-center gap-3">
@@ -113,7 +129,7 @@ export default function BusinessOwnerOverviewPage() {
       <div className="rounded-xl bg-white shadow-sm border overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b bg-gray-50">
           <h2 className="text-sm font-bold text-gray-900">Active Campaigns</h2>
-          <Link to="/business-owner/campaigns" className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
+          <Link to="/dashboard/campaigns" className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
             View all <ArrowRight className="h-3 w-3" />
           </Link>
         </div>

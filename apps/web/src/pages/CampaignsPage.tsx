@@ -5,7 +5,18 @@ import {
   SlidersHorizontal, ChevronDown, ArrowRight, Store,
 } from "lucide-react";
 import { HUB_LOCATIONS } from "@/data/hubActivation";
-import { getDemoCampaignsForHighStreet, getLocalAreasForCity } from "@/data/highStreetData";
+import {
+  getDemoCampaignsForHighStreet,
+  getLocalAreasForCity,
+  getHighStreetsForArea,
+} from "@/data/highStreetData";
+import {
+  getAdminCampaigns,
+  getAdminCampaignById,
+  adminCampaignToHubCampaign,
+  campaignCoversLocation,
+  summarizeCoverage,
+} from "@/data/adminCampaigns";
 import type { DemoCampaign } from "@/data/demo";
 
 /* ───────── helpers ───────── */
@@ -17,11 +28,29 @@ type CampaignWithLocation = DemoCampaign & {
   areaName: string;
   streetSlug: string;
   streetName: string;
+  /** Set for admin-managed campaigns so location filters use their coverage set. */
+  adminId?: string;
 };
 
 function getAllHighStreetCampaigns(): CampaignWithLocation[] {
   const all: CampaignWithLocation[] = [];
   const seen = new Set<string>();
+
+  // Admin-created campaigns first — these are the ones admins manage and preview.
+  for (const c of getAdminCampaigns()) {
+    if (seen.has(c.slug)) continue;
+    seen.add(c.slug);
+    all.push({
+      ...adminCampaignToHubCampaign(c),
+      citySlug: c.citySlug,
+      cityName: c.cityName,
+      areaSlug: c.areaSlug,
+      areaName: c.areaName,
+      streetSlug: c.streetSlug,
+      streetName: c.streetName,
+      adminId: c.id,
+    });
+  }
 
   for (const loc of HUB_LOCATIONS) {
     const citySlug = loc.slug;
@@ -105,22 +134,51 @@ export default function CampaignsPage() {
   }, [allCampaigns]);
 
   const areas = useMemo(() => {
-    if (selectedCity === "all") {
-      const map = new Map<string, string>();
-      allCampaigns.forEach(c => map.set(c.areaSlug, c.areaName));
-      return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
-    }
     const map = new Map<string, string>();
-    allCampaigns.filter(c => c.citySlug === selectedCity).forEach(c => map.set(c.areaSlug, c.areaName));
+    for (const c of allCampaigns) {
+      if (c.adminId) continue; // admin campaigns contribute via their coverage set below
+      if (selectedCity !== "all" && c.citySlug !== selectedCity) continue;
+      map.set(c.areaSlug, c.areaName);
+    }
+    for (const c of allCampaigns) {
+      if (!c.adminId) continue;
+      const admin = getAdminCampaignById(c.adminId);
+      if (!admin) continue;
+      for (const a of admin.coverage.localAreas) {
+        if (selectedCity !== "all" && a.citySlug !== selectedCity) continue;
+        if (map.has(a.areaSlug)) continue;
+        const name =
+          getLocalAreasForCity(a.citySlug).find((x) => x.slug === a.areaSlug)?.name ??
+          a.areaSlug.replace(/-/g, " ");
+        map.set(a.areaSlug, name);
+      }
+    }
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allCampaigns, selectedCity]);
 
   const streets = useMemo(() => {
-    let filtered = allCampaigns;
-    if (selectedCity !== "all") filtered = filtered.filter(c => c.citySlug === selectedCity);
-    if (selectedArea !== "all") filtered = filtered.filter(c => c.areaSlug === selectedArea);
     const map = new Map<string, string>();
-    filtered.forEach(c => map.set(c.streetSlug, c.streetName));
+    for (const c of allCampaigns) {
+      if (c.adminId) continue;
+      if (selectedCity !== "all" && c.citySlug !== selectedCity) continue;
+      if (selectedArea !== "all" && c.areaSlug !== selectedArea) continue;
+      map.set(c.streetSlug, c.streetName);
+    }
+    // Coverage streets of admin campaigns (incl. ones whose primary location is elsewhere)
+    for (const c of allCampaigns) {
+      if (!c.adminId) continue;
+      const admin = getAdminCampaignById(c.adminId);
+      if (!admin) continue;
+      for (const s of admin.coverage.highStreets) {
+        if (selectedCity !== "all" && s.citySlug !== selectedCity) continue;
+        if (selectedArea !== "all" && s.areaSlug !== selectedArea) continue;
+        if (map.has(s.streetSlug)) continue;
+        const name =
+          getHighStreetsForArea(s.citySlug, s.areaSlug).find((x) => x.slug === s.streetSlug)?.name ??
+          s.streetSlug.replace(/-/g, " ");
+        map.set(s.streetSlug, name);
+      }
+    }
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allCampaigns, selectedCity, selectedArea]);
 
@@ -137,26 +195,64 @@ export default function CampaignsPage() {
 
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter(c =>
-        c.title.toLowerCase().includes(q) ||
-        c.shortDescription?.toLowerCase().includes(q) ||
-        c.cityName.toLowerCase().includes(q) ||
-        c.areaName.toLowerCase().includes(q) ||
-        c.streetName.toLowerCase().includes(q) ||
-        c.category?.name.toLowerCase().includes(q)
-      );
+      result = result.filter(c => {
+        const admin = c.adminId ? getAdminCampaignById(c.adminId) : undefined;
+        return (
+          c.title.toLowerCase().includes(q) ||
+          c.shortDescription?.toLowerCase().includes(q) ||
+          c.cityName.toLowerCase().includes(q) ||
+          c.areaName.toLowerCase().includes(q) ||
+          c.streetName.toLowerCase().includes(q) ||
+          c.category?.name.toLowerCase().includes(q) ||
+          (admin ? summarizeCoverage(admin).toLowerCase().includes(q) : false)
+        );
+      });
     }
 
-    if (selectedCity !== "all") result = result.filter(c => c.citySlug === selectedCity);
-    if (selectedArea !== "all") result = result.filter(c => c.areaSlug === selectedArea);
-    if (selectedStreet !== "all") result = result.filter(c => c.streetSlug === selectedStreet);
+    // Location filters — admin campaigns match via their coverage set
+    // (broader coverage covers everything beneath it), demo campaigns via
+    // their single location.
+    if (selectedCity !== "all" || selectedArea !== "all" || selectedStreet !== "all") {
+      result = result.filter((c) => {
+        const admin = c.adminId ? getAdminCampaignById(c.adminId) : undefined;
+        if (!admin) {
+          if (selectedCity !== "all" && c.citySlug !== selectedCity) return false;
+          if (selectedArea !== "all" && c.areaSlug !== selectedArea) return false;
+          if (selectedStreet !== "all" && c.streetSlug !== selectedStreet) return false;
+          return true;
+        }
+        const cityScope =
+          selectedCity !== "all"
+            ? [selectedCity]
+            : Array.from(new Set([...admin.coverage.cities, c.citySlug]));
+        if (selectedCity !== "all" && !campaignCoversLocation(admin, selectedCity)) return false;
+        if (
+          selectedArea !== "all" &&
+          !cityScope.some((cs) => campaignCoversLocation(admin, cs, selectedArea))
+        )
+          return false;
+        if (
+          selectedStreet !== "all" &&
+          !cityScope.some((cs) =>
+            campaignCoversLocation(
+              admin,
+              cs,
+              selectedArea !== "all" ? selectedArea : undefined,
+              selectedStreet
+            )
+          )
+        )
+          return false;
+        return true;
+      });
+    }
 
     if (activeCategory !== "all") {
       result = result.filter(c => c.category?.slug === activeCategory);
     }
 
     if (activeAudience !== "all") {
-      result = result.filter(c => c.targetAudience === activeAudience);
+      result = result.filter(c => c.targetAudience === activeAudience || c.targetAudience === "both");
     }
 
     switch (activeSort) {

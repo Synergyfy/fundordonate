@@ -12,6 +12,8 @@ import {
   RewardManager,
   RewardFormData,
 } from "@/components/campaign/RewardManager";
+import { FileUpload } from "@/components/ui/FileUpload";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 // ───────────────────── Types ─────────────────────
 
@@ -496,7 +498,7 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
             </div>
             <div>
               <label className={labelCls}>Campaign Deadline</label>
-              <input type="date" value={form.deadline} onChange={e => patch({ deadline: e.target.value })} className={inputCls} />
+              <DatePicker value={form.deadline} onChange={e => patch({ deadline: e.target.value })} className={inputCls} />
               <p className={hintCls}>Recommended 30-60 days. Leave empty for open-ended.</p>
             </div>
             <div>
@@ -529,25 +531,13 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
         {/* ══════════ STEP 3 — Media ══════════ */}
         {step === 3 && (
           <div className="space-y-5">
-            <div>
-              <label className={labelCls}>Featured Image</label>
-              {form.featuredImagePreview ? (
-                <div className="relative inline-block w-full">
-                  <img src={form.featuredImagePreview} alt="Featured" className="h-48 w-full rounded-lg object-cover" />
-                  <button type="button" onClick={() => patch({ featuredImagePreview: "" })} className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white hover:bg-red-700 text-xs">✕</button>
-                </div>
-              ) : (
-                <label className="flex h-48 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100">
-                  <span className="text-3xl text-gray-300">📷</span>
-                  <span className="mt-2 text-sm text-gray-500">Click to upload image</span>
-                  <span className="text-xs text-gray-400">PNG, JPG, WebP up to 10MB</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) { const r = new FileReader(); r.onload = () => patch({ featuredImagePreview: r.result as string }); r.readAsDataURL(file); }
-                  }} />
-                </label>
-              )}
-            </div>
+            <FileUpload
+              value={form.featuredImagePreview || ""}
+              onChange={(url) => patch({ featuredImagePreview: url })}
+              label="Featured Image"
+              accept="image/*"
+              placeholder="https://example.com/image.jpg"
+            />
             <div>
               <label className={labelCls}>Campaign Video URL</label>
               <input type="url" value={form.videoUrl} onChange={e => patch({ videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=..." className={inputCls} />

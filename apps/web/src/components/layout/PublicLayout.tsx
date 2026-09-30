@@ -3,18 +3,20 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   Menu, X, Heart,
-  Home, Info, HelpCircle, MapPin, Megaphone,
+  Home, Info, Mail, Landmark, Calendar, MapPin,
   LogIn,
   LayoutDashboard, LogOut,
-  Facebook, Twitter, Instagram, Mail,
+  Facebook, Twitter, Instagram,
 } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Home", to: "/", icon: Home, exact: true },
-  { label: "UK Hub Activation", to: "/uk-hub-activation", icon: MapPin, exact: false },
-  { label: "Campaigns", to: "/campaigns", icon: Megaphone, exact: false },
-  { label: "How It Works", to: "/how-it-works", icon: HelpCircle, exact: true },
-  { label: "About", to: "/about", icon: Info, exact: true },
+  { label: "Funding", to: "/funding", icon: Landmark, exact: false },
+  { label: "Seasonal", to: "/seasonal-funding", icon: Calendar, exact: false },
+  { label: "UK Hubs", to: "/uk-hub-activation", icon: MapPin, exact: false },
+  { label: "Donate", to: "/donate", icon: Heart, exact: false },
+  { label: "About", to: "/about", icon: Info, exact: false },
+  { label: "Contact", to: "/contact", icon: Mail, exact: false },
 ];
 
 function isActive(currentPath: string, linkTo: string, exact: boolean): boolean {
@@ -22,31 +24,36 @@ function isActive(currentPath: string, linkTo: string, exact: boolean): boolean 
   return currentPath === linkTo || currentPath.startsWith(linkTo + "/");
 }
 
-const FOOTER_LINKS = {
-  discover: [
-    { label: "Fund vs Donate", to: "/fund-vs-donate" },
-    { label: "How It Works", to: "/how-it-works" },
-  ],
-  fund: [
-    { label: "Fund vs Donate", to: "/fund-vs-donate" },
-    { label: "For Business Owners", to: "/about#business-owners" },
-    { label: "For Local Residents", to: "/about#local-residents" },
-    { label: "Start a Campaign", to: "/campaigns/create" },
-  ],
-  support: [
-    { label: "Help Centre", to: "/#faq" },
-    { label: "Contact Us", to: "/#community" },
-    { label: "FundOrDonate", to: "/about" },
-    { label: "MCOM Community", to: "/about#mcom-ecosystem" },
-  ],
-  company: [
-    { label: "About FundOrDonate", to: "/about" },
-    { label: "How It Works", to: "/how-it-works" },
-    { label: "Fund vs Donate", to: "/fund-vs-donate" },
-    { label: "Local Hubs", to: "/about#local-hubs" },
-    { label: "UK Hub Activation", to: "/uk-hub-activation" },
-  ],
-};
+const FOOTER_LINKS: { title: string; links: { label: string; to: string }[] }[] = [
+  {
+    title: "Explore",
+    links: [
+      { label: "National Funding", to: "/funding" },
+      { label: "Seasonal Funding", to: "/seasonal-funding" },
+      { label: "Donate", to: "/donate" },
+      { label: "UK Hub Activation", to: "/uk-hub-activation" },
+      { label: "Campaigns", to: "/campaigns" },
+    ],
+  },
+  {
+    title: "Platform",
+    links: [
+      { label: "About", to: "/about" },
+      { label: "Contact", to: "/contact" },
+      { label: "How It Works", to: "/how-it-works" },
+      { label: "Start a Campaign", to: "/campaigns/create" },
+    ],
+  },
+  {
+    title: "Support & Legal",
+    links: [
+      { label: "FAQ", to: "/about#faq" },
+      { label: "Privacy", to: "/privacy" },
+      { label: "Terms", to: "/terms" },
+      { label: "Fund vs Donate", to: "/fund-vs-donate" },
+    ],
+  },
+];
 
 export function PublicLayout({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -111,16 +118,15 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
             </Link>
 
             {/* Desktop Nav */}
-            <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
+            <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1" aria-label="Main navigation">
               {NAV_LINKS.map((link) => (
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-2.5 xl:px-3 py-2 rounded-lg text-[13px] xl:text-sm font-medium transition-colors whitespace-nowrap ${
                     isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                   }`}
                 >
-                  <link.icon className="w-4 h-4" />
                   {link.label}
                 </Link>
               ))}
@@ -246,9 +252,9 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-300" role="contentinfo">
         <div className="container-page py-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 lg:gap-12">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 lg:gap-12">
             {/* Brand */}
-            <div className="col-span-2 md:col-span-4 lg:col-span-1 mb-4 lg:mb-0">
+            <div className="col-span-2 md:col-span-3 lg:col-span-1 mb-4 lg:mb-0">
               <Link to="/" className="flex items-center gap-2.5 mb-4">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
                   <Heart className="w-5 h-5 text-white" fill="white" />
@@ -258,15 +264,15 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
                 </span>
               </Link>
               <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
-                Empowering local high streets through Fund or Donate. Fund what matters.
+                Funding, campaigns and donation opportunities for communities across the UK.
               </p>
             </div>
 
             {/* Link Columns */}
-            {Object.entries(FOOTER_LINKS).map(([title, links]) => (
+            {FOOTER_LINKS.map(({ title, links }) => (
               <div key={title}>
                 <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
-                  {title === "discover" ? "Discover" : title === "fund" ? "Fund or Donate" : title === "support" ? "Support" : "Learn"}
+                  {title}
                 </h3>
                 <ul className="space-y-2.5">
                   {links.map((link) => (

@@ -7,10 +7,16 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Search, ChevronRight, MapPin, Plus, LayoutGrid, List,
+  Search, ChevronRight, MapPin, Plus, LayoutGrid, List, Check, ShieldCheck,
 } from "lucide-react";
 import { getCities, formatCurrency } from "@/data/ukHubData";
-import { getCityStats } from "@/data/highStreetData";
+import { getCityStats, getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import {
+  getCitySetup,
+  areaState,
+  streetState,
+  setBoundary,
+} from "@/data/locationRegistry";
 import { LOCATION_PUBLIC_STATUS_META } from "@/types/uk-hub";
 
 // ───────────────────── Seasons ─────────────────────
@@ -35,14 +41,25 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 
 // ───────────────────── Page ─────────────────────
 
-export function CitiesPage() {
+export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [seasonFilter, setSeasonFilter] = useState<string>("autumn-2026");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [, setRefreshKey] = useState(0);
 
   const cities = useMemo(() => getCities(), []);
+
+  const confirmBoundary = (citySlug: string) => {
+    const setup = getCitySetup(citySlug);
+    setBoundary(citySlug, {
+      mode: setup.boundaryMode,
+      radiusMiles: setup.boundaryRadiusMiles,
+      confirmed: true,
+    });
+    setRefreshKey((k) => k + 1);
+  };
 
   const filtered = useMemo(() => {
     return cities.filter((city) => {
@@ -69,41 +86,83 @@ export function CitiesPage() {
     return counts;
   }, [cities]);
 
-  // Get city stats from highStreetData
+  // Per-city layer confirmation counts (only CONFIRMED layers count as official)
   const getCityRowData = (citySlug: string) => {
-    const stats = getCityStats(citySlug) as any;
-    if (stats) {
-      return {
-        localAreas: stats.totalLocalAreas,
-        localAreasActive: stats.activeLocalAreas ?? 0,
-        highStreets: stats.totalHighStreets,
-        highStreetsActive: stats.activeHighStreets ?? 0,
-        campaigns: stats.totalCampaigns,
-        businesses: stats.totalBusinesses,
-        businessesParticipating: stats.participatingBusinesses ?? 0,
-      };
+    const setup = getCitySetup(citySlug);
+    const areas = getLocalAreasForCity(citySlug);
+    let areasConfirmed = 0;
+    let streetsTotal = 0;
+    let streetsConfirmed = 0;
+    for (const area of areas) {
+      if (areaState(setup, area.slug) === "confirmed") areasConfirmed++;
+      const streets = getHighStreetsForArea(citySlug, area.slug);
+      streetsTotal += streets.length;
+      for (const s of streets) {
+        if (streetState(setup, s.slug) === "confirmed") streetsConfirmed++;
+      }
     }
-    return null;
+    const stats = getCityStats(citySlug) as any;
+    return {
+      localAreas: areas.length,
+      localAreasActive: areasConfirmed,
+      highStreets: streetsTotal,
+      highStreetsActive: streetsConfirmed,
+      campaigns: stats?.totalCampaigns ?? 0,
+      businesses: stats?.totalBusinesses ?? 0,
+      businessesParticipating: stats?.participatingBusinesses ?? 0,
+    };
+  };
+
+  const boundaryChip = (citySlug: string, align: "center" | "left" = "center") => {
+    const setup = getCitySetup(citySlug);
+    const confirmed = setup.boundaryState === "confirmed";
+    return (
+      <div className={`mt-1 flex items-center gap-1 ${align === "center" ? "justify-center" : ""}`}>
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+            confirmed ? "border-green-200 bg-green-50 text-green-700" : "border-amber-200 bg-amber-50 text-amber-700"
+          }`}
+          title={confirmed ? "Operating area confirmed by admin" : "Operating area suggested by geographic data — not yet confirmed"}
+        >
+          {confirmed ? <ShieldCheck className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+          {confirmed ? "Boundary confirmed" : "Boundary suggested"}
+        </span>
+        {!confirmed && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              confirmBoundary(citySlug);
+            }}
+            className="inline-flex items-center gap-0.5 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-green-700 transition-colors"
+          >
+            <Check className="h-3 w-3" /> Confirm
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link to="/admin" className="hover:text-gray-700">Admin</Link>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <span className="text-gray-900 font-medium">UK Activation</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <span className="text-gray-900 font-medium">Cities</span>
+        {!embedded && (
+          <div>
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+              <Link to="/admin" className="hover:text-gray-700">Admin</Link>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-gray-900 font-medium">UK Activation</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-gray-900 font-medium">Cities</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">UK Cities</h1>
+            <p className="text-sm text-gray-500">Manage UK City Hubs, geographic coverage, activation readiness and progress.</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">UK Cities</h1>
-          <p className="text-sm text-gray-500">Manage UK City Hubs, geographic coverage, activation readiness and progress.</p>
-        </div>
+        )}
         <button
           onClick={() => navigate("/admin/cities/new")}
-          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
+          className="ml-auto flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
           Add / Activate City
@@ -215,6 +274,7 @@ export function CitiesPage() {
                       <td className="px-4 py-3 text-center">
                         <span className="font-medium text-gray-900">{stats?.localAreasActive ?? 0}</span>
                         <span className="text-gray-400"> / {stats?.localAreas ?? 0}</span>
+                        <div className="text-[10px] text-gray-400">{getCitySetup(city.slug).areaTerminology}</div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="font-medium text-gray-900">{stats?.highStreetsActive ?? 0}</span>
@@ -241,6 +301,7 @@ export function CitiesPage() {
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${statusMeta.bgColor} ${statusMeta.color}`}>
                           {statusMeta.label}
                         </span>
+                        {boundaryChip(city.slug)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
@@ -292,6 +353,7 @@ export function CitiesPage() {
                         {statusMeta.label}
                       </span>
                     </div>
+                    {boundaryChip(city.slug, "left")}
                     <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
                       <span>{stats?.localAreasActive ?? 0}/{stats?.localAreas ?? 0} local areas</span>
                       <span>{stats?.highStreetsActive ?? 0}/{stats?.highStreets ?? 0} high streets</span>
