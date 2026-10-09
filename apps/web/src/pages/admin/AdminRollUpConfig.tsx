@@ -19,7 +19,6 @@ const CAMPAIGN_TYPE_OPTIONS = [
   { value: "donation", label: "Donation Campaigns" },
   { value: "fund", label: "Fund Campaigns" },
   { value: "founding", label: "Founding Membership" },
-  { value: "sponsor", label: "Sponsorship" },
 ];
 
 export function AdminRollUpConfig() {

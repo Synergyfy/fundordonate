@@ -35,7 +35,7 @@ userRewardsRouter.get("/user/rewards", async (req: AuthRequest, res, next) => {
  */
 userRewardsRouter.get("/user/rewards/:id", async (req: AuthRequest, res, next) => {
   try {
-    const entitlement = await rewardService.getEntitlementById(req.params.id);
+    const entitlement = await rewardService.getEntitlementById(String(req.params.id));
     if (entitlement.userId !== req.userId) {
       return res.status(403).json({ status: "error", message: "Not your entitlement" });
     }
@@ -51,7 +51,7 @@ userRewardsRouter.get("/user/rewards/:id", async (req: AuthRequest, res, next) =
  */
 userRewardsRouter.post("/user/rewards/:id/claim", async (req: AuthRequest, res, next) => {
   try {
-    const entitlement = await rewardService.claimEntitlement(req.params.id, req.userId!);
+    const entitlement = await rewardService.claimEntitlement(String(req.params.id), req.userId!);
     res.json({ status: "success", data: entitlement });
   } catch (error) {
     next(error);

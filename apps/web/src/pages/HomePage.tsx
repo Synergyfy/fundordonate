@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import {
-  ArrowRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Heart, Landmark, MapPin, SlidersHorizontal,
+  ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight,
+  Heart, Landmark, SlidersHorizontal,
 } from "lucide-react";
 import { CampaignCarousel } from "@/components/public/CampaignCarousel";
 import { HUB_LOCATIONS, HUB_STATUS_META, type HubLocation } from "@/data/hubActivation";
@@ -77,7 +77,7 @@ const HERO_SLIDES: HeroSlide[] = [
     eyebrow: "Funding across the UK",
     heading: "Discover funding opportunities across the UK.",
     copy: "FundOrDonate brings funding, campaigns and donation opportunities together in one place — for businesses, communities and causes.",
-    cta: { label: "Explore Funding", to: "/funding" },
+    cta: { label: "Explore Campaign", to: "/campaigns" },
     mediaSide: "right",
   },
   {
@@ -224,27 +224,15 @@ function HeroCarousel() {
 const FUNDING_TABS = [
   {
     icon: Landmark,
-    label: "National Funding",
+    label: "Fund",
     description:
-      "Access UK-wide funding opportunities in one place — grants, campaigns and support for businesses, communities and causes, all with clear next steps.",
+      "Back a campaign and help it reach its goal. Every fund opportunity is a live campaign — follow it from the first pledge to the finish.",
     bullets: [
-      "Browse live funding opportunities from across the UK",
-      "Find opportunities that fit your business, community or cause",
-      "Follow each opportunity through to its next step",
+      "Browse campaigns open for funding across the UK",
+      "Back the campaigns that matter to your community",
+      "Follow each campaign's progress as it grows",
     ],
-    cta: { label: "Explore National Funding", to: "/funding" },
-  },
-  {
-    icon: CalendarDays,
-    label: "Seasonal Funding",
-    description:
-      "Seasonal Funding brings opportunities together around the seasons — see what is active now, what is coming up and what has recently closed.",
-    bullets: [
-      "See active, scheduled and completed seasons at a glance",
-      "Plan ahead around seasonal deadlines",
-      "Switch between seasons to find the right opportunity",
-    ],
-    cta: { label: "Explore Seasonal Funding", to: "/seasonal-funding" },
+    cta: { label: "Explore Fund Campaigns", to: "/campaigns?mode=fund" },
   },
   {
     icon: Heart,
@@ -258,25 +246,12 @@ const FUNDING_TABS = [
     ],
     cta: { label: "Start Donating", to: "/donate" },
   },
-  {
-    icon: MapPin,
-    label: "UK Hub Activation",
-    description:
-      "UK City Hubs bring businesses, residents and campaigns together on local high streets — each one connected to a national community of cities working the same way.",
-    bullets: [
-      "Explore hubs across UK cities and their activation status",
-      "Find the hubs closest to your community",
-      "Join the activation journey in your area",
-    ],
-    cta: { label: "Explore UK Hubs", to: "/uk-hub-activation" },
-  },
 ];
 
 const CAMPAIGN_FILTERS: { label: string; value?: string }[] = [
   { label: "All campaigns" },
-  { label: "Donate", value: "donation" },
   { label: "Fund", value: "fund" },
-  { label: "Sponsor", value: "sponsor" },
+  { label: "Donate", value: "donation" },
 ];
 
 /* ───────────────────── hub city visual ───────────────────── */
@@ -350,15 +325,15 @@ export default function HomePage() {
       <Section className="py-14 md:py-20 bg-white">
         <div className="container-page">
           <SectionHeader
-            title="Explore Funding"
-            description="Four ways to take part — switch a tab to see what each one offers."
+            title="Explore Campaign"
+            description="Two ways to take part — switch a tab to see what each one offers."
           />
 
           {/* Tabs */}
           <div
             role="tablist"
             aria-label="Ways to take part"
-            className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 lg:grid-cols-4"
+            className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 lg:max-w-xl"
           >
             {FUNDING_TABS.map((tab, i) => (
               <button

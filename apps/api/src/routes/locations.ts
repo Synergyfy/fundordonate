@@ -28,8 +28,9 @@ locationsRouter.get("/locations/tree", async (_req, res, next) => {
 
     // Build lookup maps
     type LocationRow = typeof locations[number];
-    const byId = new Map(locations.map((l) => [l.id, { ...l, children: [] as LocationRow[] }]));
-    const roots: LocationRow[] = [];
+    type LocationNode = LocationRow & { children: LocationNode[] };
+    const byId = new Map(locations.map((l) => [l.id, { ...l, children: [] as LocationNode[] }]));
+    const roots: LocationNode[] = [];
 
     // Wire parent-child relationships
     for (const loc of locations) {
@@ -56,8 +57,8 @@ locationsRouter.get("/locations/tree", async (_req, res, next) => {
       fullPath: city.fullPath,
       publicStatus: city.publicStatus,
       localAreas: city.children
-        .filter((c) => ["BOROUGH", "DISTRICT", "LOCAL_AREA", "COMMERCIAL_AREA"].includes(c.type))
-        .map((area) => ({
+        .filter((c: LocationNode) => ["BOROUGH", "DISTRICT", "LOCAL_AREA", "COMMERCIAL_AREA"].includes(c.type))
+        .map((area: LocationNode) => ({
           id: area.id,
           name: area.name,
           slug: area.slug,
@@ -65,8 +66,8 @@ locationsRouter.get("/locations/tree", async (_req, res, next) => {
           fullPath: area.fullPath,
           publicStatus: area.publicStatus,
           highStreets: area.children
-            .filter((h) => h.type === "HIGH_STREET")
-            .map((hs) => ({
+            .filter((h: LocationNode) => h.type === "HIGH_STREET")
+            .map((hs: LocationNode) => ({
               id: hs.id,
               name: hs.name,
               slug: hs.slug,

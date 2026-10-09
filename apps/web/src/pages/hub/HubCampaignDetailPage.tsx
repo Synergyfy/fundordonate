@@ -175,7 +175,7 @@ export default function HubCampaignDetailPage() {
   const countdown = useCountdown(campaign.deadline);
   const isCountdownActive = daysLeft > 0;
 
-  const modeLabel = campaign.mode === "fund" ? "Fund" : campaign.mode === "donation" ? "Donate" : "Sponsor";
+  const modeLabel = campaign.mode === "fund" ? "Fund" : "Donate";
 
   // Evaluate rewards when payment completes
   useEffect(() => {

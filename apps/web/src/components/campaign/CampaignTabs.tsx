@@ -17,7 +17,6 @@ interface Props {
   faqs: Faq[];
   campaignId: string;
   isAuthor?: boolean;
-  mode?: string;
   goalAmount?: number;
   raisedAmount?: number;
   deadline?: string;
@@ -49,7 +48,6 @@ export function CampaignTabs({
   faqs,
   campaignId,
   isAuthor,
-  mode,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("story");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -185,7 +183,7 @@ export function CampaignTabs({
 
                       {!isSoldOut && (
                         <button className="btn-primary mt-4 w-full">
-                          {mode === "fund" ? "Select This Reward" : mode === "sponsor" ? "Become a Partner" : "Select This Reward"}
+                          Select This Reward
                         </button>
                       )}
                     </div>

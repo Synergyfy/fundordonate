@@ -202,6 +202,14 @@ export function getDemoRewardsForCampaign(campaignSlug: string): DemoReward[] {
 }
 
 /**
+ * Whether a campaign has its own configured reward tiers
+ * (falls back to DEFAULT_REWARDS for display only when true is not the case).
+ */
+export function hasCampaignSpecificRewards(campaignSlug: string): boolean {
+  return Object.prototype.hasOwnProperty.call(DEMO_REWARDS_BY_CAMPAIGN, campaignSlug);
+}
+
+/**
  * Simulate reward evaluation after a contribution.
  * Returns which rewards the contribution qualifies for based on trigger config.
  */

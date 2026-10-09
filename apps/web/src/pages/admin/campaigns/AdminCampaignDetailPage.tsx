@@ -91,7 +91,7 @@ const DEMO_REWARDS = [
   { id: "r1", name: "Community Supporter", threshold: 1000, items: ["Digital Badge", "Newsletter"], quantity: 500, claimed: 342, fulfilled: 280, redeemed: 210, expired: 12, status: "active" },
   { id: "r2", name: "Local Champion", threshold: 5000, items: ["T-Shirt", "Sticker Pack", "Certificate"], quantity: 200, claimed: 156, fulfilled: 120, redeemed: 95, expired: 5, status: "active" },
   { id: "r3", name: "Founding Patron", threshold: 10000, items: ["Framed Certificate", "Annual Dinner Invite", "Name on Wall"], quantity: 100, claimed: 87, fulfilled: 60, redeemed: 45, expired: 3, status: "active" },
-  { id: "r4", name: "Platinum Sponsor", threshold: 25000, items: ["Custom Plaque", "VIP Event Access", "Feature Article"], quantity: 25, claimed: 18, fulfilled: 10, redeemed: 8, expired: 1, status: "active" },
+  { id: "r4", name: "Platinum Patron", threshold: 25000, items: ["Custom Plaque", "VIP Event Access", "Feature Article"], quantity: 25, claimed: 18, fulfilled: 10, redeemed: 8, expired: 1, status: "active" },
   { id: "r5", name: "Legacy Partner", threshold: 50000, items: ["Permanent Plaque", "Board Advisory Role", "Annual Report Feature"], quantity: 10, claimed: 5, fulfilled: 2, redeemed: 1, expired: 0, status: "active" },
 ];
 

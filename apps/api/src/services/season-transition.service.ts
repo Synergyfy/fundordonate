@@ -171,15 +171,14 @@ export async function autoAssignToNextSeason(seasonId: string) {
   if (!nextSeason) return null;
 
   // Find campaigns in current season that could continue
-  const campaignsToTransition = await prisma.campaign.findMany({
+  // TODO: Implement transition logic based on campaign status and spillover rules
+  // Some campaigns may be archived, some may move to next season
+  await prisma.campaign.findMany({
     where: {
       seasonId,
       status: { in: ["published", "active"] },
     },
   });
-
-  // TODO: Implement transition logic based on campaign status and spillover rules
-  // Some campaigns may be archived, some may move to next season
 
   return nextSeason;
 }

@@ -304,7 +304,7 @@ export default function HighStreetPage() {
                       <div className="flex flex-wrap gap-2 mb-3">
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                           <Megaphone className="h-2.5 w-2.5" />
-                          {c.mode === "donation" ? "Donation" : c.mode === "fund" ? "Fund" : "Sponsor"}
+                          {c.mode === "fund" ? "Fund" : "Donate"}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                           {c.category.name}

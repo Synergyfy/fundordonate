@@ -79,13 +79,14 @@ export async function calculateTarget(
   const normalizedEconomicIndex = (metrics.economicIndex || 50) / maxEconomicIndex;
   const normalizedActivityLevel = (metrics.activityLevel || 50) / maxActivityLevel;
 
-  // Calculate weighted score
-  const weightedScore =
+  // Calculate weighted score (kept for potential future use)
+  void (
     normalizedPopulation * weights.population +
     normalizedDensity * weights.density +
     normalizedAreaSize * weights.areaSize +
     normalizedEconomicIndex * weights.economicIndex +
-    normalizedActivityLevel * weights.activityLevel;
+    normalizedActivityLevel * weights.activityLevel
+  );
 
   // Calculate raw target
   const rawTarget =
@@ -217,7 +218,6 @@ export async function approveTarget(
 export async function getTargetCalculation(locationId: string) {
   return prisma.targetCalculation.findUnique({
     where: { locationId },
-    include: { location: true },
   });
 }
 
@@ -234,7 +234,6 @@ export async function getAllTargetCalculations(filters?: {
 
   return prisma.targetCalculation.findMany({
     where,
-    include: { location: true },
     orderBy: { updatedAt: "desc" },
   });
 }
@@ -279,7 +278,7 @@ export async function bulkImportMetrics(data: {
     try {
       // Find location by name
       const location = await prisma.hubLocation.findFirst({
-        where: { name: { contains: row.location, mode: "insensitive" } },
+        where: { name: { contains: row.location } },
       });
 
       if (!location) {
@@ -293,21 +292,16 @@ export async function bulkImportMetrics(data: {
         where: { locationId: location.id },
         create: {
           locationId: location.id,
-          locationName: location.name,
           population: row.population,
           density: row.density,
           areaSize: row.areaSize,
           economicIndex: row.economicIndex,
-          dataSource: "imported",
-          lastUpdated: new Date(),
         },
         update: {
           population: row.population,
           density: row.density,
           areaSize: row.areaSize,
           economicIndex: row.economicIndex,
-          dataSource: "imported",
-          lastUpdated: new Date(),
         },
       });
 
@@ -343,21 +337,15 @@ export async function updateLocationMetrics(
     dataSource?: string;
   }
 ) {
-  const location = await prisma.hubLocation.findUnique({
-    where: { id: locationId },
-  });
 
   return prisma.locationMetrics.upsert({
     where: { locationId },
     create: {
       locationId,
-      locationName: location?.name,
       ...data,
-      lastUpdated: new Date(),
     },
     update: {
       ...data,
-      lastUpdated: new Date(),
     },
   });
 }
@@ -370,7 +358,6 @@ export async function getCalculationConfig() {
   return config || {
     id: "default",
     ...DEFAULT_CONFIG,
-    defaultWeights: DEFAULT_WEIGHTS,
   };
 }
 
@@ -383,7 +370,7 @@ export async function updateCalculationConfig(data: Partial<typeof DEFAULT_CONFI
   if (existing) {
     return prisma.targetCalculationConfig.update({
       where: { id: existing.id },
-      data,
+      data: data as Record<string, unknown>,
     });
   }
 
@@ -391,8 +378,7 @@ export async function updateCalculationConfig(data: Partial<typeof DEFAULT_CONFI
     data: {
       id: "default",
       ...DEFAULT_CONFIG,
-      defaultWeights: DEFAULT_WEIGHTS,
       ...data,
-    } as any,
+    } as Record<string, unknown>,
   });
 }

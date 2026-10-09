@@ -193,7 +193,6 @@ export async function checkAndGrantRewards(userId: string, locationId: string) {
 export async function getUserRewards(userId: string) {
   return prisma.rewardGrant.findMany({
     where: { userId },
-    include: { cityReward: true, boroughReward: true },
     orderBy: { grantedAt: "desc" },
   });
 }

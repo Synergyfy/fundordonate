@@ -63,7 +63,7 @@ export async function grantBackerStatus(userId: string, sourceCampaignId: string
   }
 
   // Check existing status - only upgrade
-  const existing = await prisma.backerStatusRecord.findFirst({
+  const existing = await prisma.backerStatus.findFirst({
     where: { userId },
     orderBy: { grantedAt: "desc" },
   });
@@ -77,15 +77,15 @@ export async function grantBackerStatus(userId: string, sourceCampaignId: string
   }
 
   // Create new backer status
-  const status = await prisma.backerStatusRecord.create({
+  const status = await prisma.backerStatus.create({
     data: {
       userId,
       statusType: tier,
       sourceCampaignId,
       locationId: campaign.locationId,
-      cityCount: uniqueLocationCount,
       grantedAt: new Date(),
       visibility: "PUBLIC",
+      metadata: JSON.stringify({ cityCount: uniqueLocationCount }),
     },
   });
 
@@ -106,7 +106,7 @@ export async function grantBackerStatus(userId: string, sourceCampaignId: string
 export async function getLeaderboard(locationId?: string, limit: number = 20) {
   const where = locationId ? { locationId } : {};
 
-  const backerStats = await prisma.backerStatusRecord.groupBy({
+  const backerStats = await prisma.backerStatus.groupBy({
     by: ["userId"],
     where,
     _max: { statusType: true },
@@ -115,7 +115,7 @@ export async function getLeaderboard(locationId?: string, limit: number = 20) {
 
   // Get user details and total contributed
   const leaderboard = await Promise.all(
-    backerStats.map(async (b) => {
+    backerStats.map(async (b: { userId: string; _max: { statusType: string | null }; _count: { id: number } }) => {
       const user = await prisma.user.findUnique({
         where: { id: b.userId },
         select: { id: true, firstName: true, lastName: true, avatar: true, username: true },
@@ -137,7 +137,7 @@ export async function getLeaderboard(locationId?: string, limit: number = 20) {
   );
 
   return leaderboard
-    .sort((a, b) => b.totalContributed - a.totalContributed)
+    .sort((a: { totalContributed: number }, b: { totalContributed: number }) => b.totalContributed - a.totalContributed)
     .slice(0, limit);
 }
 
@@ -186,11 +186,11 @@ export async function redeemFunnelCode(code: string, userId: string) {
  * Get backer stats for a location.
  */
 export async function getLocationStats(locationId: string) {
-  const totalBackers = await prisma.backerStatusRecord.count({
+  const totalBackers = await prisma.backerStatus.count({
     where: { locationId },
   });
 
-  const tierBreakdown = await prisma.backerStatusRecord.groupBy({
+  const tierBreakdown = await prisma.backerStatus.groupBy({
     by: ["statusType"],
     where: { locationId },
     _count: { id: true },
@@ -201,9 +201,9 @@ export async function getLocationStats(locationId: string) {
   return {
     totalBackers,
     backerTierBreakdown: {
-      BACKER: tierBreakdown.find((t) => t.statusType === "BACKER")?._count.id || 0,
-      CITY: tierBreakdown.find((t) => t.statusType === "CITY")?._count.id || 0,
-      NATIONAL: tierBreakdown.find((t) => t.statusType === "NATIONAL")?._count.id || 0,
+      BACKER: tierBreakdown.find((t: { statusType: string }) => t.statusType === "BACKER")?._count.id || 0,
+      CITY: tierBreakdown.find((t: { statusType: string }) => t.statusType === "CITY")?._count.id || 0,
+      NATIONAL: tierBreakdown.find((t: { statusType: string }) => t.statusType === "NATIONAL")?._count.id || 0,
     },
     topContributors,
   };

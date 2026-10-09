@@ -18,7 +18,7 @@ import {
 } from "@/data/campaignTemplateStore";
 
 type TemplateStatus = "draft" | "active" | "inactive" | "archived";
-type CampaignType = "donation" | "crowdfunding" | "fund" | "sponsor";
+type CampaignType = "donation" | "crowdfunding" | "fund";
 type Audience = "business" | "consumer" | "both";
 
 interface TemplateSummary {
@@ -53,7 +53,6 @@ const TYPE_META: Record<CampaignType, { label: string; color: string }> = {
   donation: { label: "Donation", color: "bg-blue-100 text-blue-700" },
   crowdfunding: { label: "Crowdfunding", color: "bg-purple-100 text-purple-700" },
   fund: { label: "Fund", color: "bg-green-100 text-green-700" },
-  sponsor: { label: "Sponsor", color: "bg-amber-100 text-amber-700" },
 };
 
 const AUDIENCE_META: Record<Audience, { label: string; color: string }> = {

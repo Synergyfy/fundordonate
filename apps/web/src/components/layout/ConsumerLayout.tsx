@@ -1,47 +1,47 @@
 // =============================================================================
 // Consumer Dashboard Layout
 // Mobile-first layout with bottom navigation bar.
-// Desktop: sidebar navigation
-// Mobile: bottom tab bar with icons
+// Desktop: compact rail with the same five areas (no multi-item sidebar).
+// Tabs: Home | Explore | Rewards | Activity | You
 // =============================================================================
 
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import {
-  Home, Heart, Receipt, User,
-  LayoutDashboard, Target, BookOpen, FileText,
-} from "lucide-react";
+import { Activity, Compass, Gift, Home, User } from "lucide-react";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { syncUnreadBadge } from "@/data/consumerNotificationsData";
 
-const BOTTOM_NAV = [
+const NAV_ITEMS = [
   { to: "/consumer", label: "Home", icon: Home, end: true },
-  { to: "/consumer/donations", label: "Donations", icon: Heart },
-  { to: "/consumer/receipts", label: "Receipts", icon: Receipt },
-  { to: "/consumer/profile", label: "Profile", icon: User },
+  { to: "/consumer/explore", label: "Explore", icon: Compass, end: false },
+  { to: "/consumer/rewards", label: "Rewards", icon: Gift, end: false },
+  { to: "/consumer/activity", label: "Activity", icon: Activity, end: false },
+  { to: "/consumer/you", label: "You", icon: User, end: false },
 ];
 
-const SIDEBAR_NAV = [
-  { to: "/consumer", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/consumer/donations", label: "My Donations", icon: Heart },
-  { to: "/consumer/pledges", label: "My Pledges", icon: Target },
-  { to: "/consumer/bookmarks", label: "Bookmarks", icon: BookOpen },
-  { to: "/consumer/receipts", label: "Receipts", icon: FileText },
-  { to: "/consumer/profile", label: "Profile", icon: User },
-];
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[8px] font-bold leading-none text-white">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
 
 export function ConsumerLayout() {
   const location = useLocation();
+  const { unread } = useUnreadNotifications();
+
+  useEffect(() => {
+    syncUnreadBadge();
+  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
-      {/* Desktop Sidebar */}
-      <aside className="w-64 border-r bg-white hidden lg:block shrink-0">
-        <div className="p-4 border-b">
-          <div className="flex items-center gap-2">
-            <Heart className="h-5 w-5 text-primary-600" />
-            <span className="text-sm font-bold text-gray-900">Consumer Dashboard</span>
-          </div>
-        </div>
-        <nav className="p-3 space-y-1">
-          {SIDEBAR_NAV.map((item) => {
+      {/* Desktop compact rail — same five areas as the bottom nav */}
+      <aside className="hidden w-48 shrink-0 border-r border-gray-200 bg-white lg:block">
+        <nav className="space-y-1 p-3">
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -56,7 +56,10 @@ export function ConsumerLayout() {
                   }`
                 }
               >
-                <Icon className="h-4 w-4" />
+                <span className="relative">
+                  <Icon className="h-4 w-4" />
+                  {item.label === "You" && <UnreadBadge count={unread} />}
+                </span>
                 {item.label}
               </NavLink>
             );
@@ -65,16 +68,16 @@ export function ConsumerLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 pb-20 lg:pb-6 bg-gray-50 overflow-auto">
+      <main className="flex-1 overflow-auto bg-gray-50 pb-24 lg:pb-6">
         <div className="p-4 lg:p-6">
           <Outlet />
         </div>
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
+      <nav className="safe-area-bottom fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white lg:hidden">
         <div className="flex items-center justify-around px-2 py-1">
-          {BOTTOM_NAV.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = item.end
               ? location.pathname === item.to
@@ -84,13 +87,16 @@ export function ConsumerLayout() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className="flex flex-col items-center gap-0.5 px-3 py-2 min-w-[56px]"
+                className="flex min-w-[56px] flex-col items-center gap-0.5 px-1 py-2"
               >
-                <Icon
-                  className={`h-5 w-5 transition-colors ${
-                    isActive ? "text-primary-600" : "text-gray-400"
-                  }`}
-                />
+                <span className="relative">
+                  <Icon
+                    className={`h-5 w-5 transition-colors ${
+                      isActive ? "text-primary-600" : "text-gray-400"
+                    }`}
+                  />
+                  {item.label === "You" && <UnreadBadge count={unread} />}
+                </span>
                 <span
                   className={`text-[10px] font-medium transition-colors ${
                     isActive ? "text-primary-600" : "text-gray-400"

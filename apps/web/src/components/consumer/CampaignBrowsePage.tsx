@@ -8,7 +8,7 @@ interface Campaign {
   goalAmount: number;
   raisedAmount: number;
   deadline: string;
-  mode: "fund" | "donate" | "sponsor";
+  mode: "fund" | "donate";
   featuredImage: string;
   location: string;
   cityName: string;
@@ -74,7 +74,7 @@ const DEMO_CAMPAIGNS: Campaign[] = [
     goalAmount: 1500000,
     raisedAmount: 900000,
     deadline: "2026-10-30",
-    mode: "sponsor",
+    mode: "donate",
     featuredImage: "",
     location: "Bristol High Street",
     cityName: "Bristol",
@@ -140,8 +140,6 @@ function getModeColor(mode: string): string {
   switch (mode) {
     case "fund":
       return "bg-primary-500 text-white";
-    case "sponsor":
-      return "bg-amber-500 text-white";
     case "donate":
       return "bg-secondary-500 text-white";
     default:
@@ -153,8 +151,6 @@ function getModeLabel(mode: string): string {
   switch (mode) {
     case "fund":
       return "Fund";
-    case "sponsor":
-      return "Sponsor";
     case "donate":
       return "Donate";
     default:
@@ -201,7 +197,6 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
     { key: "all", label: "All" },
     { key: "fund", label: "Fund" },
     { key: "donate", label: "Donate" },
-    { key: "sponsor", label: "Sponsor" },
   ];
 
   return (
@@ -211,7 +206,7 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900">Discover Campaigns</h1>
           <p className="mt-2 text-gray-500">
-            Find projects to fund, donate to, or sponsor in your community
+            Find projects to fund or donate to in your community
           </p>
         </div>
       </div>

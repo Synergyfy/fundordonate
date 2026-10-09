@@ -106,7 +106,7 @@ userDashboardRouter.get("/user/pledges", async (req: AuthRequest, res, next) => 
         where: { userId },
         include: {
           campaign: { select: { title: true, slug: true, featuredImage: true, deadline: true } },
-          reward: { select: { title: true, amount: true, deliveryDate: true } },
+          reward: { select: { title: true, amount: true } },
         },
         orderBy: { createdAt: "desc" },
         skip,

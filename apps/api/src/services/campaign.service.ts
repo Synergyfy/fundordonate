@@ -255,7 +255,6 @@ export async function createCampaign(
       hierarchyLevel: data.hierarchyLevel,
       locationId: data.locationId,
       // Campaign Context
-      location: data.location,
       isEvergreen: data.isEvergreen || false,
       participationTypes: data.participationTypes ? JSON.stringify(data.participationTypes) : "[]",
       backerTiersEnabled: data.backerTiersEnabled || false,
@@ -448,7 +447,6 @@ export async function updateCampaign(
     ...(data.hierarchyLevel !== undefined && { hierarchyLevel: data.hierarchyLevel }),
     ...(data.locationId !== undefined && { locationId: data.locationId }),
     // Campaign Context
-    ...(data.location !== undefined && { location: data.location }),
     ...(data.isEvergreen !== undefined && { isEvergreen: data.isEvergreen }),
     ...(data.participationTypes !== undefined && { participationTypes: JSON.stringify(data.participationTypes) }),
     ...(data.backerTiersEnabled !== undefined && { backerTiersEnabled: data.backerTiersEnabled }),

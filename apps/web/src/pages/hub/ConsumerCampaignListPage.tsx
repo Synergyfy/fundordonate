@@ -186,7 +186,7 @@ export default function ConsumerCampaignListPage() {
                         Consumer
                       </span>
                       <span className="rounded-full bg-green-100 text-green-700 px-2.5 py-0.5 text-[10px] font-bold">
-                        {campaign.mode === "fund" ? "Fund" : campaign.mode === "donation" ? "Donate" : "Sponsor"}
+                        {campaign.mode === "fund" ? "Fund" : "Donate"}
                       </span>
                     </div>
 

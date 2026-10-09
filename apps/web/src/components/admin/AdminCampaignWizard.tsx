@@ -30,7 +30,7 @@ interface CampaignFormData {
   title: string;
   shortDescription: string;
   description: string;
-  mode: "donation" | "crowdfunding" | "fund" | "sponsor";
+  mode: "donation" | "crowdfunding" | "fund";
   categoryId: string;
   tags: string[];
   // Step 2 — Goal & Duration
@@ -103,7 +103,6 @@ const MODES = [
   { value: "donation", label: "Donation", desc: "Direct donations, no reward tiers" },
   { value: "crowdfunding", label: "Crowdfunding", desc: "Reward-based with pledge tiers" },
   { value: "fund", label: "Fund", desc: "Goal-driven funding campaign" },
-  { value: "sponsor", label: "Sponsor", desc: "Sponsorship / partnership campaign" },
 ] as const;
 
 const SEASONS = [
@@ -121,7 +120,7 @@ const SELF_FUNDING_LEVELS = [
   { value: "platinum", label: "Platinum", color: "bg-purple-100 text-purple-700" },
 ] as const;
 
-const PARTICIPATION_OPTIONS = ["donation", "fund", "sponsor"];
+const PARTICIPATION_OPTIONS = ["donation", "fund"];
 
 const HIERARCHY_LEVELS = [
   { value: "national", label: "National", icon: "🇬🇧", desc: "UK-wide programme campaign" },

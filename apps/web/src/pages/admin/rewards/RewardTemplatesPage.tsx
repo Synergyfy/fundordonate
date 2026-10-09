@@ -95,26 +95,12 @@ const DEMO_TEMPLATES: RewardTemplate[] = [
     itemsCount: 2,
     usageCount: 18,
   },
-  {
-    id: "tpl-6",
-    name: "Sponsor Recognition",
-    description: "Public recognition for sponsors of campaigns",
-    category: "sponsorship",
-    audience: "business",
-    rewardType: "standard",
-    triggerMode: "min",
-    triggerMin: 250,
-    fulfilmentType: "manual",
-    itemsCount: 2,
-    usageCount: 6,
-  },
 ];
 
 const CATEGORY_OPTIONS = [
   { value: "backer", label: "Backer" },
   { value: "founding_member", label: "Founding Member" },
   { value: "donation", label: "Donation" },
-  { value: "sponsorship", label: "Sponsorship" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -149,7 +135,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   backer: "bg-blue-100 text-blue-700",
   founding_member: "bg-purple-100 text-purple-700",
   donation: "bg-green-100 text-green-700",
-  sponsorship: "bg-amber-100 text-amber-700",
   custom: "bg-gray-100 text-gray-700",
 };
 

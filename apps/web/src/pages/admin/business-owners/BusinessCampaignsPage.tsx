@@ -13,7 +13,7 @@ interface BusinessCampaign {
   owner: string;
   business: string;
   city: string;
-  mode: "donation" | "fund" | "sponsor";
+  mode: "donation" | "fund";
   status: "DRAFT" | "PENDING REVIEW" | "ACTIVE" | "COMPLETED";
   raised: number; // £
   target: number; // £
@@ -25,10 +25,10 @@ const DEMO_BUSINESS_CAMPAIGNS: BusinessCampaign[] = [
   { id: "bc-1", title: "TechStart Manchester Starter Kits", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", mode: "fund", status: "ACTIVE", raised: 42000, target: 50000, backers: 180, createdAt: "2026-08-14" },
   { id: "bc-2", title: "Green Initiative Planters", owner: "Sarah Chen", business: "Green Initiative Ltd", city: "Birmingham", mode: "donation", status: "ACTIVE", raised: 28000, target: 35000, backers: 120, createdAt: "2026-08-22" },
   { id: "bc-3", title: "Community Fund London Grants", owner: "Michael Okafor", business: "Community Fund London", city: "London", mode: "fund", status: "ACTIVE", raised: 65000, target: 80000, backers: 290, createdAt: "2026-07-30" },
-  { id: "bc-4", title: "Digital Skills Leeds Workshop", owner: "Emma Thompson", business: "Digital Skills Leeds", city: "Leeds", mode: "sponsor", status: "PENDING REVIEW", raised: 15000, target: 25000, backers: 85, createdAt: "2026-09-05" },
+  { id: "bc-4", title: "Digital Skills Leeds Workshop", owner: "Emma Thompson", business: "Digital Skills Leeds", city: "Leeds", mode: "donation", status: "PENDING REVIEW", raised: 15000, target: 25000, backers: 85, createdAt: "2026-09-05" },
   { id: "bc-5", title: "Liverpool Green Spaces", owner: "Lisa Patel", business: "Liverpool Green Spaces", city: "Liverpool", mode: "donation", status: "COMPLETED", raised: 9500, target: 9500, backers: 45, createdAt: "2026-06-11" },
   { id: "bc-6", title: "Bristol Tech Hub Expansion", owner: "David Brown", business: "Bristol Tech Hub", city: "Bristol", mode: "fund", status: "DRAFT", raised: 0, target: 60000, backers: 0, createdAt: "2026-09-18" },
-  { id: "bc-7", title: "Oldham Street Shopfront Fix", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", mode: "sponsor", status: "COMPLETED", raised: 12000, target: 12000, backers: 60, createdAt: "2026-05-02" },
+  { id: "bc-7", title: "Oldham Street Shopfront Fix", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", mode: "fund", status: "COMPLETED", raised: 12000, target: 12000, backers: 60, createdAt: "2026-05-02" },
 ];
 
 const STATUS_COLORS: Record<BusinessCampaign["status"], string> = {
@@ -39,9 +39,8 @@ const STATUS_COLORS: Record<BusinessCampaign["status"], string> = {
 };
 
 const MODE_LABELS: Record<BusinessCampaign["mode"], string> = {
-  donation: "Donation",
-  fund: "Funding",
-  sponsor: "Sponsorship",
+  donation: "Donate",
+  fund: "Fund",
 };
 
 const gbp = (v: number) =>

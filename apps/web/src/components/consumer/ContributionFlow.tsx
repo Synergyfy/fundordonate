@@ -5,6 +5,15 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { resolveCampaignForDetail } from "@/data/consumerExploreData";
+import {
+  getDemoRewardsForCampaign,
+  hasCampaignSpecificRewards,
+  simulateRewardEvaluation,
+} from "@/data/demoRewards";
+import { getConsumerCommunity } from "@/data/consumerHomeData";
+import { recordContribution } from "@/data/consumerActivityData";
 import {
   X,
   ArrowLeft,
@@ -726,6 +735,7 @@ function ConfirmationStep({
   participationType,
   amount,
   transactionRef,
+  completedAt,
   onGoToDashboard,
   onShare,
   onViewCampaign,
@@ -734,15 +744,18 @@ function ConfirmationStep({
   participationType: string;
   amount: number;
   transactionRef: string;
+  completedAt: string;
   onGoToDashboard: () => void;
   onShare: () => void;
   onViewCampaign: () => void;
 }) {
   const participationLabel = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.label || participationType;
   const participationEmoji = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.emoji || "";
-  const matchingReward = campaign.rewards
-    ?.filter((r) => r.amount <= amount)
-    .sort((a, b) => b.amount - a.amount)[0];
+  const qualifying = simulateRewardEvaluation(campaign.slug, Math.round(amount * 100));
+  const earned = qualifying[0]?.reward;
+  const completedDate = completedAt
+    ? new Date(completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
   return (
     <div className="space-y-6 text-center">
@@ -753,16 +766,12 @@ function ConfirmationStep({
       </div>
 
       <div>
-        <h2 className="text-xl font-bold text-gray-900">Thank You!</h2>
+        <h2 className="text-xl font-bold text-gray-900">Contribution Successful</h2>
         <p className="text-sm text-gray-500 mt-1">Your contribution has been successfully processed.</p>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 text-left space-y-3 shadow-sm">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Transaction Reference</p>
-          <p className="font-mono font-semibold text-gray-900 mt-0.5">{transactionRef}</p>
-        </div>
-        <div className="border-t border-gray-100 pt-3">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Campaign</p>
           <p className="font-semibold text-gray-900 mt-0.5">{campaign.title}</p>
         </div>
@@ -771,20 +780,41 @@ function ConfirmationStep({
           <p className="text-2xl font-bold text-gray-900 mt-0.5">£{amount}</p>
         </div>
         <div className="border-t border-gray-100 pt-3">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Participation</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Date</p>
+          <p className="font-medium text-gray-900 mt-0.5">{completedDate}</p>
+        </div>
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Transaction Reference</p>
+          <p className="font-mono font-semibold text-gray-900 mt-0.5">{transactionRef}</p>
+        </div>
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Contribution Type</p>
           <span className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 bg-primary-50 text-primary-700 text-sm font-medium rounded-full">
             {participationEmoji} {participationLabel}
           </span>
         </div>
-        {matchingReward && (
-          <div className="border-t border-gray-100 pt-3">
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Reward Earned</p>
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Contribution Status</p>
+          <span className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 bg-green-50 text-green-700 text-sm font-medium rounded-full">
+            <Check className="h-3.5 w-3.5" /> Completed
+          </span>
+        </div>
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Reward Eligibility</p>
+          {earned ? (
             <div className="flex items-center gap-2 mt-1">
               <Gift className="h-4 w-4 text-amber-500" />
-              <span className="font-medium text-gray-900">{matchingReward.title}</span>
+              <div>
+                <span className="font-medium text-gray-900">Eligible — {earned.title}</span>
+                {earned.description && (
+                  <p className="text-xs text-gray-500 mt-0.5">{earned.description}</p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-sm text-gray-500 mt-1">Not qualified for a reward yet</p>
+          )}
+        </div>
       </div>
 
       <div className="bg-primary-50 border border-primary-100 rounded-xl p-4 text-left">
@@ -807,8 +837,15 @@ function ConfirmationStep({
 
       <div className="flex flex-col gap-2 pt-2">
         <button
-          onClick={onGoToDashboard}
+          onClick={onViewCampaign}
           className="w-full flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+        >
+          <Eye className="h-4 w-4" />
+          View Campaign
+        </button>
+        <button
+          onClick={onGoToDashboard}
+          className="w-full flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
         >
           <LayoutDashboard className="h-4 w-4" />
           Go to Dashboard
@@ -819,13 +856,6 @@ function ConfirmationStep({
         >
           <Share2 className="h-4 w-4" />
           Share on Social Media
-        </button>
-        <button
-          onClick={onViewCampaign}
-          className="w-full flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          <Eye className="h-4 w-4" />
-          View Campaign
         </button>
       </div>
     </div>
@@ -845,9 +875,57 @@ const DEFAULT_CAMPAIGN: Campaign = {
   mode: "donate",
 };
 
+function buildCampaignFromSlug(slug: string): Campaign | null {
+  const resolved = resolveCampaignForDetail(slug);
+  if (!resolved) return null;
+  const c = resolved.campaign;
+  const types = c.participationTypes ?? [];
+  const hasFund = types.includes("fund");
+  const hasDonate = types.includes("donate");
+  const noTypeDetails = !hasFund && !hasDonate;
+  const isFounding =
+    c.membership === true || c.category.slug === "founding-membership";
+  const rewardsConfigured =
+    hasCampaignSpecificRewards(c.slug) || c.backerTiersEnabled === true;
+  return {
+    id: c.id,
+    slug: c.slug,
+    title: c.title,
+    shortDescription: c.shortDescription,
+    goalAmount: c.goalAmount,
+    raisedAmount: c.raisedAmount,
+    deadline: c.deadline,
+    status: "active",
+    mode: c.mode,
+    featuredImage: c.featuredImage,
+    participation: {
+      backCampaign: noTypeDetails || hasFund,
+      foundingMember: isFounding,
+      foundingMemberMonthly: isFounding && c.recurringEnabled === true,
+      donateContribute: noTypeDetails || hasDonate,
+    },
+    rewards: rewardsConfigured
+      ? getDemoRewardsForCampaign(c.slug).map((r) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          amount: (r.triggerConfig.min ?? 0) / 100,
+          items: r.items.map((i) => ({ title: i.title })),
+        }))
+      : undefined,
+    leaderboard: { enabled: true },
+  };
+}
+
 export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp, onComplete: _onComplete }: ContributionFlowProps) {
-  const campaign = campaignProp ?? DEFAULT_CAMPAIGN;
-  const onClose = onCloseProp ?? (() => {});
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const resolvedCampaign = useMemo(
+    () => campaignProp ?? (slug ? buildCampaignFromSlug(slug) : null),
+    [campaignProp, slug],
+  );
+  const campaign = resolvedCampaign ?? DEFAULT_CAMPAIGN;
+  const onClose = onCloseProp ?? (() => navigate(-1));
   const [currentStep, setCurrentStep] = useState(0);
   const [participationType, setParticipationType] = useState("");
   const [amount, setAmount] = useState(0);
@@ -858,13 +936,18 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   const [paymentMethod, setPaymentMethod] = useState("stripe");
   const [processing, setProcessing] = useState(false);
   const [transactionRef, setTransactionRef] = useState("");
+  const [completedAt, setCompletedAt] = useState("");
 
   const steps = useMemo(() => {
+    let list = STEPS;
     if (!campaign.allocationEnabled) {
-      return STEPS.filter((s) => s.id !== "allocation");
+      list = list.filter((s) => s.id !== "allocation");
     }
-    return STEPS;
-  }, [campaign.allocationEnabled]);
+    if (!campaign.terms?.campaignTerms && !campaign.terms?.contributionTerms) {
+      list = list.filter((s) => s.id !== "terms");
+    }
+    return list;
+  }, [campaign.allocationEnabled, campaign.terms]);
 
   const canProceed = useCallback(() => {
     const step = steps[currentStep];
@@ -904,7 +987,35 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
       setProcessing(true);
       setTimeout(() => {
         const ref = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        const amountPence = Math.round(amount * 100);
+        const qualifying = simulateRewardEvaluation(campaign.slug, amountPence);
+        const earned = qualifying[0]?.reward;
+        const community = getConsumerCommunity();
+        const resolvedLocation =
+          resolveCampaignForDetail(campaign.slug)?.campaign.location ?? "";
         setTransactionRef(ref);
+        setCompletedAt(new Date().toISOString());
+        void recordContribution({
+          reference: ref,
+          campaignSlug: campaign.slug,
+          campaignTitle: campaign.title,
+          campaignImage: campaign.featuredImage,
+          campaignLocation: resolvedLocation,
+          communityCityName: community.cityName,
+          communityAreaName: community.areaName,
+          communityStreetName: community.streetName,
+          mode: campaign.mode === "fund" ? "fund" : "donation",
+          participationType:
+            participationType ||
+            (campaign.mode === "fund" ? "backer" : "donation"),
+          kind: campaign.mode === "fund" ? "pledge" : "donation",
+          amount: amountPence,
+          rewardEligible: !!earned,
+          rewardId: earned?.id,
+          rewardTitle: earned?.title,
+        }).catch(() => {
+          /* fake store unavailable — confirmation still renders */
+        });
         setProcessing(false);
         setCurrentStep((prev) => prev + 1);
       }, 2000);
@@ -919,7 +1030,7 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   };
 
   const handleGoToDashboard = () => {
-    onClose();
+    navigate("/consumer");
   };
 
   const handleShare = () => {
@@ -933,7 +1044,7 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   };
 
   const handleViewCampaign = () => {
-    window.open(`/campaigns/${campaign.slug}`, "_blank");
+    navigate(`/consumer/explore/campaign/${campaign.slug}`);
   };
 
   const renderStep = () => {
@@ -1003,6 +1114,7 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
             participationType={participationType}
             amount={amount}
             transactionRef={transactionRef}
+            completedAt={completedAt}
             onGoToDashboard={handleGoToDashboard}
             onShare={handleShare}
             onViewCampaign={handleViewCampaign}

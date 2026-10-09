@@ -5,7 +5,6 @@
 
 import type {
   Season,
-  SeasonStatus,
   SeasonMetrics,
   SeasonReview,
   CreateSeasonPayload,
@@ -13,10 +12,6 @@ import type {
   SeasonListResponse,
   SeasonActionRequest,
   SeasonCityActivity,
-  SeasonLocalAreaActivity,
-  SeasonHighStreetActivity,
-  SeasonBusinessActivity,
-  SeasonParticipation,
 } from "@fundordonate/types";
 
 // =============================================================================
@@ -243,14 +238,14 @@ export const seasonService = {
       totalRaised: season.totalRaised,
       progressPercent: Math.round((season.totalRaised / season.overallTarget) * 100),
       remainingAmount: season.overallTarget - season.totalRaised,
-      citiesActive: season.activationScope.cities.filter((c) => c.enabled).length,
+      citiesActive: season.activationScope.cities.filter((c: { enabled: boolean }) => c.enabled).length,
       citiesTargeted: season.activationScope.cities.length,
       localAreasActive: season.activationScope.cities.reduce(
-        (sum, c) => sum + c.localAreas.filter((la) => la.enabled).length, 0
+        (sum: number, c: { localAreas: { enabled: boolean }[] }) => sum + c.localAreas.filter((la: { enabled: boolean }) => la.enabled).length, 0
       ),
       highStreetsActive: season.activationScope.cities.reduce(
-        (sum, c) => sum + c.localAreas.reduce(
-          (laSum, la) => laSum + la.highStreets.filter((hs) => hs.enabled).length, 0
+        (sum: number, c: { localAreas: { highStreets: { enabled: boolean }[] }[] }) => sum + c.localAreas.reduce(
+          (laSum: number, la: { highStreets: { enabled: boolean }[] }) => laSum + la.highStreets.filter((hs: { enabled: boolean }) => hs.enabled).length, 0
         ), 0
       ),
       businessesActive: 45,

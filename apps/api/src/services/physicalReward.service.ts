@@ -170,7 +170,7 @@ export async function startPhysicalRewardJourney(
 export async function completePhysicalRedemption(
   userId: string,
   journeyId: string,
-  donationId: string
+  _donationId: string
 ) {
   const journey = await prisma.physicalRewardJourney.findUnique({
     where: { id: journeyId },
@@ -225,7 +225,6 @@ export async function completePhysicalRedemption(
 export async function getUserPhysicalJourneys(userId: string) {
   return prisma.physicalRewardJourney.findMany({
     where: { userId },
-    include: { reward: true, business: true },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -241,7 +240,6 @@ export async function getBusinessPendingRedemptions(businessId: string) {
       physicalRedeemed: false,
       status: "PENDING",
     },
-    include: { user: true, reward: true },
     orderBy: { createdAt: "asc" },
   });
 }

@@ -142,7 +142,7 @@ export async function evaluateRewardTriggers(
         userId,
         rewardId: match.reward.id,
         campaignId,
-        triggerValue: match.triggerValue,
+        triggerValue: match.triggerValue as object,
         status: "earned",
         expiresAt,
       },

@@ -88,7 +88,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type CampaignType = "donation" | "crowdfunding" | "fund" | "sponsor";
+type CampaignType = "donation" | "crowdfunding" | "fund";
 type TemplateAudience = "business" | "consumer" | "both";
 type ConditionMode = "minimum" | "range" | "exact";
 type DeliveryTiming = "instant" | "campaign_end" | "manual";
@@ -242,7 +242,6 @@ const CAMPAIGN_TYPES: { id: CampaignType; label: string; description: string }[]
   { id: "donation", label: "Donation", description: "Give-based campaigns with optional contributor rewards." },
   { id: "crowdfunding", label: "Crowdfunding", description: "Goal-driven campaigns backed by many small contributions." },
   { id: "fund", label: "Fund", description: "Structured funding campaigns with a defined target and dates." },
-  { id: "sponsor", label: "Sponsor", description: "Sponsorship campaigns backed by partners and brands." },
 ];
 
 const AUDIENCE_OPTIONS: { id: TemplateAudience; label: string; description: string }[] = [

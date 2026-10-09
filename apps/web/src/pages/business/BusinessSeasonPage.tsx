@@ -180,7 +180,7 @@ export default function BusinessSeasonPage() {
               {[
                 { title: "Local Hub Fund", raised: 4500, goal: 10000, mode: "fund" },
                 { title: "High Street Business Support", raised: 2800, goal: 5000, mode: "donation" },
-                { title: "Community Rewards Programme", raised: 1200, goal: 3000, mode: "sponsor" },
+                { title: "Community Rewards Programme", raised: 1200, goal: 3000, mode: "donation" },
               ].map((c, i) => (
                 <div key={i} className="flex items-center gap-3 rounded-lg bg-white border p-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-green-600 flex-shrink-0">

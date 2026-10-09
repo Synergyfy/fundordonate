@@ -65,7 +65,7 @@ export function ReportsAnalyticsPage() {
   }, [stats]);
 
   const modeData = useMemo(() => {
-    const modes = { donation: 0, fund: 0, sponsor: 0 };
+    const modes = { donation: 0, fund: 0 };
     DEMO_CAMPAIGNS.forEach((c) => {
       const m = c.mode as keyof typeof modes;
       if (m in modes) modes[m]++;

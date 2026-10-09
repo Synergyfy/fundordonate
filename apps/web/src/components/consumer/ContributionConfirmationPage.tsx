@@ -14,7 +14,12 @@ import {
   TrendingUp,
   Trophy,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  listContributions,
+  type ConsumerContribution,
+} from "@/data/consumerActivityData";
 
 // ── Types ──
 
@@ -78,20 +83,108 @@ const WHAT_HAPPENS_NEXT = [
 const DEFAULT_PARTICIPATION_META = { label: "Backer", emoji: "🤝", color: "text-primary-700", bg: "bg-primary-50 border-primary-200" };
 
 export function ContributionConfirmationPage({
-  transactionRef = "",
-  campaignTitle = "Campaign",
-  campaignSlug = "",
-  amount = 0,
-  participationType = "backer",
+  transactionRef: transactionRefProp,
+  campaignTitle: campaignTitleProp,
+  campaignSlug: campaignSlugProp,
+  amount: amountProp,
+  participationType: participationTypeProp,
   reward,
-  onDashboardClick = () => {},
-  onViewCampaign = () => {},
+  onDashboardClick,
+  onViewCampaign,
 }: ContributionConfirmationPageProps) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [fallback, setFallback] = useState<ConsumerContribution | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const meta = PARTICIPATION_META[participationType] ?? PARTICIPATION_META.backer ?? DEFAULT_PARTICIPATION_META;
+  useEffect(() => {
+    if (searchParams.get("ref") || transactionRefProp) return;
+    let cancelled = false;
+    listContributions()
+      .then((list) => {
+        if (!cancelled) setFallback(list[0] ?? null);
+      })
+      .catch(() => {
+        /* show defaults */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, transactionRefProp]);
+
+  const transactionRef =
+    searchParams.get("ref") ?? transactionRefProp ?? fallback?.reference ?? "";
+  const campaignSlug =
+    searchParams.get("slug") ?? campaignSlugProp ?? fallback?.campaignSlug ?? "";
+  const campaignTitle =
+    searchParams.get("title") ??
+    campaignTitleProp ??
+    fallback?.campaignTitle ??
+    "Campaign";
+  const amountParam = searchParams.get("amount");
+  const amount = amountParam
+    ? Number(amountParam)
+    : (amountProp ?? fallback?.amount ?? 0);
+  const rawParticipation =
+    searchParams.get("type") ??
+    participationTypeProp ??
+    fallback?.participationType ??
+    "backer";
+  const participationType = (rawParticipation === "back_campaign" || rawParticipation === "backer"
+    ? "backer"
+    : rawParticipation === "donation" || rawParticipation === "donate"
+      ? "donate"
+      : rawParticipation) as NonNullable<
+    ContributionConfirmationPageProps["participationType"]
+  >;
+  const contributionStatus =
+    searchParams.get("status") ?? fallback?.status ?? "completed";
+  const dateIso =
+    searchParams.get("date") ?? fallback?.createdAt ?? new Date().toISOString();
+  const rewardParam = searchParams.get("reward");
+  const rewardTitle = rewardParam ?? reward?.title ?? fallback?.rewardTitle;
+  const rewardDescription = reward?.description;
+  const rewardEligible = rewardParam
+    ? true
+    : reward
+      ? true
+      : fallback
+        ? fallback.rewardEligible
+        : false;
+
+  const meta =
+    PARTICIPATION_META[participationType] ??
+    PARTICIPATION_META.backer ??
+    DEFAULT_PARTICIPATION_META;
   const campaignUrl = `${window.location.origin}/campaigns/${campaignSlug}`;
   const shareText = `I just contributed ${formatPence(amount)} to ${campaignTitle}! Check it out:`;
+  const formattedDate = new Date(dateIso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const statusStyle =
+    contributionStatus === "pending"
+      ? "bg-amber-100 text-amber-700"
+      : contributionStatus === "failed"
+        ? "bg-red-100 text-red-700"
+        : "bg-green-100 text-green-700";
+  const statusLabel =
+    contributionStatus === "pending"
+      ? "Pending"
+      : contributionStatus === "failed"
+        ? "Failed"
+        : "Completed";
+
+  const handleViewCampaign =
+    onViewCampaign ??
+    (() =>
+      navigate(
+        campaignSlug
+          ? `/consumer/explore/campaign/${campaignSlug}`
+          : "/consumer/explore",
+      ));
+  const handleDashboard = onDashboardClick ?? (() => navigate("/consumer"));
 
   const handleCopyRef = async () => {
     try {
@@ -163,7 +256,7 @@ export function ContributionConfirmationPage({
                 Transaction Reference
               </p>
               <p className="font-mono text-sm font-semibold text-gray-900 mt-0.5">
-                {transactionRef}
+                {transactionRef || "—"}
               </p>
             </div>
             <button
@@ -198,21 +291,40 @@ export function ContributionConfirmationPage({
             <p className="text-2xl font-bold text-gray-900 mt-0.5">{formatPence(amount)}</p>
           </div>
 
-          {/* Reward */}
-          {reward && (
+          {/* Date */}
+          <div className="py-3 border-b border-gray-100">
+            <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Date</p>
+            <p className="font-medium text-gray-900 mt-0.5">{formattedDate}</p>
+          </div>
+
+          {/* Contribution Status */}
+          <div className="py-3 border-b border-gray-100">
+            <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Contribution Status</p>
+            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold mt-1 ${statusStyle}`}>
+              {statusLabel}
+            </span>
+          </div>
+
+          {/* Reward Eligibility */}
+          {rewardEligible && rewardTitle ? (
             <div className="py-3 bg-amber-50 -mx-5 px-5 border-t border-amber-100 rounded-b-xl">
               <p className="text-xs text-amber-600 uppercase tracking-wide font-medium">
-                Reward Earned
+                Reward Eligibility
               </p>
               <div className="flex items-start gap-2 mt-1.5">
                 <Gift className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-amber-900">{reward.title}</p>
-                  {reward.description && (
-                    <p className="text-xs text-amber-700 mt-0.5">{reward.description}</p>
+                  <p className="font-semibold text-amber-900">Eligible — {rewardTitle}</p>
+                  {rewardDescription && (
+                    <p className="text-xs text-amber-700 mt-0.5">{rewardDescription}</p>
                   )}
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="py-3 border-t border-gray-100">
+              <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Reward Eligibility</p>
+              <p className="text-sm text-gray-500 mt-0.5">Not qualified for a reward yet</p>
             </div>
           )}
         </div>
@@ -275,14 +387,14 @@ export function ContributionConfirmationPage({
         {/* Action Buttons */}
         <div className="mt-5 flex flex-col gap-3">
           <button
-            onClick={onViewCampaign}
+            onClick={handleViewCampaign}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             <ExternalLink className="h-4 w-4" />
             View Campaign
           </button>
           <button
-            onClick={onDashboardClick}
+            onClick={handleDashboard}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <LayoutDashboard className="h-4 w-4" />

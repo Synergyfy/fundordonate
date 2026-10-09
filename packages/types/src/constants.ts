@@ -103,7 +103,6 @@ export const CampaignMode = {
   DONATION: "donation",
   CROWDFUNDING: "crowdfunding",
   FUND: "fund",
-  SPONSOR: "sponsor",
 } as const;
 export type CampaignMode = (typeof CampaignMode)[keyof typeof CampaignMode];
 

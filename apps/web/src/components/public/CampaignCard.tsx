@@ -18,7 +18,6 @@ export const formatCurrency = (pence: number) =>
 
 export function modeLabel(mode?: string | null): string {
   if (mode === "donation" || mode === "donate") return "Donate";
-  if (mode === "sponsor") return "Sponsor";
   return "Fund";
 }
 

@@ -34,7 +34,7 @@ export async function grantFoundingMembership(
 ) {
   const programme = await prisma.foundingProgramme.findUniqueOrThrow({
     where: { id: programmeId },
-    include: { foundingMemberships: true },
+    include: { memberships: true },
   });
 
   // Check capacity
@@ -75,8 +75,7 @@ export async function grantFoundingMembership(
   });
 
   // Create badge
-  const badgeType = isOriginal ? "ORIGINAL_FOUNDING" : "FOUNDING_MEMBER";
-  // TODO: Create UserBadge record
+  // TODO: Create UserBadge record — badgeType would be: isOriginal ? "ORIGINAL_FOUNDING" : "FOUNDING_MEMBER"
 
   // TODO: Unlock benefits based on programme.benefitConfig
 

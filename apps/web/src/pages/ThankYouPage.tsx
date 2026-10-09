@@ -114,9 +114,14 @@ export function ThankYouPage() {
         <div className="text-center">
           <h1 className="text-5xl font-bold text-gray-200">404</h1>
           <p className="mt-3 text-gray-600">{error || "Transaction not found"}</p>
-          <Link to="/campaigns" className="btn-primary mt-5 inline-block">
-            Browse Campaigns
-          </Link>
+          <div className="mt-5 flex justify-center gap-3">
+            <Link to="/campaigns" className="btn-primary inline-block">
+              Browse Campaigns
+            </Link>
+            <Link to="/consumer" className="btn-secondary inline-block">
+              Go to Dashboard
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -170,7 +175,7 @@ export function ThankYouPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Amount</span>
-              <span className="font-semibold text-gray-900">${transaction.amount.toLocaleString()}</span>
+              <span className="font-semibold text-gray-900">£{(transaction.amount / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Status</span>
@@ -267,11 +272,11 @@ export function ThankYouPage() {
 
         {/* Actions */}
         <div className="mt-4 flex gap-3">
-          <Link to={`/campaigns/${transaction.campaign.slug}`} className="btn-primary flex-1 text-center text-sm">
+          <Link to={`/consumer/explore/campaign/${transaction.campaign.slug}`} className="btn-primary flex-1 text-center text-sm">
             View Campaign
           </Link>
-          <Link to="/campaigns" className="btn-secondary flex-1 text-center text-sm">
-            Browse More
+          <Link to="/consumer" className="btn-secondary flex-1 text-center text-sm">
+            Go to Dashboard
           </Link>
         </div>
 

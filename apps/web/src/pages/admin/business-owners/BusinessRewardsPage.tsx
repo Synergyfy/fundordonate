@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 import { Search, ChevronRight, X, Gift, CheckCircle2, Package } from "lucide-react";
 
 type RewardStatus = "issued" | "claimed" | "expired";
-type RewardCategory = "Backer" | "Founding Member" | "Donation" | "Sponsorship" | "Custom";
+type RewardCategory = "Backer" | "Founding Member" | "Donation" | "Custom";
 
 interface BusinessReward {
   id: string;
@@ -24,13 +24,11 @@ interface BusinessReward {
 
 const DEMO_BUSINESS_REWARDS: BusinessReward[] = [
   { id: "rw-1", name: "Standard Backer Reward", business: "TechStart Manchester", owner: "James Wilson", campaign: "Manchester Tech Hub Launch", category: "Backer", status: "claimed", value: 10, issuedAt: "2026-09-20" },
-  { id: "rw-2", name: "Sponsor Recognition", business: "Green Initiative Ltd", owner: "Sarah Chen", campaign: "Birmingham Green Initiative", category: "Sponsorship", status: "issued", value: 250, issuedAt: "2026-09-19" },
   { id: "rw-3", name: "Founding Member Reward", business: "Community Fund London", owner: "Michael Okafor", campaign: "London Community Garden", category: "Founding Member", status: "claimed", value: 100, issuedAt: "2026-09-16" },
   { id: "rw-4", name: "E-Card Thank You", business: "Digital Skills Leeds", owner: "Emma Thompson", campaign: "Leeds Digital Skills Programme", category: "Donation", status: "claimed", value: 5, issuedAt: "2026-09-14" },
   { id: "rw-5", name: "Cashback Reward", business: "Liverpool Green Spaces", owner: "Lisa Patel", campaign: "Liverpool Youth Fund", category: "Custom", status: "issued", value: 50, issuedAt: "2026-09-12" },
   { id: "rw-6", name: "Loyalty Points Pack", business: "Bristol Tech Hub", owner: "David Brown", campaign: "Bristol Arts Centre", category: "Custom", status: "expired", value: 25, issuedAt: "2026-08-02" },
   { id: "rw-7", name: "Standard Backer Reward", business: "TechStart Manchester", owner: "James Wilson", campaign: "Oldham Street Shopfront Fix", category: "Backer", status: "expired", value: 10, issuedAt: "2026-07-18" },
-  { id: "rw-8", name: "Sponsor Recognition", business: "Community Fund London", owner: "Michael Okafor", campaign: "London Tech Startup Fund", category: "Sponsorship", status: "issued", value: 250, issuedAt: "2026-09-08" },
 ];
 
 const STATUS_META: Record<RewardStatus, { label: string; color: string }> = {
@@ -43,7 +41,6 @@ const CATEGORY_COLORS: Record<RewardCategory, string> = {
   Backer: "bg-purple-100 text-purple-700",
   "Founding Member": "bg-amber-100 text-amber-700",
   Donation: "bg-blue-100 text-blue-700",
-  Sponsorship: "bg-green-100 text-green-700",
   Custom: "bg-pink-100 text-pink-700",
 };
 

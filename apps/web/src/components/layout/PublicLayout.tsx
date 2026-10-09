@@ -3,18 +3,31 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   Menu, X, Heart,
-  Home, Info, Mail, Landmark, Calendar, MapPin,
+  Home, Info, Mail, MapPin, Target, ChevronDown,
   LogIn,
   LayoutDashboard, LogOut,
   Facebook, Twitter, Instagram,
 } from "lucide-react";
 
-const NAV_LINKS = [
+const NAV_LINKS: {
+  label: string;
+  to: string;
+  icon: typeof Home;
+  exact: boolean;
+  children?: { label: string; to: string }[];
+}[] = [
   { label: "Home", to: "/", icon: Home, exact: true },
-  { label: "Funding", to: "/funding", icon: Landmark, exact: false },
-  { label: "Seasonal", to: "/seasonal-funding", icon: Calendar, exact: false },
   { label: "UK Hubs", to: "/uk-hub-activation", icon: MapPin, exact: false },
-  { label: "Donate", to: "/donate", icon: Heart, exact: false },
+  {
+    label: "Campaigns",
+    to: "/campaigns",
+    icon: Target,
+    exact: false,
+    children: [
+      { label: "For Businesses", to: "/campaigns/business" },
+      { label: "For Consumers", to: "/campaigns/consumer" },
+    ],
+  },
   { label: "About", to: "/about", icon: Info, exact: false },
   { label: "Contact", to: "/contact", icon: Mail, exact: false },
 ];
@@ -22,6 +35,14 @@ const NAV_LINKS = [
 function isActive(currentPath: string, linkTo: string, exact: boolean): boolean {
   if (exact) return currentPath === linkTo;
   return currentPath === linkTo || currentPath.startsWith(linkTo + "/");
+}
+
+/** Dropdown child active state — exact path + query match (e.g. ?mode=fund). */
+function isChildActive(pathname: string, search: string, to: string): boolean {
+  const qIndex = to.indexOf("?");
+  const childPath = qIndex === -1 ? to : to.slice(0, qIndex);
+  const childQuery = qIndex === -1 ? "" : to.slice(qIndex);
+  return pathname === childPath && search === childQuery;
 }
 
 const FOOTER_LINKS: { title: string; links: { label: string; to: string }[] }[] = [
@@ -58,12 +79,14 @@ const FOOTER_LINKS: { title: string; links: { label: string; to: string }[] }[] 
 export function PublicLayout({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const { user, isAuthenticated, logout } = useAuthStore();
   const location = useLocation();
 
   useEffect(() => {
     setMobileOpen(false);
-  }, [location.pathname]);
+    setOpenMenu(null);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -119,17 +142,69 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1" aria-label="Main navigation">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={`px-2.5 xl:px-3 py-2 rounded-lg text-[13px] xl:text-sm font-medium transition-colors whitespace-nowrap ${
-                    isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {NAV_LINKS.map((link) =>
+                link.children ? (
+                  <div key={link.to} className="relative">
+                    {openMenu === link.label && (
+                      <button
+                        type="button"
+                        aria-label="Close menu"
+                        onClick={() => setOpenMenu(null)}
+                        className="fixed inset-0 z-10 cursor-default"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu(openMenu === link.label ? null : link.label)}
+                      aria-haspopup="menu"
+                      aria-expanded={openMenu === link.label}
+                      className={`flex items-center gap-1 px-2.5 xl:px-3 py-2 rounded-lg text-[13px] xl:text-sm font-medium transition-colors whitespace-nowrap ${
+                        isActive(location.pathname, link.to, link.exact)
+                          ? "text-primary-600 bg-primary-50"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      }`}
+                    >
+                      {link.label}
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${openMenu === link.label ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {openMenu === link.label && (
+                      <div
+                        role="menu"
+                        className="absolute left-0 top-full z-20 mt-1 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+                      >
+                        {link.children.map((child) => (
+                          <Link
+                            key={child.to}
+                            to={child.to}
+                            role="menuitem"
+                            onClick={() => setOpenMenu(null)}
+                            className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                              isChildActive(location.pathname, location.search, child.to)
+                                ? "bg-primary-50 text-primary-700"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {child.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`px-2.5 xl:px-3 py-2 rounded-lg text-[13px] xl:text-sm font-medium transition-colors whitespace-nowrap ${
+                      isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                )
+              )}
             </nav>
 
             {/* Desktop Actions */}
@@ -195,17 +270,41 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
 
               <div className="space-y-1">
                 {NAV_LINKS.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                      isActive(location.pathname, link.to, link.exact) ? "text-primary-600 bg-primary-50" : "text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    <link.icon className="w-5 h-5" />
-                    {link.label}
-                  </Link>
+                  <div key={link.to}>
+                    <Link
+                      to={link.to}
+                      onClick={() => setMobileOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                        isActive(location.pathname, link.to, link.exact)
+                          ? "text-primary-600 bg-primary-50"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <link.icon className="w-5 h-5" />
+                      {link.label}
+                      {link.children && (
+                        <ChevronDown className="ml-auto h-4 w-4 text-gray-400" aria-hidden="true" />
+                      )}
+                    </Link>
+                    {link.children && (
+                      <div className="ml-8 mt-1 space-y-1 border-l border-gray-100 pl-3">
+                        {link.children.map((child) => (
+                          <Link
+                            key={child.to}
+                            to={child.to}
+                            onClick={() => setMobileOpen(false)}
+                            className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                              isChildActive(location.pathname, location.search, child.to)
+                                ? "bg-primary-50 text-primary-700"
+                                : "text-gray-600 hover:bg-gray-50"
+                            }`}
+                          >
+                            {child.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
 

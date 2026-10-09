@@ -51,7 +51,18 @@ export async function createTemplate(data: {
 }) {
   return prisma.campaignTemplate.create({
     data: {
-      ...data,
+      type: data.type,
+      title: data.title,
+      description: data.description,
+      shortDescription: data.shortDescription,
+      mode: data.mode,
+      categorySlug: data.categorySlug,
+      goalAmount: data.goalAmount,
+      deadlineDays: data.deadlineDays,
+      contentStructure: data.contentStructure ? JSON.parse(JSON.stringify(data.contentStructure)) : undefined,
+      benefitsConfig: data.benefitsConfig ? JSON.parse(JSON.stringify(data.benefitsConfig)) : undefined,
+      rewardConfig: data.rewardConfig ? JSON.parse(JSON.stringify(data.rewardConfig)) : undefined,
+      createdBy: data.createdBy,
       status: "DRAFT",
       instantiatedCount: 0,
     },
@@ -74,7 +85,17 @@ export async function updateTemplate(templateId: string, data: Partial<{
 }>) {
   return prisma.campaignTemplate.update({
     where: { id: templateId },
-    data,
+    data: {
+      ...(data.title !== undefined && { title: data.title }),
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.shortDescription !== undefined && { shortDescription: data.shortDescription }),
+      ...(data.goalAmount !== undefined && { goalAmount: data.goalAmount }),
+      ...(data.deadlineDays !== undefined && { deadlineDays: data.deadlineDays }),
+      ...(data.contentStructure !== undefined && { contentStructure: JSON.parse(JSON.stringify(data.contentStructure)) }),
+      ...(data.benefitsConfig !== undefined && { benefitsConfig: JSON.parse(JSON.stringify(data.benefitsConfig)) }),
+      ...(data.rewardConfig !== undefined && { rewardConfig: JSON.parse(JSON.stringify(data.rewardConfig)) }),
+      ...(data.status !== undefined && { status: data.status }),
+    },
   });
 }
 

@@ -48,7 +48,7 @@ const formatCurrency = (a: number) =>
 const formatDate = (d: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 
-const CAMPAIGN_MODES: string[] = ["donation", "crowdfunding", "fund", "sponsor"];
+const CAMPAIGN_MODES: string[] = ["donation", "crowdfunding", "fund"];
 
 const STATUS_OPTIONS: { value: CampaignStatusType; label: string }[] = [
   { value: "draft", label: "Draft" },

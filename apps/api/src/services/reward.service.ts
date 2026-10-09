@@ -398,7 +398,7 @@ export async function grantEntitlement(
       userId,
       rewardId,
       campaignId,
-      triggerValue,
+      triggerValue: triggerValue as object,
       status: "earned",
       expiresAt,
     },

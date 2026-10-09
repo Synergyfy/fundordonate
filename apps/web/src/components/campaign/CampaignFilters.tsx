@@ -37,7 +37,6 @@ const MODE_OPTIONS = [
   { value: "", label: "All Modes" },
   { value: "donation", label: "Donate" },
   { value: "fund", label: "Fund" },
-  { value: "sponsor", label: "Sponsor" },
 ];
 
 const STATUS_OPTIONS = [
@@ -74,7 +73,6 @@ const CAMPAIGN_TYPE_OPTIONS = [
   { value: "high-street", label: "High Street" },
   { value: "founding-membership", label: "Founding Membership" },
   { value: "self-funding", label: "Self-Funding" },
-  { value: "sponsorship", label: "Sponsorship" },
   { value: "mcom-programme", label: "MCOM Programme" },
   { value: "247gbs", label: "247GBS Programme" },
 ];
@@ -194,10 +192,6 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
                 filters.mode === opt.value
                   ? opt.value === "donation"
                     ? "bg-secondary-600 text-white"
-                    : opt.value === "fund"
-                    ? "bg-primary-600 text-white"
-                    : opt.value === "sponsor"
-                    ? "bg-amber-500 text-white"
                     : "bg-primary-600 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}

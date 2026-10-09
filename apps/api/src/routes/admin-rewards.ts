@@ -24,7 +24,7 @@ adminRewardsRouter.use(authenticate, authorize("admin"));
  */
 adminRewardsRouter.post("/admin/campaigns/:campaignId/rewards", async (req: AuthRequest, res, next) => {
   try {
-    const { campaignId } = req.params;
+    const campaignId = String(req.params.campaignId);
 
     // Verify campaign exists
     const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -65,7 +65,7 @@ adminRewardsRouter.post("/admin/campaigns/:campaignId/rewards", async (req: Auth
  */
 adminRewardsRouter.get("/admin/campaigns/:campaignId/rewards", async (req: AuthRequest, res, next) => {
   try {
-    const { campaignId } = req.params;
+    const campaignId = String(req.params.campaignId);
     const rewards = await rewardService.getRewardsByCampaign(campaignId);
     res.json({ status: "success", data: rewards });
   } catch (error) {
@@ -79,7 +79,7 @@ adminRewardsRouter.get("/admin/campaigns/:campaignId/rewards", async (req: AuthR
  */
 adminRewardsRouter.get("/admin/rewards/:id", async (req: AuthRequest, res, next) => {
   try {
-    const reward = await rewardService.getRewardById(req.params.id);
+    const reward = await rewardService.getRewardById(String(req.params.id));
     res.json({ status: "success", data: reward });
   } catch (error) {
     next(error);
@@ -92,7 +92,7 @@ adminRewardsRouter.get("/admin/rewards/:id", async (req: AuthRequest, res, next)
  */
 adminRewardsRouter.put("/admin/rewards/:id", async (req: AuthRequest, res, next) => {
   try {
-    const reward = await rewardService.updateReward(req.params.id, {
+    const reward = await rewardService.updateReward(String(req.params.id), {
       title: req.body.title,
       description: req.body.description,
       order: req.body.order,
@@ -123,7 +123,7 @@ adminRewardsRouter.put("/admin/rewards/:id", async (req: AuthRequest, res, next)
  */
 adminRewardsRouter.delete("/admin/rewards/:id", async (req: AuthRequest, res, next) => {
   try {
-    await rewardService.deleteReward(req.params.id);
+    await rewardService.deleteReward(String(req.params.id));
     res.json({ status: "success", message: "Reward deleted" });
   } catch (error) {
     next(error);
@@ -140,7 +140,7 @@ adminRewardsRouter.delete("/admin/rewards/:id", async (req: AuthRequest, res, ne
  */
 adminRewardsRouter.post("/admin/rewards/:rewardId/items", async (req: AuthRequest, res, next) => {
   try {
-    const item = await rewardService.createRewardItem(req.params.rewardId, {
+    const item = await rewardService.createRewardItem(String(req.params.rewardId), {
       title: req.body.title,
       description: req.body.description,
       image: req.body.image,
@@ -164,7 +164,7 @@ adminRewardsRouter.post("/admin/rewards/:rewardId/items", async (req: AuthReques
  */
 adminRewardsRouter.put("/admin/rewards/items/:itemId", async (req: AuthRequest, res, next) => {
   try {
-    const item = await rewardService.updateRewardItem(req.params.itemId, {
+    const item = await rewardService.updateRewardItem(String(req.params.itemId), {
       title: req.body.title,
       description: req.body.description,
       image: req.body.image,
@@ -188,7 +188,7 @@ adminRewardsRouter.put("/admin/rewards/items/:itemId", async (req: AuthRequest, 
  */
 adminRewardsRouter.delete("/admin/rewards/items/:itemId", async (req: AuthRequest, res, next) => {
   try {
-    await rewardService.deleteRewardItem(req.params.itemId);
+    await rewardService.deleteRewardItem(String(req.params.itemId));
     res.json({ status: "success", message: "Item deleted" });
   } catch (error) {
     next(error);
@@ -201,7 +201,7 @@ adminRewardsRouter.delete("/admin/rewards/items/:itemId", async (req: AuthReques
  */
 adminRewardsRouter.put("/admin/rewards/:rewardId/items/reorder", async (req: AuthRequest, res, next) => {
   try {
-    await rewardService.reorderRewardItems(req.params.rewardId, req.body.itemIds);
+    await rewardService.reorderRewardItems(String(req.params.rewardId), req.body.itemIds);
     res.json({ status: "success", message: "Items reordered" });
   } catch (error) {
     next(error);
@@ -218,7 +218,7 @@ adminRewardsRouter.put("/admin/rewards/:rewardId/items/reorder", async (req: Aut
  */
 adminRewardsRouter.put("/admin/campaigns/:campaignId/qualification-mode", async (req: AuthRequest, res, next) => {
   try {
-    const { campaignId } = req.params;
+    const campaignId = String(req.params.campaignId);
     const { mode } = req.body;
 
     if (!["highest", "cumulative"].includes(mode)) {
@@ -246,7 +246,7 @@ adminRewardsRouter.put("/admin/campaigns/:campaignId/qualification-mode", async 
  */
 adminRewardsRouter.get("/admin/campaigns/:campaignId/entitlements", async (req: AuthRequest, res, next) => {
   try {
-    const entitlements = await rewardService.getCampaignEntitlements(req.params.campaignId);
+    const entitlements = await rewardService.getCampaignEntitlements(String(req.params.campaignId));
     res.json({ status: "success", data: entitlements });
   } catch (error) {
     next(error);
@@ -259,7 +259,7 @@ adminRewardsRouter.get("/admin/campaigns/:campaignId/entitlements", async (req: 
  */
 adminRewardsRouter.put("/admin/entitlements/:id/fulfill", async (req: AuthRequest, res, next) => {
   try {
-    const entitlement = await rewardService.fulfillEntitlement(req.params.id, req.body.reference);
+    const entitlement = await rewardService.fulfillEntitlement(String(req.params.id), req.body.reference);
     res.json({ status: "success", data: entitlement });
   } catch (error) {
     next(error);
@@ -272,7 +272,7 @@ adminRewardsRouter.put("/admin/entitlements/:id/fulfill", async (req: AuthReques
  */
 adminRewardsRouter.post("/admin/campaigns/:campaignId/rewards/evaluate", async (req: AuthRequest, res, next) => {
   try {
-    const result = await batchEvaluateCampaign(req.params.campaignId);
+    const result = await batchEvaluateCampaign(String(req.params.campaignId));
     res.json({ status: "success", data: result });
   } catch (error) {
     next(error);

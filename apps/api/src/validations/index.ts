@@ -55,7 +55,7 @@ export const campaignCreateSchema = z.object({
   description: z.string().optional(),
   goalAmount: z.number().int().positive("Goal must be a positive number"),
   deadline: z.string().datetime().or(z.date()),
-  mode: z.enum(["donation", "crowdfunding", "fund", "sponsor"]).optional(),
+  mode: z.enum(["donation", "crowdfunding", "fund"]).optional(),
   categoryId: z.string().uuid().optional(),
   fundId: z.string().uuid().optional(),
 });

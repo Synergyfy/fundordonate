@@ -72,17 +72,19 @@ export async function getLeaderboard(
   const userMap = new Map<string, { totalContributed: number; campaignCount: number }>();
 
   for (const d of donationAggregates) {
-    const existing = userMap.get(d.userId) || { totalContributed: 0, campaignCount: 0 };
+    const key = d.userId ?? "unknown";
+    const existing = userMap.get(key) || { totalContributed: 0, campaignCount: 0 };
     existing.totalContributed += d._sum.amount || 0;
     existing.campaignCount += d._count.id;
-    userMap.set(d.userId, existing);
+    userMap.set(key, existing);
   }
 
   for (const p of pledgeAggregates) {
-    const existing = userMap.get(p.userId) || { totalContributed: 0, campaignCount: 0 };
+    const key = p.userId ?? "unknown";
+    const existing = userMap.get(key) || { totalContributed: 0, campaignCount: 0 };
     existing.totalContributed += p._sum.amount || 0;
     existing.campaignCount += p._count.id;
-    userMap.set(p.userId, existing);
+    userMap.set(key, existing);
   }
 
   // Sort and rank
@@ -110,7 +112,7 @@ export async function getLeaderboard(
       });
 
       // Get backer tier
-      const backerStatus = await prisma.backerStatusRecord.findFirst({
+      const backerStatus = await prisma.backerStatus.findFirst({
         where: { userId },
         orderBy: { grantedAt: "desc" },
       });
@@ -149,9 +151,6 @@ export async function getUrgencyLeaderboard(
   qualificationWindowHours: number = 72
 ) {
   const leaderboard = await getLeaderboard(scope, scopeId, qualificationLimit);
-
-  // Apply qualification window
-  const windowStart = new Date(Date.now() - qualificationWindowHours * 60 * 60 * 1000);
 
   const qualified = leaderboard.entries
     .filter((e) => {

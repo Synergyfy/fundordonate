@@ -49,7 +49,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export type TemplateLifecycle = "draft" | "active" | "inactive" | "archived";
-export type TemplateCampaignType = "donation" | "crowdfunding" | "fund" | "sponsor";
+export type TemplateCampaignType = "donation" | "crowdfunding" | "fund";
 
 /** Area 1 — predefined campaign structure sections. */
 export interface TemplateSection {
@@ -578,7 +578,6 @@ const CAMPAIGN_TYPE_LABELS: Record<TemplateCampaignType, string> = {
   donation: "Donation",
   crowdfunding: "Crowdfunding",
   fund: "Fund",
-  sponsor: "Sponsor",
 };
 
 function audienceForBusiness(t: MasterTemplate): boolean {
@@ -691,9 +690,9 @@ const ADMIN_SEED_META: AdminSeedMeta[] = [
   },
   {
     id: "t4",
-    name: "City Sponsor Programme",
-    purpose: "Sponsorship structure for city-wide partners and brands.",
-    campaignType: "sponsor",
+    name: "City Partnership Programme",
+    purpose: "Partnership structure for city-wide partners and brands.",
+    campaignType: "fund",
     audience: "business",
     lifecycle: "draft",
     campaignsUsing: 0,
@@ -901,11 +900,7 @@ function buildAdminSeed(
   status: AdminCampaignStatus
 ): AdminCampaignSeed {
   const mode: AdminCampaignSeed["mode"] =
-    master?.campaignType === "donation"
-      ? "donation"
-      : master?.campaignType === "sponsor"
-      ? "sponsor"
-      : "fund";
+    master?.campaignType === "donation" ? "donation" : "fund";
   const description =
     master?.purpose ??
     "Business campaign created from an approved FundOrDonate master template.";

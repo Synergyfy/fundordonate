@@ -1759,7 +1759,7 @@ export function getDemoCampaignsForHighStreet(
     + streetSlug.split("").reduce((acc, c) => ((acc << 3) + c.charCodeAt(0)) | 0, 0);
 
   const categories = ["Local Hub", "Business", "Community", "High Street"];
-  const modes: ("donation" | "fund" | "sponsor")[] = ["donation", "fund", "sponsor"];
+  const modes: ("donation" | "fund")[] = ["donation", "fund"];
   const audiences: ("business" | "consumer")[] = ["business", "consumer"];
   const images = [
     "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=800&h=400&fit=crop",

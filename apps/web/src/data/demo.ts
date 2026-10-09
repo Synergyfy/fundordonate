@@ -37,7 +37,7 @@ export interface DemoCampaign {
   slug: string;
   title: string;
   shortDescription: string;
-  mode: "donation" | "fund" | "sponsor";
+  mode: "donation" | "fund";
   goalAmount: number;
   raisedAmount: number;
   deadline: string;
@@ -193,7 +193,7 @@ export const DEMO_CAMPAIGNS: DemoCampaign[] = [
     parentSlug: "mcom-community-cost-neutral-funding",
     parentTitle: "MCOM Community Cost-Neutral Funding Programme",
     campaignType: "Business",
-    participationTypes: ["fund", "donate", "sponsor"],
+    participationTypes: ["fund", "donate"],
     targetAudience: "consumer",
     backerTiersEnabled: true,
     _count: { donations: 0, pledges: 187 },
@@ -301,7 +301,7 @@ export const DEMO_CAMPAIGNS: DemoCampaign[] = [
     parentSlug: "mcom-community-cost-neutral-funding",
     parentTitle: "MCOM Community Cost-Neutral Funding Programme",
     campaignType: "Business",
-    participationTypes: ["fund", "donate", "sponsor"],
+    participationTypes: ["fund", "donate"],
     backerTiersEnabled: true,
     _count: { donations: 203, pledges: 0 },
   },
@@ -459,7 +459,7 @@ export const DEMO_CAMPAIGNS: DemoCampaign[] = [
     parentSlug: "mcom-community-cost-neutral-funding",
     parentTitle: "MCOM Community Cost-Neutral Funding Programme",
     campaignType: "Business",
-    participationTypes: ["fund", "donate", "sponsor"],
+    participationTypes: ["fund", "donate"],
     backerTiersEnabled: true,
     _count: { donations: 0, pledges: 34 },
   },
@@ -475,13 +475,6 @@ export const DEMO_CAMPAIGNS: DemoCampaign[] = [
   //   id: "dc14",
   //   slug: "247gbs-spring-2026-city-hubs",
   //   title: "247GBS Spring 2026 City Hub Launch",
-  //   ...
-  // },
-  // ── SPONSOR CAMPAIGN ── (COMMENTED OUT)
-  // {
-  //   id: "dc15",
-  //   slug: "national-mcom-sponsor-network",
-  //   title: "National MCOM Sponsor Network",
   //   ...
   // },
 ];
@@ -558,7 +551,7 @@ export const DEMO_TESTIMONIALS: DemoTestimonial[] = [
 export const DEMO_FAQ = [
   {
     q: "What is FundOrDonate?",
-    a: "FundOrDonate is a platform that supports Hyper Local National Reward and Loyalty Fund or Donate Hubs on UK High Streets. Business Owners and Local Residents can Fund or Donate to their Local Hub, with support for donation, fund, and sponsor modes.",
+    a: "FundOrDonate is a platform that supports Hyper Local National Reward and Loyalty Fund or Donate Hubs on UK High Streets. Business Owners and Local Residents can Fund or Donate to their Local Hub, with support for donation and fund modes.",
   },
   {
     q: "How do I start a Local Hub campaign?",

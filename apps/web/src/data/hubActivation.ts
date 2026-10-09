@@ -198,7 +198,7 @@ export function getDemoCampaignsForLocation(location: HubLocation): DemoCampaign
     const seed = location.id.split("").reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
     const campaignCount = location.status === "active" ? 3 : 2;
     const categories = ["Local Hub", "Business", "Community", "High Street"];
-    const modes: ("donation" | "fund" | "sponsor")[] = ["donation", "fund", "sponsor"];
+    const modes: ("donation" | "fund")[] = ["donation", "fund"];
     // Category-specific relevant images
     const categoryImages: Record<string, { featured: string; gallery: string[] }> = {
       "Local Hub": {

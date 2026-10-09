@@ -20,6 +20,8 @@ model User {
   lastName      String?
   avatar        String?
   bio           String?
+  phone         String?
+  mcomPoints    Int      @default(0)
   role          String    @default("donor") // admin, fundraiser, collaborator, backer, donor
   userType      String    @default("consumer") // consumer, business, admin
   businessId    String?   // links user to a Business entity (future)
@@ -112,7 +114,7 @@ model Campaign {
   raisedAmount    Int      @default(0)
   deadline        DateTime
   status          String   @default("draft") // draft, submitted, pending_review, approved, rejected, published, active, paused, completed, cancelled, expired, archived
-  mode            String   @default("donation") // donation, crowdfunding, fund, sponsor
+  mode            String   @default("donation") // donation, crowdfunding, fund
   featuredImage   String?
   videoUrl        String?
   platformFee     Int?
@@ -144,7 +146,7 @@ model Campaign {
   isEvergreen     Boolean  @default(false) // evergreen (always available) vs seasonal
 
   // Participation Configuration
-  participationTypes String @default("[]") // JSON array: ["fund","donate","sponsor"] — which modes this campaign supports
+  participationTypes String @default("[]") // JSON array: ["fund","donate"] — which modes this campaign supports
   backerTiersEnabled Boolean @default(false) // whether this campaign shows Standard/Pro/Pro+ selection
   recurringEnabled   Boolean @default(false) // whether monthly/recurring contributions are allowed
 
@@ -206,6 +208,13 @@ model Campaign {
   backerStatuses      BackerStatus[]
   location            HubLocation?  @relation("CampaignLocationHierarchy", fields: [locationId], references: [id])
 
+  // Spillover & surplus relations
+  spilloverRules      SpilloverRule[]
+  surplusRecords      SurplusRecord[]
+
+  // Template instance relation
+  templateInstances   CampaignTemplateInstance[]
+
   @@index([authorId])
   @@index([fundraiserId])
   @@index([categoryId])
@@ -223,6 +232,278 @@ model Campaign {
   @@index([status, mode]) // compound: filter by status+mode
   @@index([authorId, status]) // compound: author's published campaigns
   @@map("campaigns")
+}
+
+// =============================================================================
+// UK HUB REWARD & RECOGNITION MODELS
+// =============================================================================
+
+model FunnelCode {
+  id          String   @id @default(uuid())
+  userId      String
+  code        String   @unique
+  campaignId  String?
+  issuedAt    DateTime @default(now())
+  expiresAt   DateTime?
+  redeemed    Boolean  @default(false)
+  redeemedAt  DateTime?
+  redeemedBy  String?
+
+  @@index([userId])
+  @@index([code])
+  @@map("funnel_codes")
+}
+
+model McomReward {
+  id            String   @id @default(uuid())
+  userId        String
+  trigger       String
+  pointsAwarded Int
+  campaignId    String?
+  locationId    String?
+  redeemed      Boolean  @default(false)
+  redeemedAt    DateTime?
+  details       Json?
+  awardedAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, trigger])
+  @@map("mcom_rewards")
+}
+
+model VCard {
+  id        String   @id @default(uuid())
+  vcardId   String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("vcards")
+}
+
+model LifetimeStats {
+  id                      String   @id @default(uuid())
+  userId                  String   @unique
+  totalContributed        Int      @default(0)
+  totalCampaignsBacked    Int      @default(0)
+  totalPledges            Int      @default(0)
+  channelBreakdown        Json?
+  hierarchyBreakdown      Json?
+  firstContributionAt     DateTime?
+  lastContributionAt      DateTime?
+  uniqueLocationsBacked   Int      @default(0)
+  isCommunityBacker       Boolean  @default(false)
+  communityBackerAwardedAt DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([userId])
+  @@map("lifetime_stats")
+}
+
+model CityReward {
+  id                   String   @id @default(uuid())
+  cityLocationId       String
+  cityName             String
+  title                String
+  description          String
+  type                 String
+  trigger              String
+  minContributionPence Int?
+  minCampaignCount     Int?
+  badgeIcon            String?
+  badgeColor           String?
+  pointsValue          Int      @default(0)
+  isActive             Boolean  @default(true)
+  grantedCount         Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([cityLocationId])
+  @@map("city_rewards")
+}
+
+model BoroughReward {
+  id                   String   @id @default(uuid())
+  boroughLocationId    String
+  boroughName          String
+  title                String
+  description          String
+  type                 String
+  trigger              String
+  minContributionPence Int?
+  minCampaignCount     Int?
+  badgeIcon            String?
+  badgeColor           String?
+  pointsValue          Int      @default(0)
+  isActive             Boolean  @default(true)
+  grantedCount         Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([boroughLocationId])
+  @@map("borough_rewards")
+}
+
+model RewardGrant {
+  id           String   @id @default(uuid())
+  userId       String
+  rewardId     String
+  rewardType   String
+  campaignId   String?
+  locationId   String?
+  locationName String?
+  grantedAt    DateTime @default(now())
+  claimed      Boolean  @default(false)
+  claimedAt    DateTime?
+
+  @@index([userId])
+  @@index([rewardId])
+  @@index([userId, rewardId])
+  @@map("reward_grants")
+}
+
+model DonationGatedReward {
+  id               String   @id @default(uuid())
+  title            String
+  description      String?
+  minDonationPence Int
+  campaignIds      String   @default("[]") // JSON array of campaign IDs
+  locationIds      String   @default("[]") // JSON array of location IDs
+  isActive         Boolean  @default(true)
+  unlockedCount    Int      @default(0)
+  windowStart      DateTime?
+  windowEnd        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("donation_gated_rewards")
+}
+
+model PhysicalRewardJourney {
+  id                   String   @id @default(uuid())
+  userId               String
+  rewardId             String
+  onlineQualified      Boolean  @default(false)
+  onlineQualifiedAt    DateTime?
+  physicalRedeemed     Boolean  @default(false)
+  physicalRedeemedAt   DateTime?
+  redemptionBusinessId String?
+  redemptionQrCode     String?
+  status               String   @default("PENDING")
+  expiresAt            DateTime?
+  createdAt            DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, rewardId])
+  @@index([redemptionBusinessId])
+  @@map("physical_reward_journeys")
+}
+
+model VCardRecognition {
+  id               String   @id @default(uuid())
+  userId           String
+  recognitionLevel String
+  trigger          String
+  campaignId       String?
+  locationId       String?
+  details          Json?
+  awardedAt        DateTime @default(now())
+
+  @@index([userId])
+  @@map("vcard_recognitions")
+}
+
+model LocationMetrics {
+  id             String   @id @default(uuid())
+  locationId     String   @unique
+  population     Int?
+  density        Float?
+  areaSize       Float?
+  economicIndex  Float?
+  activityLevel  Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("location_metrics")
+}
+
+model TargetCalculation {
+  id                String   @id @default(uuid())
+  locationId        String   @unique
+  calculatedTarget  Int
+  finalTarget       Int
+  calculationMethod String
+  status            String   @default("CALCULATED")
+  weights           Json?
+  inputs            Json?
+  overrideTarget    Int?
+  overrideReason    String?
+  approvedBy        String?
+  approvedAt        DateTime?
+  calculatedAt      DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([locationId])
+  @@map("target_calculations")
+}
+
+model TargetCalculationConfig {
+  id                       String   @id @default(uuid())
+  minTarget                Int      @default(1000000)
+  maxTarget                Int      @default(50000000)
+  populationMultiplier     Float    @default(10)
+  densityMultiplier        Float    @default(5000)
+  economicMultiplier       Float    @default(200000)
+  autoCalculationEnabled   Boolean  @default(true)
+  recalculationIntervalHours Int    @default(24)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("target_calculation_configs")
+}
+
+model CampaignTemplate {
+  id                String   @id @default(uuid())
+  type              String
+  title             String
+  description       String?
+  shortDescription  String?
+  mode              String   @default("donation")
+  categorySlug      String?
+  goalAmount        Int
+  deadlineDays      Int      @default(30)
+  contentStructure  Json?
+  benefitsConfig    Json?
+  rewardConfig      Json?
+  status            String   @default("DRAFT")
+  instantiatedCount Int      @default(0)
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  instances CampaignTemplateInstance[]
+
+  @@index([type])
+  @@index([status])
+  @@map("campaign_templates")
+}
+
+model CampaignTemplateInstance {
+  id             String   @id @default(uuid())
+  templateId     String
+  campaignId     String
+  locationId     String?
+  locationName   String?
+  instantiatedAt DateTime @default(now())
+
+  template   CampaignTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  campaign   Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([campaignId])
+  @@map("campaign_template_instances")
 }
 
 model CampaignImage {
@@ -353,6 +634,9 @@ model CampaignSeason {
   updatedAt   DateTime @updatedAt
 
   campaigns Campaign[]
+
+  spilloverRules        SpilloverRule[]
+  seasonTransitionLogs  SeasonTransitionLog[]
 
   @@index([status])
   @@index([startDate, endDate])
@@ -667,6 +951,8 @@ model Reward {
 
   // ── Display & Type ──
   image      String?
+  amount     Int      @default(0) // reward value in pence
+  limit      Int?     // max number of these rewards available
   rewardType String @default("standard") // standard | ecard | cashback | points | discount
   currency   String @default("GBP")
 
@@ -796,6 +1082,8 @@ model Donation {
   isAnonymous            Boolean  @default(false)
   isManual               Boolean  @default(false)
   userInfo               String   @default("{}")
+  channel                String?  // web, terminal, qr, in_store, vcard, mobile_app
+  linkedVia              String?  // email, phone, vcard
 
   // FundOrDonate Contribution Architecture
   contributionType      String   @default("external") // owner, external

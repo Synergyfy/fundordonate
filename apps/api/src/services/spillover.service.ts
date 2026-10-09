@@ -96,7 +96,7 @@ export async function evaluateSpilloverRules(campaignId: string) {
       campaignId,
       action: rule.action,
       amount: ruleAmount,
-      targetId: rule.targetCampaignId || rule.targetSeasonId || null,
+      targetId: rule.targetCampaignId || rule.targetSeasonId || undefined,
       status: "pending",
     });
 

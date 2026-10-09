@@ -22,9 +22,11 @@ const leaderboardRouter = Router();
  */
 leaderboardRouter.get("/leaderboard/:level/:scopeId?", async (req, res) => {
   try {
-    const { level, scopeId } = req.params;
-    const top = parseInt(req.query.top as string) || 100;
-    const sortBy = (req.query.sortBy as string) || "totalContributed";
+    const level = String(req.params.level);
+    const params = req.params as Record<string, string | undefined>;
+    const scopeId = params.scopeId ? String(params.scopeId) : undefined;
+    const top = parseInt(String(req.query.top)) || 100;
+    const sortBy = String(req.query.sortBy) || "totalContributed";
 
     const validLevels = ["campaign", "city", "borough", "high_street", "national"];
     if (!validLevels.includes(level)) {

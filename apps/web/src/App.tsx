@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { ProtectedRoute, GuestRoute } from "@/components/auth/ProtectedRoute";
 import { AuthInitializer } from "@/components/auth/AuthInitializer";
 import ScrollToTop from "@/components/ScrollToTop";
@@ -16,6 +16,7 @@ import "@/styles/print.css";
 // Lazy-loaded routes for code splitting
 import {
   HomePage,
+  CampaignsIndexPage,
   CampaignsPage,
   CampaignDetailPage,
   AboutPage,
@@ -49,7 +50,6 @@ import {
   CampaignBrowsePage,
   ContributionFlow,
   ContributionConfirmationPage,
-  CampaignTrackingPage,
   LoginPage,
   RegisterPage,
   ForgotPasswordPage,
@@ -82,12 +82,20 @@ import {
   AdminFundingPage,
   AdminDonorsPage,
   AdminReportsPage,
-  DashboardOverview,
-  DonationHistory,
-  PledgeHistory,
-  BookmarkedCampaigns,
-  ReceiptsPage,
+  ConsumerHomePage,
   ProfilePage,
+  ConsumerExplorePage,
+  ConsumerActivityPage,
+  ContributionDetailPage,
+  ConsumerYouPage,
+  ConsumerRewardsPage,
+  ConsumerRewardDetailPage,
+  ConsumerMembershipPage,
+  ConsumerFoundingMemberStatusPage,
+  ConsumerRecognitionPage,
+  ConsumerNotificationsPage,
+  ConsumerSettingsPage,
+  ConsumerHelpPage,
   QrDonationFlow,
   // Seasons & Programmes
   AllSeasonsPage,
@@ -207,6 +215,7 @@ import {
   ConsumerOpportunitiesPage,
   ConsumerParticipationChoicePage,
   ConsumerBackerContributionPage,
+  ConsumerCampaignDetailPage,
   ConsumerFoundingMemberChoicePage,
   ConsumerFoundingMemberPage,
   ConsumerFoundingMemberMonthlyPage,
@@ -237,12 +246,21 @@ function App() {
         {/* ─── Public routes with shared layout ─── */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="/campaigns" element={<CampaignsIndexPage />} />
+          <Route path="/campaigns/business" element={<CampaignsPage audience="business" />} />
+          <Route path="/campaigns/consumer" element={<CampaignsPage audience="consumer" />} />
           <Route path="/campaigns/:slug" element={<CampaignDetailPage />} />
           <Route path="/discover" element={<CampaignBrowsePage />} />
-          <Route path="/contribute/:slug" element={<ContributionFlow />} />
+          <Route
+            path="/contribute/:slug"
+            element={
+              <ProtectedRoute>
+                <ContributionFlow />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/contribution/confirmation" element={<ContributionConfirmationPage />} />
-          <Route path="/my-activity" element={<CampaignTrackingPage />} />
+          <Route path="/my-activity" element={<Navigate to="/consumer/activity" replace />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/funding" element={<NationalFundingPage />} />
           <Route path="/seasonal-funding" element={<SeasonalFundingPage />} />
@@ -292,7 +310,14 @@ function App() {
           <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/opportunities" element={<ConsumerOpportunitiesPage />} />
           <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/participation" element={<ConsumerParticipationChoicePage />} />
           <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/backer" element={<ConsumerBackerContributionPage />} />
-          <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/founding-member-choice" element={<ConsumerFoundingMemberChoicePage />} />
+          <Route
+          path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/founding-member-choice"
+          element={
+            <ProtectedRoute>
+              <ConsumerFoundingMemberChoicePage />
+            </ProtectedRoute>
+          }
+        />
           <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/founding-member" element={<ConsumerFoundingMemberPage />} />
           <Route path="/uk-hub-activation/:citySlug/consumer/:localAreaSlug/:highStreetSlug/join/founding-member-monthly" element={<ConsumerFoundingMemberMonthlyPage />} />
           {/* UK Hub Campaign Discovery Flow */}
@@ -534,13 +559,35 @@ function App() {
             Mobile-first layout with bottom navigation
             ═══════════════════════════════════════════════════════════════════ */}
         <Route element={<ProtectedRoute requiredUserTypes={["consumer"]}><ConsumerLayout /></ProtectedRoute>}>
-          <Route path="/consumer" element={<DashboardOverview />} />
-          <Route path="/consumer/campaigns" element={<CampaignsPage />} />
-          <Route path="/consumer/donations" element={<DonationHistory />} />
-          <Route path="/consumer/pledges" element={<PledgeHistory />} />
-          <Route path="/consumer/bookmarks" element={<BookmarkedCampaigns />} />
-          <Route path="/consumer/receipts" element={<ReceiptsPage />} />
-          <Route path="/consumer/profile" element={<ProfilePage />} />
+          <Route path="/consumer" element={<ConsumerHomePage />} />
+          <Route path="/consumer/explore" element={<ConsumerExplorePage />} />
+          <Route path="/consumer/explore/city/:citySlug" element={<ConsumerExplorePage />} />
+          <Route path="/consumer/explore/city/:citySlug/area/:areaSlug" element={<ConsumerExplorePage />} />
+          <Route
+            path="/consumer/explore/city/:citySlug/area/:areaSlug/street/:streetSlug"
+            element={<ConsumerExplorePage />}
+          />
+          <Route path="/consumer/explore/campaign/:slug" element={<ConsumerCampaignDetailPage />} />
+          <Route path="/consumer/activity" element={<ConsumerActivityPage />} />
+          <Route path="/consumer/activity/contributions/:id" element={<ContributionDetailPage />} />
+          <Route path="/consumer/you" element={<ConsumerYouPage />} />
+          <Route path="/consumer/you/profile" element={<ProfilePage />} />
+          <Route path="/consumer/you/membership" element={<ConsumerMembershipPage />} />
+          <Route path="/consumer/you/founding-member" element={<ConsumerFoundingMemberStatusPage />} />
+          <Route path="/consumer/you/recognition" element={<ConsumerRecognitionPage />} />
+          <Route path="/consumer/you/notifications" element={<ConsumerNotificationsPage />} />
+          <Route path="/consumer/you/settings" element={<ConsumerSettingsPage />} />
+          <Route path="/consumer/you/help" element={<ConsumerHelpPage />} />
+          <Route path="/consumer/you/rewards" element={<Navigate to="/consumer/rewards" replace />} />
+          <Route path="/consumer/rewards" element={<ConsumerRewardsPage />} />
+          <Route path="/consumer/rewards/:id" element={<ConsumerRewardDetailPage />} />
+          {/* Legacy tabs → new five-area IA */}
+          <Route path="/consumer/campaigns" element={<Navigate to="/consumer/explore" replace />} />
+          <Route path="/consumer/donations" element={<Navigate to="/consumer/activity?tab=contributions" replace />} />
+          <Route path="/consumer/pledges" element={<Navigate to="/consumer/activity?tab=contributions" replace />} />
+          <Route path="/consumer/receipts" element={<Navigate to="/consumer/activity?tab=contributions" replace />} />
+          <Route path="/consumer/bookmarks" element={<Navigate to="/consumer/explore" replace />} />
+          <Route path="/consumer/profile" element={<Navigate to="/consumer/you/profile" replace />} />
         </Route>
 
         {/* ─── 404 ─── */}

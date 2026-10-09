@@ -130,7 +130,7 @@ export interface AdminCampaignSeed {
   };
   audience: AdminCampaignAudience;
   status: AdminCampaignStatus;
-  mode: "donation" | "fund" | "sponsor";
+  mode: "donation" | "fund";
   raisedAmount: number;
   targetAmount: number;
   backers: number;
@@ -344,7 +344,7 @@ const SEEDS: AdminCampaignSeed[] = [
     },
     audience: "business",
     status: "active",
-    mode: "sponsor",
+    mode: "fund",
     raisedAmount: 650000,
     targetAmount: 800000,
     backers: 290,
