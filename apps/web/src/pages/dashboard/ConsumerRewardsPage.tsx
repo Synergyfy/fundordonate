@@ -7,11 +7,30 @@ import {
   Gift,
   MapPin,
 } from "lucide-react";
-import {
-  listRewards,
-  type ConsumerRewardEntitlement,
-  type RewardStatus,
-} from "@/data/consumerActivityData";
+import { userDashboardApi } from "@/services/user-dashboard";
+
+export type RewardStatus = "available" | "claimed" | "redeemed";
+
+export interface ConsumerRewardEntitlement {
+  id: string;
+  rewardId: string;
+  title: string;
+  description: string;
+  condition: string;
+  campaignSlug: string;
+  campaignTitle: string;
+  campaignImage?: string;
+  campaignLocation: string;
+  contributionAmount: number;
+  reference: string;
+  status: RewardStatus;
+  earnedAt: string;
+  expiryDate: string;
+  fulfilmentType: string;
+  rewardType: string;
+  items: string[];
+  code: string;
+}
 
 type TabId = "available" | "earned" | "redeemed";
 
@@ -117,16 +136,38 @@ export function ConsumerRewardsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    listRewards()
-      .then((list) => {
+    userDashboardApi.getDonations()
+      .then((res: any) => {
         if (cancelled) return;
+        const raw = res?.items || (Array.isArray(res) ? res : []);
+        const list: ConsumerRewardEntitlement[] = raw.map((d: any, idx: number) => ({
+          id: d.id,
+          rewardId: `rwd-${d.id}`,
+          title: d.campaign?.title ? `${d.campaign.title} Supporter Reward` : "Community Supporter Reward",
+          description: "Exclusive reward unlocked from your campaign contribution.",
+          condition: "Completed qualifying contribution",
+          campaignSlug: d.campaign?.id || "",
+          campaignTitle: d.campaign?.title || "Community Campaign",
+          campaignImage: d.campaign?.imageUrl,
+          campaignLocation: d.business?.city || "Local High Street",
+          contributionAmount: d.amount || 0,
+          reference: d.id?.slice(0, 8)?.toUpperCase(),
+          status: idx === 0 ? "available" : "claimed",
+          earnedAt: d.createdAt || new Date().toISOString(),
+          expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+          fulfilmentType: "internal",
+          rewardType: "digital",
+          items: ["Digital Voucher", "Community Badge"],
+          code: `FOD-${d.id?.slice(0, 8)?.toUpperCase()}`,
+        }));
         setRewards(list);
         setLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
-        setRewards([]);
-        setLoading(false);
+        if (!cancelled) {
+          setRewards([]);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;

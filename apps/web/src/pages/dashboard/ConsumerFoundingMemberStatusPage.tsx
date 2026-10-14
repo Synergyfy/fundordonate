@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Award, MapPin, Star } from "lucide-react";
-import {
-  listContributions,
-  type ConsumerContribution,
-} from "@/data/consumerActivityData";
-import { getConsumerCommunity } from "@/data/consumerHomeData";
+import { userDashboardApi } from "@/services/user-dashboard";
+import { getConsumerCommunity } from "@/services/community";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", {
@@ -19,6 +16,15 @@ const PARTICIPATION_LABELS: Record<string, string> = {
   founding_monthly: "Founding Member Monthly",
 };
 
+interface FoundingRecord {
+  id: string;
+  participationType: string;
+  campaignTitle: string;
+  campaignLocation?: string;
+  campaignSlug: string;
+  createdAt: string;
+}
+
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-b border-gray-100 py-3 last:border-b-0">
@@ -31,27 +37,38 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 export function ConsumerFoundingMemberStatusPage() {
-  const [record, setRecord] = useState<ConsumerContribution | null>(null);
+  const [record, setRecord] = useState<FoundingRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    listContributions()
-      .then((items) => {
+    userDashboardApi.getDonations()
+      .then((res: any) => {
         if (cancelled) return;
-        const fm =
-          items.find(
-            (c) =>
-              c.participationType === "founding_member" ||
-              c.participationType === "founding_monthly",
-          ) ?? null;
-        setRecord(fm);
+        const items = res?.items || (Array.isArray(res) ? res : []);
+        const fm = items.find((c: any) =>
+          c.campaign?.title?.toLowerCase().includes("founding") ||
+          c.campaign?.category?.toLowerCase().includes("founding")
+        );
+        if (fm) {
+          setRecord({
+            id: fm.id,
+            participationType: "founding_member",
+            campaignTitle: fm.campaign?.title || "Founding Member Campaign",
+            campaignLocation: fm.business?.city || "Community Hub",
+            campaignSlug: fm.campaign?.slug || fm.campaign?.id || "",
+            createdAt: fm.createdAt || new Date().toISOString(),
+          });
+        } else {
+          setRecord(null);
+        }
         setLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
-        setRecord(null);
-        setLoading(false);
+        if (!cancelled) {
+          setRecord(null);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;

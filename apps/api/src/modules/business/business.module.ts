@@ -1,0 +1,57 @@
+import { Module } from "@nestjs/common";
+import { PrismaModule } from "@/prisma/prisma.module";
+
+// Guards
+import { BusinessOwnerGuard } from "./guards/business-owner.guard";
+
+// Services
+import { BusinessDashboardService } from "./services/business-dashboard.service";
+import { BusinessProfileService } from "./services/business-profile.service";
+import { BusinessCampaignService } from "./services/business-campaign.service";
+import { BusinessContributionService } from "./services/business-contribution.service";
+import { BusinessLeaderboardService } from "./services/business-leaderboard.service";
+import { BusinessRewardService } from "./services/business-reward.service";
+import { BusinessSettingsService } from "./services/business-settings.service";
+
+// Controllers
+import { BusinessDashboardController } from "./controllers/business-dashboard.controller";
+import { BusinessProfileController } from "./controllers/business-profile.controller";
+import { BusinessCampaignController } from "./controllers/business-campaign.controller";
+import { BusinessContributionController } from "./controllers/business-contribution.controller";
+import { BusinessLeaderboardController } from "./controllers/business-leaderboard.controller";
+import { BusinessRewardController } from "./controllers/business-reward.controller";
+import { BusinessSettingsController } from "./controllers/business-settings.controller";
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [
+    BusinessDashboardController,
+    BusinessProfileController,
+    BusinessCampaignController,
+    BusinessContributionController,
+    BusinessLeaderboardController,
+    BusinessRewardController,
+    BusinessSettingsController,
+  ],
+  providers: [
+    BusinessOwnerGuard,
+    BusinessDashboardService,
+    BusinessProfileService,
+    BusinessCampaignService,
+    BusinessContributionService,
+    BusinessLeaderboardService,
+    BusinessRewardService,
+    BusinessSettingsService,
+  ],
+  exports: [
+    BusinessOwnerGuard,
+    BusinessDashboardService,
+    BusinessProfileService,
+    BusinessCampaignService,
+    BusinessContributionService,
+    BusinessLeaderboardService,
+    BusinessRewardService,
+    BusinessSettingsService,
+  ],
+})
+export class BusinessModule {}

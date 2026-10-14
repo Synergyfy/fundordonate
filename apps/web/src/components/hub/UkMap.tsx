@@ -10,7 +10,7 @@ import {
   hubLatLng,
   type HubLocation,
   type HubStatus,
-} from "@/data/hubActivation";
+} from "@/types/uk-hub";
 
 // UK bounding box for default view.
 const UK_CENTER: google.maps.LatLngLiteral = { lat: 54.0, lng: -2.0 };
@@ -135,12 +135,13 @@ export function UkMap({ locations, selectedSlug, onSelect, statusFilter }: UkMap
         {filtered.map((l) => {
           const pos = hubLatLng(l);
           const isSelected = l.slug === selectedSlug;
+          const st: HubStatus = l.status || "needs_activation";
           return (
             <MarkerF
               key={l.id}
               position={pos}
               icon={{
-                url: statusMarkerSvg(l.status, isSelected),
+                url: statusMarkerSvg(st, isSelected),
                 anchor: new google.maps.Point(isSelected ? 14 : 10, isSelected ? 14 : 10),
               }}
               zIndex={isSelected ? 100 : 1}
@@ -148,7 +149,7 @@ export function UkMap({ locations, selectedSlug, onSelect, statusFilter }: UkMap
               onClick={() => onMarkerClick(l.slug)}
               onMouseOver={() => setHoveredSlug(l.slug)}
               onMouseOut={() => setHoveredSlug(null)}
-              title={`${l.name} — ${HUB_STATUS_META[l.status].label}`}
+              title={`${l.name} — ${(HUB_STATUS_META[st] || HUB_STATUS_META.active).label}`}
             />
           );
         })}
@@ -158,6 +159,7 @@ export function UkMap({ locations, selectedSlug, onSelect, statusFilter }: UkMap
           const hub = locations.find((l) => l.slug === hoveredSlug);
           if (!hub) return null;
           const pos = hubLatLng(hub);
+          const hSt: HubStatus = hub.status || "needs_activation";
           return (
             <InfoWindowF
               position={{ lat: pos.lat + 0.15, lng: pos.lng }}
@@ -168,7 +170,7 @@ export function UkMap({ locations, selectedSlug, onSelect, statusFilter }: UkMap
             >
               <div className="bg-white rounded-lg shadow-lg border border-gray-100 px-3 py-2 text-xs whitespace-nowrap">
                 <span className="font-semibold text-gray-900">{hub.name}</span>
-                <span className="ml-1.5 text-gray-500">— {HUB_STATUS_META[hub.status].label}</span>
+                <span className="ml-1.5 text-gray-500">— {(HUB_STATUS_META[hSt] || HUB_STATUS_META.active).label}</span>
               </div>
             </InfoWindowF>
           );
@@ -177,7 +179,8 @@ export function UkMap({ locations, selectedSlug, onSelect, statusFilter }: UkMap
         {/* Selected info window */}
         {selected && (() => {
           const pos = hubLatLng(selected);
-          const meta = HUB_STATUS_META[selected.status];
+          const sSt: HubStatus = selected.status || "needs_activation";
+          const meta = HUB_STATUS_META[sSt] || HUB_STATUS_META.active;
           return (
             <InfoWindowF
               position={pos}

@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { fetchLocationTree } from "@/services/location.service";
+import { fetchLocationTree } from "@/services/location";
 import type {
   LocationTreeResponse,
   LocationTreeCity,

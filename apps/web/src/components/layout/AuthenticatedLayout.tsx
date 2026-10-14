@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { getAdminNavGroups, ADMIN_OVERVIEW_ITEM, type AdminNavGroup } from "@/components/admin/adminNavConfig.tsx";
 import { GlobalSeasonSelector } from "@/components/admin/GlobalSeasonSelector";
+import { WalletBalanceBadge } from "@/components/wallet/WalletBalanceBadge";
 
 // =============================================================================
 // Non-admin Navigation
@@ -554,22 +555,25 @@ export function AuthenticatedLayout() {
             </div>
           )}
           <div className="flex-1" />
-          {isAdmin ? (
-            <AdminAvatarDropdown user={user} onLogout={handleLogout} />
-          ) : (
-            <>
-              <Link
-                to="/campaigns"
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <Compass className="h-4 w-4" />
-                Browse Campaigns
-              </Link>
-              <Link to="/" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-                View Site
-              </Link>
-            </>
-          )}
+          <div className="flex items-center gap-3">
+            <WalletBalanceBadge />
+            {isAdmin ? (
+              <AdminAvatarDropdown user={user} onLogout={handleLogout} />
+            ) : (
+              <>
+                <Link
+                  to="/campaigns"
+                  className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <Compass className="h-4 w-4" />
+                  Browse Campaigns
+                </Link>
+                <Link to="/" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+                  View Site
+                </Link>
+              </>
+            )}
+          </div>
         </header>
 
         {/* Page content */}

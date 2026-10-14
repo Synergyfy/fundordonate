@@ -6,7 +6,9 @@ import {
   Heart, Landmark, SlidersHorizontal,
 } from "lucide-react";
 import { CampaignCarousel } from "@/components/public/CampaignCarousel";
-import { HUB_LOCATIONS, HUB_STATUS_META, type HubLocation } from "@/data/hubActivation";
+import { HUB_STATUS_META, type HubLocation } from "@/types/uk-hub";
+import { locationService } from "@/services/location";
+import { useQuery } from "@tanstack/react-query";
 
 /* ───────────────────── helpers ───────────────────── */
 
@@ -257,7 +259,8 @@ const CAMPAIGN_FILTERS: { label: string; value?: string }[] = [
 /* ───────────────────── hub city visual ───────────────────── */
 
 function hubStatusChip(loc: HubLocation) {
-  const meta = HUB_STATUS_META[loc.status];
+  const statusKey = (loc.status || (loc.publicStatus === "ACTIVE" ? "active" : loc.publicStatus === "MAKING_PROGRESS" ? "making_progress" : "needs_activation")) as keyof typeof HUB_STATUS_META;
+  const meta = HUB_STATUS_META[statusKey] || HUB_STATUS_META.needs_activation;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.bgClass} ${meta.textClass}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${meta.dotClass}`} aria-hidden="true" />
@@ -267,7 +270,11 @@ function hubStatusChip(loc: HubLocation) {
 }
 
 function HubCitiesVisual() {
-  const cities = HUB_LOCATIONS.filter((l) => l.type === "city").slice(0, 6);
+  const { data: hubCities = [] } = useQuery({
+    queryKey: ["hub-cities-home"],
+    queryFn: () => locationService.fetchHubCities(),
+  });
+  const cities = hubCities.slice(0, 6);
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5 sm:p-6 shadow-sm">
       <div className="flex items-center justify-between mb-4">

@@ -10,20 +10,25 @@ import {
   MapPin,
   ShieldCheck,
 } from "lucide-react";
-import {
-  getContribution,
-  type ConsumerContribution,
-} from "@/data/consumerActivityData";
+import { userDashboardApi } from "@/services/user-dashboard";
+import { formatCurrency, formatDate } from "@/utils/formatters";
 
-const formatCurrency = (pence: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+export interface ConsumerContribution {
+  id: string;
+  reference: string;
+  campaignSlug: string;
+  campaignTitle: string;
+  campaignImage?: string;
+  campaignLocation?: string;
+  amount: number;
+  status: string;
+  paymentStatus: string;
+  participationType: string;
+  rewardEligible: boolean;
+  rewardTitle?: string;
+  rewardStatus?: string;
+  createdAt: string;
+}
 
 const STATUS_STYLES: Record<string, string> = {
   completed: "bg-green-50 text-green-700",
@@ -79,16 +84,38 @@ export function ContributionDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getContribution(id ?? "")
-      .then((res) => {
+    userDashboardApi.getDonations()
+      .then((res: any) => {
         if (cancelled) return;
-        setItem(res);
+        const raw = res?.items || (Array.isArray(res) ? res : []);
+        const match = raw.find((d: any) => d.id === id) || raw[0];
+        if (match) {
+          setItem({
+            id: match.id,
+            reference: match.id?.slice(0, 8)?.toUpperCase(),
+            campaignSlug: match.campaign?.id || "",
+            campaignTitle: match.campaign?.title || "Community Campaign",
+            campaignImage: match.campaign?.imageUrl,
+            campaignLocation: match.business?.city || "Local High Street",
+            amount: match.amount || 0,
+            status: (match.status || "completed").toLowerCase(),
+            paymentStatus: "Paid",
+            participationType: "donation",
+            rewardEligible: true,
+            rewardTitle: "Supporter Reward",
+            rewardStatus: "available",
+            createdAt: match.createdAt || new Date().toISOString(),
+          });
+        } else {
+          setItem(null);
+        }
         setLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
-        setItem(null);
-        setLoading(false);
+        if (!cancelled) {
+          setItem(null);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;

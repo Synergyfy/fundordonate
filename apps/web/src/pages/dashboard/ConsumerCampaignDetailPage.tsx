@@ -1,80 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Crown, HandHeart } from "lucide-react";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { useAuthStore } from "@/stores/auth.store";
-import { DEMO_CAMPAIGNS, type DemoCampaign } from "@/data/demo";
-import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
-import { getAdminCampaignBySlug, adminCampaignToHubCampaign } from "@/data/adminCampaigns";
-import { resolveCampaignForDetail } from "@/data/consumerExploreData";
-import { getConsumerCommunity } from "@/data/consumerHomeData";
+import { getConsumerCommunity } from "@/services/community";
 import {
   CampaignDetailBody,
   type DetailCampaign,
 } from "@/components/campaign/CampaignDetailBody";
 import { RelatedCampaigns } from "@/components/campaign/RelatedCampaigns";
-
-function demoToDetail(c: DemoCampaign, statusOverride?: string): DetailCampaign {
-  return {
-    id: c.id,
-    slug: c.slug,
-    title: c.title,
-    shortDescription: c.shortDescription,
-    description: c.shortDescription,
-    goalAmount: c.goalAmount,
-    raisedAmount: c.raisedAmount,
-    deadline: c.deadline,
-    status: statusOverride ?? "published",
-    mode: c.mode,
-    featuredImage: c.featuredImage,
-    settings: "{}",
-    createdAt: new Date().toISOString(),
-    author: {
-      id: "demo-user",
-      firstName: c.author.firstName,
-      lastName: c.author.lastName,
-      username: `${c.author.firstName.toLowerCase()}-${c.author.lastName.toLowerCase()}`,
-    },
-    category: c.category
-      ? { id: `cat-${c.category.slug}`, name: c.category.name, slug: c.category.slug }
-      : undefined,
-    tags: Array.isArray(c.tags)
-      ? c.tags.map((t) => ({ tag: { id: `tag-${t}`, name: t, slug: t } }))
-      : undefined,
-    _count: {
-      donations: c._count?.donations || 0,
-      pledges: c._count?.pledges || 0,
-      comments: 0,
-      bookmarks: 0,
-    },
-    parentId: c.parentId,
-    parentSlug: c.parentSlug,
-    parentTitle: c.parentTitle,
-    location: c.location,
-    campaignType: c.campaignType,
-    participationTypes: c.participationTypes
-      ? JSON.stringify(c.participationTypes)
-      : undefined,
-    backerTiersEnabled: c.backerTiersEnabled,
-    recurringEnabled: c.recurringEnabled,
-    isSelfFunding: c.isSelfFunding,
-    selfFundingLevel: c.selfFundingLevel,
-    ownerContribution: c.ownerContribution,
-    campaignTarget: c.campaignTarget,
-    children: DEMO_CAMPAIGNS.filter((x) => x.parentId === c.id).map((child) => ({
-      id: child.id,
-      slug: child.slug,
-      title: child.title,
-      shortDescription: child.shortDescription,
-      goalAmount: child.goalAmount,
-      raisedAmount: child.raisedAmount,
-      deadline: child.deadline,
-      mode: child.mode,
-      featuredImage: child.featuredImage,
-      _count: { donations: child._count?.donations || 0, pledges: child._count?.pledges || 0 },
-    })),
-  };
-}
 
 export function ConsumerCampaignDetailPage() {
   const { slug = "" } = useParams<{ slug: string }>();
@@ -83,7 +17,6 @@ export function ConsumerCampaignDetailPage() {
   const [campaign, setCampaign] = useState<DetailCampaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const resolved = useMemo(() => (slug ? resolveCampaignForDetail(slug) : null), [slug]);
 
   useEffect(() => {
     if (!slug) return;
@@ -93,39 +26,17 @@ export function ConsumerCampaignDetailPage() {
   useEffect(() => {
     if (!slug) return;
 
-    const adminCampaign = getAdminCampaignBySlug(slug);
-    if (adminCampaign) {
-      setCampaign(demoToDetail(adminCampaignToHubCampaign(adminCampaign), adminCampaign.status));
-      setLoading(false);
-      return;
-    }
-
     setCampaign(null);
     setLoading(true);
     setError(null);
 
     campaignApi
       .getBySlug(slug)
-      .then(setCampaign)
-      .catch(() => {
-        const demo = DEMO_CAMPAIGNS.find((c) => c.slug === slug);
-        if (demo) {
-          setCampaign(demoToDetail(demo));
-          return;
-        }
-        for (const location of HUB_LOCATIONS) {
-          const locationCampaigns = getDemoCampaignsForLocation(location);
-          const match = locationCampaigns.find((c) => c.slug === slug);
-          if (match) {
-            setCampaign(demoToDetail(match));
-            return;
-          }
-        }
-        const streetMatch = resolveCampaignForDetail(slug);
-        if (streetMatch) {
-          setCampaign(demoToDetail(streetMatch.campaign));
-          return;
-        }
+      .then((data: any) => {
+        setCampaign(data);
+      })
+      .catch((err) => {
+        console.error("Campaign fetch error:", err);
         setError("Campaign not found");
       })
       .finally(() => setLoading(false));
@@ -170,7 +81,11 @@ export function ConsumerCampaignDetailPage() {
   }
 
   const community = getConsumerCommunity();
-  const hierarchy = resolved?.hierarchy;
+  const hierarchy = {
+    citySlug: community.citySlug,
+    areaSlug: community.areaSlug,
+    streetSlug: community.streetSlug,
+  };
   const isFounding =
     campaign.category?.slug === "founding-membership" ||
     campaign.campaignType === "Founding Membership";

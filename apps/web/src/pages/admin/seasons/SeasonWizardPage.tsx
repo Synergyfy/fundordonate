@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import { ArrowLeft, Check } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
 

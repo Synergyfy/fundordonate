@@ -6,7 +6,7 @@ import {
   getConsumerSettings,
   updateSettingsSection,
   type ConsumerSettings,
-} from "@/data/consumerSettingsData";
+} from "@/services/settings";
 import { useAuthStore } from "@/stores/auth.store";
 
 function Toggle({

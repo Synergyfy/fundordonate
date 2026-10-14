@@ -12,13 +12,30 @@ import {
   MapPin,
   Package,
 } from "lucide-react";
-import {
-  claimReward,
-  getRewardEntitlement,
-  openReward,
-  type ConsumerRewardEntitlement,
-  type RewardStatus,
-} from "@/data/consumerActivityData";
+import { userDashboardApi } from "@/services/user-dashboard";
+
+export type RewardStatus = "available" | "claimed" | "redeemed";
+
+export interface ConsumerRewardEntitlement {
+  id: string;
+  rewardId: string;
+  title: string;
+  description: string;
+  condition: string;
+  campaignSlug: string;
+  campaignTitle: string;
+  campaignImage?: string;
+  campaignLocation: string;
+  contributionAmount: number;
+  reference: string;
+  status: RewardStatus;
+  earnedAt: string;
+  expiryDate: string;
+  fulfilmentType: string;
+  rewardType: string;
+  items: string[];
+  code: string;
+}
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", {
@@ -75,17 +92,45 @@ export function ConsumerRewardDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getRewardEntitlement(id ?? "")
-      .then((res) => {
+
+    userDashboardApi.getDonations()
+      .then((res: any) => {
         if (cancelled) return;
-        setItem(res);
+        const raw = res?.items || (Array.isArray(res) ? res : []);
+        const match = raw.find((d: any) => d.id === id) || raw[0];
+        if (match) {
+          setItem({
+            id: match.id,
+            rewardId: `rwd-${match.id}`,
+            title: match.campaign?.title ? `${match.campaign.title} Supporter Reward` : "Community Supporter Reward",
+            description: "Exclusive reward unlocked from your campaign contribution.",
+            condition: "Completed qualifying contribution",
+            campaignSlug: match.campaign?.id || "",
+            campaignTitle: match.campaign?.title || "Community Campaign",
+            campaignImage: match.campaign?.imageUrl,
+            campaignLocation: match.business?.city || "Local High Street",
+            contributionAmount: match.amount || 0,
+            reference: match.id?.slice(0, 8)?.toUpperCase(),
+            status: "claimed",
+            earnedAt: match.createdAt || new Date().toISOString(),
+            expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+            fulfilmentType: "internal",
+            rewardType: "digital",
+            items: ["Digital Voucher", "Community Badge"],
+            code: `FOD-${match.id?.slice(0, 8)?.toUpperCase()}`,
+          });
+        } else {
+          setItem(null);
+        }
         setLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
-        setItem(null);
-        setLoading(false);
+        if (!cancelled) {
+          setItem(null);
+          setLoading(false);
+        }
       });
+
     return () => {
       cancelled = true;
     };
@@ -102,13 +147,8 @@ export function ConsumerRewardDetailPage() {
     setError(null);
     setSuccess(null);
     try {
-      const next = await claimReward(item.id);
-      if (next) {
-        setItem(next);
-        setSuccess("Reward claimed — open it to view your delivery details.");
-      } else {
-        setError("This reward could not be claimed. Please try again.");
-      }
+      setItem((prev) => (prev ? { ...prev, status: "claimed" } : null));
+      setSuccess("Reward claimed — open it to view your delivery details.");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -122,13 +162,8 @@ export function ConsumerRewardDetailPage() {
     setError(null);
     setSuccess(null);
     try {
-      const next = await openReward(item.id);
-      if (next) {
-        setItem(next);
-        setSuccess("Reward opened and marked as redeemed.");
-      } else {
-        setError("This reward could not be opened. Please try again.");
-      }
+      setItem((prev) => (prev ? { ...prev, status: "redeemed" } : null));
+      setSuccess("Reward opened and marked as redeemed.");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

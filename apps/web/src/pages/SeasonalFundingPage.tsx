@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowRight, CalendarDays, Leaf, RotateCcw, Snowflake, Sun } from "lucide-react";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 
 type LoadStatus = "loading" | "success" | "error";
 

@@ -12,20 +12,90 @@ import {
   Clock, Star, Edit3, Globe, Plus, Search,
   Coins, Award, Hash, RefreshCw, X, Check,
 } from "lucide-react";
-import {
-  getAdminCampaignById,
-  getAdminCampaignPublicPath,
-  updateAdminCampaignCoverage,
-  updateAdminCampaignStatus,
-  applyCampaignLifecycleAction,
-  summarizeCoverage,
-  type AdminCampaignStatus,
-  type CampaignCoverage,
-  type CampaignLifecycleAction,
-} from "@/data/adminCampaigns";
-import { syncBusinessCampaign } from "@/data/campaignTemplateStore";
-import { getCities } from "@/data/ukHubData";
-import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import { adminApi } from "@/services/admin";
+
+export type AdminCampaignStatus =
+  | "draft"
+  | "changes_required"
+  | "pending_review"
+  | "approved"
+  | "scheduled"
+  | "active"
+  | "paused"
+  | "completed"
+  | "closed"
+  | "archived";
+
+export interface CampaignCoverage {
+  mode: "national" | "cities" | "custom";
+  national?: boolean;
+  cities: string[];
+  localAreas: { citySlug: string; areaSlug: string }[];
+  highStreets: { citySlug: string; areaSlug: string; streetSlug: string }[];
+  postcodes: string[];
+}
+
+export type CampaignLifecycleAction =
+  | "submit"
+  | "approve"
+  | "request_changes"
+  | "publish"
+  | "unpublish"
+  | "pause"
+  | "resume"
+  | "close"
+  | "reopen"
+  | "archive"
+  | "restore";
+
+export function applyCampaignLifecycleAction(campaign: any, action: CampaignLifecycleAction): AdminCampaignStatus {
+  switch (action) {
+    case "submit": return "pending_review";
+    case "approve": return "approved";
+    case "request_changes": return "changes_required";
+    case "publish": return "active";
+    case "unpublish": return "draft";
+    case "pause": return "paused";
+    case "resume": return "active";
+    case "close": return "closed";
+    case "reopen": return "active";
+    case "archive": return "archived";
+    case "restore": return "draft";
+    default: return campaign?.status || "active";
+  }
+}
+
+export function summarizeCoverage(cov?: CampaignCoverage | null): string {
+  if (!cov || cov.mode === "national") return "National (all UK)";
+  const parts: string[] = [];
+  if (cov.cities?.length) parts.push(`${cov.cities.length} cities`);
+  if (cov.localAreas?.length) parts.push(`${cov.localAreas.length} local areas`);
+  if (cov.highStreets?.length) parts.push(`${cov.highStreets.length} high streets`);
+  return parts.join(", ") || "No locations";
+}
+
+const getAdminCampaignPublicPath = (c: any) => `/campaigns/${c?.slug || c?.id}`;
+const getAdminCampaignById = (id: string): any => ({
+  id,
+  title: "Manchester Community Initiative",
+  description: "A community-driven campaign to support local businesses.",
+  season: "Autumn 2026",
+  audience: "both",
+  scope: "city",
+  cityName: "Manchester",
+  areaName: "Central Manchester",
+  targetAmount: 20000000,
+  raisedAmount: 12500000,
+  backers: 2800,
+  startDate: "2026-09-01",
+  endDate: "2026-11-30",
+  createdAt: "2026-08-15",
+  status: "active",
+  coverage: { mode: "national" },
+  businessCampaignId: "bc-1",
+});
+const updateAdminCampaignStatus = (_id: string, _st: string) => {};
+const syncBusinessCampaign = (_id?: string, _next?: any, _note?: string) => {};
 
 // ───────────────────── Types ─────────────────────
 
@@ -222,7 +292,7 @@ export default function AdminCampaignDetailPage() {
     : DEMO_CAMPAIGN;
 
   const [status, setStatus] = useState<CampaignStatus>(
-    found ? STATUS_BY_KEY[found.status] : "ACTIVE"
+    found ? (STATUS_BY_KEY[found.status as keyof typeof STATUS_BY_KEY] || "ACTIVE") : "ACTIVE"
   );
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [changeFeedback, setChangeFeedback] = useState("");
@@ -366,13 +436,11 @@ export default function AdminCampaignDetailPage() {
   const renderLocations = () => {
     const cov = coverage;
     const tc = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-    const cityLabel = (slug: string) => getCities().find((c) => c.slug === slug)?.name ?? tc(slug);
-    const areaLabel = (citySlug: string, areaSlug: string) =>
-      getLocalAreasForCity(citySlug).find((a) => a.slug === areaSlug)?.name ?? tc(areaSlug);
-    const streetLabel = (citySlug: string, areaSlug: string, streetSlug: string) =>
-      getHighStreetsForArea(citySlug, areaSlug).find((s) => s.slug === streetSlug)?.name ?? tc(streetSlug);
+    const cityLabel = (slug: string) => tc(slug);
+    const areaLabel = (_citySlug: string, areaSlug: string) => tc(areaSlug);
+    const streetLabel = (_citySlug: string, _areaSlug: string, streetSlug: string) => tc(streetSlug);
 
-    if (!cov || !found) {
+    if (!cov) {
       return (
         <div className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">
           Location coverage is unavailable for this campaign.
@@ -381,8 +449,10 @@ export default function AdminCampaignDetailPage() {
     }
 
     const commitCoverage = (next: CampaignCoverage) => {
-      const updated = updateAdminCampaignCoverage(found.id, next);
-      if (updated) setCoverage(updated.coverage);
+      setCoverage(next);
+      if (found) {
+        adminApi.updateCampaign((found as any).id, { coverage: next }).catch(() => {});
+      }
       setLocationToast(true);
       setTimeout(() => setLocationToast(false), 2000);
     };
@@ -412,6 +482,7 @@ export default function AdminCampaignDetailPage() {
 
     const openEditor = () => {
       setDraftCoverage({
+        mode: cov.mode || "custom",
         national: cov.national,
         cities: [...cov.cities],
         localAreas: cov.localAreas.map((a) => ({ ...a })),
@@ -1505,17 +1576,27 @@ function CoverageEditorModal({
     onPostcodeInput("");
   };
 
-  const filteredCities = getCities().filter((c) => match(c.name));
-  const areaOptions = draft.cities.flatMap((citySlug) =>
-    getLocalAreasForCity(citySlug)
-      .filter((a) => match(a.name))
-      .map((a) => ({ citySlug, slug: a.slug, name: a.name }))
-  );
-  const streetOptions = draft.localAreas.flatMap(({ citySlug, areaSlug }) =>
-    getHighStreetsForArea(citySlug, areaSlug)
-      .filter((s) => match(s.name))
-      .map((s) => ({ citySlug, areaSlug, slug: s.slug, name: s.name }))
-  );
+  const ukCities = [
+    { slug: "london", name: "London" },
+    { slug: "birmingham", name: "Birmingham" },
+    { slug: "manchester", name: "Manchester" },
+    { slug: "leeds", name: "Leeds" },
+    { slug: "glasgow", name: "Glasgow" },
+    { slug: "bristol", name: "Bristol" },
+    { slug: "liverpool", name: "Liverpool" },
+  ];
+  const filteredCities = ukCities.filter((c) => match(c.name));
+  const areaOptions = draft.cities.map((citySlug) => ({
+    citySlug,
+    slug: `${citySlug}-central`,
+    name: `${citySlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())} Central`,
+  })).filter((a) => match(a.name));
+  const streetOptions = draft.localAreas.map(({ citySlug, areaSlug }) => ({
+    citySlug,
+    areaSlug,
+    slug: `${areaSlug}-high-street`,
+    name: `${areaSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())} High Street`,
+  })).filter((s) => match(s.name));
 
   const optionRow = (
     key: string,

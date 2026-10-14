@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { physicalApi, type VCardRecognition } from "@/services/physical.service";
+import { physicalApi, type VCardRecognition } from "@/services/physical";
 import { Smartphone } from "lucide-react";
 
 const RECOGNITION_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {

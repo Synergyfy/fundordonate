@@ -19,7 +19,7 @@ import {
   rejectLocationRecommendation,
   type LocationRecommendation,
   type RecommendationStatus,
-} from "@/data/locationRecommendations";
+} from "@/services/recommendations";
 
 type Filter = "pending" | "approved" | "rejected" | "all";
 

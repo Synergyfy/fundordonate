@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { physicalApi, type LifetimeStats } from "@/services/physical.service";
+import { physicalApi, type LifetimeStats } from "@/services/physical";
 import { TrendingUp, Globe, Smartphone, CreditCard, QrCode, Store } from "lucide-react";
 
 const CHANNEL_META: Record<string, { icon: any; label: string; color: string }> = {

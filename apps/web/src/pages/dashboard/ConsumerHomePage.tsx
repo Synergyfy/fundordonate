@@ -11,17 +11,13 @@ import {
   Target,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
-import { seasonApi, type Season } from "@/services/season.service";
-import { userDashboardApi } from "@/services/user-dashboard.service";
+import { seasonApi, type Season } from "@/services/season";
+import { userDashboardApi } from "@/services/user-dashboard";
 import { GreetingHeader } from "@/components/dashboard/GreetingHeader";
-import {
-  findConsumerCampaign,
-  getConsumerCommunity,
-  getRecommendedCampaigns,
-  type ConsumerCampaignRef,
-} from "@/data/consumerHomeData";
-import { getLocalStats } from "@/data/consumerActivityData";
-import type { DemoCampaign } from "@/data/demo";
+import { WalletCard } from "@/components/wallet/WalletCard";
+import { campaignService } from "@/services/campaign";
+import { getConsumerCommunity } from "@/services/community";
+import { formatCurrency, formatDate } from "@/utils/formatters";
 
 interface DashboardStats {
   totalContributed: number;
@@ -29,13 +25,16 @@ interface DashboardStats {
   rewardsEarned: number;
 }
 
-const LAST_VIEWED_KEY = "lastViewedCampaign";
-
-const formatCurrency = (pence: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+interface CampaignSummary {
+  id: string;
+  slug: string;
+  title: string;
+  mode: string;
+  raisedAmount: number;
+  goalAmount: number;
+  location: string;
+  featuredImage?: string;
+}
 
 const getModeLabel = (mode: string) => (mode === "fund" ? "Fund" : "Donate");
 
@@ -59,34 +58,40 @@ export function ConsumerHomePage() {
     campaignsBacked: 0,
     rewardsEarned: 0,
   });
-  const [recommended, setRecommended] = useState<DemoCampaign[]>([]);
-  const [continueCampaign, setContinueCampaign] = useState<ConsumerCampaignRef | null>(null);
+  const [recommended, setRecommended] = useState<CampaignSummary[]>([]);
+  const [continueCampaign, setContinueCampaign] = useState<CampaignSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [seasonResult, statsResult, localResult] = await Promise.allSettled([
+      const [seasonResult, statsResult, campaignsResult] = await Promise.allSettled([
         seasonApi.getCurrent(),
         userDashboardApi.getStats(),
-        getLocalStats(),
+        campaignService.list({ status: "ACTIVE", limit: 3 }),
       ]);
       if (cancelled) return;
       setSeason(seasonResult.status === "fulfilled" ? seasonResult.value : null);
       const apiStats = normalizeStats(
         statsResult.status === "fulfilled" ? statsResult.value : null,
       );
-      const hasApiData =
-        apiStats.totalContributed > 0 ||
-        apiStats.campaignsBacked > 0 ||
-        apiStats.rewardsEarned > 0;
-      if (!hasApiData && localResult.status === "fulfilled") {
-        setStats(localResult.value);
-      } else {
-        setStats(apiStats);
+      setStats(apiStats);
+
+      if (campaignsResult.status === "fulfilled" && campaignsResult.value?.items) {
+        const mapped = campaignsResult.value.items.map((c: any) => ({
+          id: c.id,
+          slug: c.slug || c.id,
+          title: c.title,
+          mode: (c.category || "donation").toLowerCase(),
+          raisedAmount: c.raisedAmount || 0,
+          goalAmount: c.targetAmount || 1000,
+          location: c.location?.name || "UK High Street",
+          featuredImage: c.imageUrl || "",
+        }));
+        setRecommended(mapped);
+        if (mapped.length > 0 && mapped[0]) {
+          setContinueCampaign(mapped[0]);
+        }
       }
-      setRecommended(getRecommendedCampaigns());
-      const lastSlug = window.localStorage.getItem(LAST_VIEWED_KEY);
-      setContinueCampaign(lastSlug ? findConsumerCampaign(lastSlug) : null);
       setLoading(false);
     })();
     return () => {
@@ -126,6 +131,8 @@ export function ConsumerHomePage() {
   return (
     <div className="space-y-6">
       <GreetingHeader name={displayName} />
+
+      <WalletCard />
 
       {season && (
         <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">

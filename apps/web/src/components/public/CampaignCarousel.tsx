@@ -23,7 +23,7 @@ const TRACK_LAYOUT =
  * below it (and touch swipe on mobile).
  */
 export function CampaignCarousel({ mode, limit = 12 }: CampaignCarouselProps) {
-  const { status, campaigns, load } = usePublicCampaigns({ mode, limit, demoAll: true });
+  const { status, campaigns, load } = usePublicCampaigns({ mode, limit });
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);

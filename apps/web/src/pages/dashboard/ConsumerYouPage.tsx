@@ -13,9 +13,8 @@ import {
   User,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
-import { NATIONAL_HUB } from "@/data/ukHubData";
 
 interface MenuEntry {
   label: string;
@@ -119,7 +118,7 @@ export function ConsumerYouPage() {
           </div>
           <div className="flex items-center justify-between gap-3">
             <span className="text-gray-500">UK Hub</span>
-            <span className="font-semibold text-gray-900">{NATIONAL_HUB.name}</span>
+            <span className="font-semibold text-gray-900">UK National Hub</span>
           </div>
         </div>
       </div>

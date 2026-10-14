@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { templateApi, type CampaignTemplate } from "@/services/template.service";
+import { templateApi, type CampaignTemplate } from "@/services/template";
 import { ArrowLeft, Plus, Copy, Archive, Clock, Users, Target } from "lucide-react";
 
 const TEMPLATE_TYPES = [

@@ -6,11 +6,10 @@ import {
   CheckCircle2,
   CircleAlert,
   Info,
-  Lock,
   X,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
-import { userDashboardApi } from "@/services/user-dashboard.service";
+import { userDashboardApi } from "@/services/user-dashboard";
 
 interface Profile {
   id: string;
@@ -151,8 +150,7 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
-    return tab === "password" ||
-      tab === "notifications" ||
+    return tab === "notifications" ||
       tab === "danger" ||
       tab === "profile"
       ? tab
@@ -178,10 +176,8 @@ export function ProfilePage() {
     pushCampaignUpdates: false,
   });
 
-  // Password change
-  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  // Password change is handled by MCOM Central Hub — no local password UI.
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -196,7 +192,7 @@ export function ProfilePage() {
         const p = profileResult.value;
         const phone = extras.phone ?? p.phone ?? "";
         const location = extras.location ?? p.location ?? "";
-        setProfile({ ...p, phone, location });
+        setProfile({ ...p, phone, location } as any);
         setForm({
           firstName: p.firstName || "",
           lastName: p.lastName || "",
@@ -297,29 +293,6 @@ export function ProfilePage() {
     e.target.value = "";
   };
 
-  const handleChangePassword = async () => {
-    if (pwForm.newPassword !== pwForm.confirmPassword) {
-      showMessage("error", "Passwords do not match");
-      return;
-    }
-    if (pwForm.newPassword.length < 8) {
-      showMessage("error", "Password must be at least 8 characters");
-      return;
-    }
-    setSaving(true);
-    try {
-      await userDashboardApi.changePassword({
-        currentPassword: pwForm.currentPassword,
-        newPassword: pwForm.newPassword,
-      });
-      setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      showMessage("success", "Password changed successfully");
-    } catch {
-      showMessage("error", "Failed to change password. Check your current password.");
-    }
-    setSaving(false);
-  };
-
   const handleSaveNotifications = async () => {
     setSaving(true);
     try {
@@ -332,14 +305,13 @@ export function ProfilePage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!deletePassword) return;
     setSaving(true);
     try {
-      await userDashboardApi.deleteAccount(deletePassword);
+      await userDashboardApi.deleteAccount();
       useAuthStore.getState().logout();
       navigate("/");
     } catch {
-      showMessage("error", "Failed to delete account. Check your password.");
+      showMessage("error", "Failed to delete account. Please try again.");
     }
     setSaving(false);
   };
@@ -354,7 +326,6 @@ export function ProfilePage() {
 
   const tabs = [
     { id: "profile", label: "Profile" },
-    { id: "password", label: "Password" },
     { id: "notifications", label: "Notifications" },
     { id: "danger", label: "Danger Zone" },
   ];
@@ -515,41 +486,6 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Password Tab */}
-      {activeTab === "password" && (
-        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-          <CardHeader
-            title="Change Password"
-            description="Use a password you haven't used on FundOrDonate before."
-            icon={
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50">
-                <Lock className="h-4 w-4 text-primary-600" />
-              </span>
-            }
-          />
-          <div className="space-y-4 p-5">
-            <div>
-              <label className="label">Current Password</label>
-              <input type="password" value={pwForm.currentPassword} onChange={(e) => setPwForm((f) => ({ ...f, currentPassword: e.target.value }))} className="input-field w-full" placeholder="Enter current password" />
-            </div>
-            <div>
-              <label className="label">New Password</label>
-              <input type="password" value={pwForm.newPassword} onChange={(e) => setPwForm((f) => ({ ...f, newPassword: e.target.value }))} className="input-field w-full" placeholder="Enter new password" />
-              <p className="mt-1 text-xs text-gray-400">Minimum 8 characters</p>
-            </div>
-            <div>
-              <label className="label">Confirm New Password</label>
-              <input type="password" value={pwForm.confirmPassword} onChange={(e) => setPwForm((f) => ({ ...f, confirmPassword: e.target.value }))} className="input-field w-full" placeholder="Re-enter new password" />
-            </div>
-            <div className="flex justify-end border-t border-gray-50 pt-4">
-              <button onClick={handleChangePassword} disabled={saving || !pwForm.currentPassword || !pwForm.newPassword} className="btn-primary">
-                {saving ? "Changing..." : "Change Password"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Notifications Tab */}
       {activeTab === "notifications" && (
         <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
@@ -676,38 +612,31 @@ export function ProfilePage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Delete Account</h2>
                   <p className="text-sm text-gray-500">
-                    This action is irreversible. Enter your password to confirm.
+                    This action is irreversible. Please confirm to continue.
                   </p>
                 </div>
               </div>
               <button
                 aria-label="Close"
-                onClick={() => { setShowDeleteModal(false); setDeletePassword(""); }}
+                onClick={() => setShowDeleteModal(false)}
                 className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div>
-              <label className="label">Password</label>
-              <input
-                type="password"
-                value={deletePassword}
-                onChange={(e) => setDeletePassword(e.target.value)}
-                className="input-field w-full"
-                placeholder="Enter your password"
-              />
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              Deleting your account is permanent and cannot be undone.
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
               <button
                 onClick={handleDeleteAccount}
-                disabled={saving || !deletePassword}
+                disabled={saving}
                 className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-40"
               >
                 {saving ? "Deleting..." : "Yes, Delete My Account"}
               </button>
               <button
-                onClick={() => { setShowDeleteModal(false); setDeletePassword(""); }}
+                onClick={() => setShowDeleteModal(false)}
                 className="btn-secondary flex-1"
               >
                 Cancel

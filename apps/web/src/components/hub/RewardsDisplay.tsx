@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { rewardsApi, type CityReward, type BoroughReward } from "@/services/rewards.service";
+import { rewardsApi, type CityReward, type BoroughReward } from "@/services/reward";
 import { Gift } from "lucide-react";
 
 const REWARD_COLORS: Record<string, { bg: string; text: string; border: string }> = {

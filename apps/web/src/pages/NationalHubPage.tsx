@@ -6,19 +6,26 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
+import api from "@/services/api";
 import {
-  NATIONAL_HUB, getNationalHubSummary, getCitiesByStatus, getCities,
-  formatCurrency, formatNumber,
-} from "@/data/ukHubData";
-import {
-  HUB_LOCATIONS, HUB_STATUS_META,
-  type HubLocation as MapHubLocation, type HubStatus,
-} from "@/data/hubActivation";
-import { getCityStats } from "@/data/highStreetData";
+  HUB_STATUS_META,
+  type HubLocation as MapHubLocation,
+  type HubStatus,
+} from "@/types/uk-hub";
 import { LocationStatusBadge } from "@/components/hub/HubStatusBadge";
 import { UkMap } from "@/components/hub/UkMap";
 import { Tooltip } from "@/components/ui/Tooltip";
+
+const formatCurrency = (n: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
+const formatNumber = (n: number) =>
+  new Intl.NumberFormat("en-GB").format(n);
+
+const NATIONAL_HERO = {
+  headline: "UK Hub Activation Programme",
+  supportingText: "Connecting cities, businesses and communities across the United Kingdom through localised activation, funding and participation.",
+};
 import {
   Calendar, Clock, Store, Users, MapPin, Megaphone,
   ArrowRight, Info, ChevronDown, ChevronUp, Search, Globe,
@@ -197,26 +204,17 @@ function SeasonBanner({ currentSeason, nextSeason }: { currentSeason: Season | n
 // ───────────────────── City Panel (Enhanced) ─────────────────────
 
 function CityInfoPanel({ location, onClose, currentSeason }: { location: MapHubLocation; onClose: () => void; currentSeason: Season | null }) {
-  const meta = HUB_STATUS_META[location.status];
+  const statusKey = location.status || "active";
+  const meta = HUB_STATUS_META[statusKey as keyof typeof HUB_STATUS_META] || HUB_STATUS_META.active;
 
-  // Use unified high street data instead of Math.random()
-  const cityStats = getCityStats(location.slug);
-  const fin = cityStats ? {
-    fundingRaised: Math.floor(location.activationProgress * 2000),
-    fundingTarget: 200000,
-    localAreas: cityStats.totalLocalAreas,
-    highStreets: cityStats.totalHighStreets,
-    businesses: cityStats.totalBusinesses,
-    consumers: cityStats.totalConsumers,
-    campaigns: cityStats.totalCampaigns,
-  } : {
-    fundingRaised: Math.floor(location.activationProgress * 2000),
-    fundingTarget: 200000,
-    localAreas: 0,
-    highStreets: 0,
-    businesses: 0,
-    consumers: 0,
-    campaigns: 0,
+  const fin = {
+    fundingRaised: (location as any).fundingRaised || 0,
+    fundingTarget: (location as any).fundingTarget || 200000,
+    localAreas: (location as any).localAreas || (location as any).localAreasCount || 0,
+    highStreets: (location as any).highStreets || (location as any).highStreetsCount || 0,
+    businesses: (location as any).businesses || (location as any).businessesCount || 0,
+    consumers: ((location as any).businesses || (location as any).businessesCount || 1) * 12,
+    campaigns: (location as any).campaigns || (location as any).campaignsCount || 0,
   };
   const fundingPct = safePct(fin.fundingRaised, fin.fundingTarget);
 
@@ -363,7 +361,7 @@ function CityInfoPanel({ location, onClose, currentSeason }: { location: MapHubL
         </div>
 
         {/* Activity */}
-        {location.activity.length > 0 && (
+        {location.activity && location.activity.length > 0 && (
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-2">What is happening</h3>
             <ul className="space-y-1.5">
@@ -403,8 +401,61 @@ function MapLegend() {
 // ───────────────────── Main Page ─────────────────────
 
 export default function NationalHubPage() {
-  const summary = getNationalHubSummary();
-  const allCities = getCities();
+  const { data: liveSummary } = useQuery({
+    queryKey: ["national-hub-summary"],
+    queryFn: () => api.get<any>("/hub/national-summary"),
+  });
+
+  const { data: liveCities } = useQuery({
+    queryKey: ["hub-cities"],
+    queryFn: () => api.get<any[]>("/hub/cities"),
+  });
+
+  const allCities = useMemo(() => {
+    if (liveCities && liveCities.length > 0) {
+      return liveCities.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        region: c.region || "UK",
+        status: (c.status === "active" ? "active" : c.status === "making_progress" ? "making_progress" : "needs_activation") as HubStatus,
+        activationProgress: c.activationProgress ?? (c.status === "active" ? 100 : c.status === "making_progress" ? 65 : 20),
+        fundingRaised: c.fundingRaised || 0,
+        fundingTarget: c.fundingTarget || 200000,
+        localAreas: c.localAreas || c.localAreasCount || 0,
+        highStreets: c.highStreets || c.highStreetsCount || 0,
+        businesses: c.businesses || c.businessesCount || 0,
+        campaigns: c.campaigns || c.campaignsCount || 0,
+        mapX: c.mapX ?? 50,
+        mapY: c.mapY ?? 50,
+        shortDescription: c.shortDescription || `${c.name} Hub`,
+        activity: c.activity || [],
+        imageOne: c.imageOne || `https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&h=500&fit=crop`,
+        imageTwo: c.imageTwo || `https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=500&fit=crop`,
+        campaignSlugs: c.campaignSlugs || [],
+        communities: c.communities || `${c.name} Local Community`,
+        type: "city" as const,
+      }));
+    }
+    return [];
+  }, [liveCities]);
+
+  const summary = useMemo(() => {
+    return liveSummary || {
+      totalCities: allCities.length,
+      active: allCities.filter((c: any) => c.status === "active").length,
+      makingProgress: allCities.filter((c: any) => c.status === "making_progress").length,
+      needsActivation: allCities.filter((c: any) => c.status === "needs_activation").length,
+      totalFundingRaised: 0,
+      totalFundingTarget: 5000000,
+      totalCampaignDonations: 0,
+      totalCampaignPledges: 0,
+      totalBackers: 0,
+      totalBusinesses: 0,
+      totalConsumers: 0,
+    };
+  }, [liveSummary, allCities]);
+
   const [activeTab, setActiveTab] = useState<HubStatus | "all">("all");
   const [selectedMapSlug, setSelectedMapSlug] = useState<string | null>(null);
   const [showAboutModal, setShowAboutModal] = useState(false);
@@ -436,17 +487,17 @@ export default function NationalHubPage() {
   const nextSeason = seasons.find((s: Season) => s.status === "SCHEDULED") || null;
 
   const selectedCity = useMemo(
-    () => (selectedMapSlug ? HUB_LOCATIONS.find((l) => l.slug === selectedMapSlug) ?? null : null),
-    [selectedMapSlug]
+    () => (selectedMapSlug ? allCities.find((l) => l.slug === selectedMapSlug) ?? null : null),
+    [allCities, selectedMapSlug]
   ) as MapHubLocation | null;
 
   const overallFundingPct = safePct(summary.totalFundingRaised, summary.totalFundingTarget);
 
   const tabCounts = useMemo(() => ({
     all: allCities.length,
-    active: getCitiesByStatus("ACTIVE").length,
-    making_progress: getCitiesByStatus("MAKING_PROGRESS").length,
-    needs_activation: getCitiesByStatus("NEEDS_ACTIVATION").length,
+    active: allCities.filter((c: any) => c.status === "active" || c.status === "ACTIVE").length,
+    making_progress: allCities.filter((c: any) => c.status === "making_progress" || c.status === "MAKING_PROGRESS").length,
+    needs_activation: allCities.filter((c: any) => c.status === "needs_activation" || c.status === "NEEDS_ACTIVATION").length,
   }), [allCities]);
 
   return (
@@ -458,8 +509,8 @@ export default function NationalHubPage() {
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1920&h=800&q=80')] bg-cover bg-center opacity-20" />
         <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{NATIONAL_HUB.heroHeadline || "UK Hub Activation Programme"}</h1>
-            <p className="mt-1 text-sm text-gray-300 leading-relaxed">{NATIONAL_HUB.heroSupportingText}</p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{NATIONAL_HERO.headline}</h1>
+            <p className="mt-1 text-sm text-gray-300 leading-relaxed">{NATIONAL_HERO.supportingText}</p>
           </div>
         </div>
       </section>
@@ -584,9 +635,9 @@ export default function NationalHubPage() {
                 // Auto-select first matching city
                 if (e.target.value.length >= 2) {
                   const q = e.target.value.toLowerCase();
-                  const match = HUB_LOCATIONS.find(l =>
-                    l.name.toLowerCase().includes(q) ||
-                    l.region.toLowerCase().includes(q)
+                  const match = (allCities as any[]).find(l =>
+                    l.name?.toLowerCase().includes(q) ||
+                    l.region?.toLowerCase().includes(q)
                   );
                   if (match) setSelectedMapSlug(match.slug);
                 }
@@ -631,16 +682,15 @@ export default function NationalHubPage() {
                   </div>
                 </div>
                 <div className="max-h-80 overflow-y-auto border-t">
-                  {HUB_LOCATIONS
-                    .filter(l => l.type === "city" || l.type === "london_borough")
+                  {(allCities as any[])
                     .filter(l =>
                       citySearchQuery === "" ||
-                      l.name.toLowerCase().includes(citySearchQuery.toLowerCase()) ||
-                      l.region.toLowerCase().includes(citySearchQuery.toLowerCase())
+                      l.name?.toLowerCase().includes(citySearchQuery.toLowerCase()) ||
+                      l.region?.toLowerCase().includes(citySearchQuery.toLowerCase())
                     )
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
                     .map(location => {
-                      const meta = HUB_STATUS_META[location.status];
+                      const meta = HUB_STATUS_META[location.status as HubStatus] || HUB_STATUS_META.active;
                       const isSelected = selectedMapSlug === location.slug;
                       return (
                         <button
@@ -662,10 +712,10 @@ export default function NationalHubPage() {
                         </button>
                       );
                     })}
-                  {HUB_LOCATIONS.filter(l => l.type === "city" || l.type === "london_borough").filter(l =>
+                  {(allCities as any[]).filter(l =>
                     citySearchQuery === "" ||
-                    l.name.toLowerCase().includes(citySearchQuery.toLowerCase()) ||
-                    l.region.toLowerCase().includes(citySearchQuery.toLowerCase())
+                    l.name?.toLowerCase().includes(citySearchQuery.toLowerCase()) ||
+                    l.region?.toLowerCase().includes(citySearchQuery.toLowerCase())
                   ).length === 0 && (
                     <div className="px-4 py-6 text-center text-sm text-gray-400">
                       No cities found matching "{citySearchQuery}"
@@ -734,7 +784,7 @@ export default function NationalHubPage() {
             <div className="flex flex-col gap-4 lg:flex-row">
               <div className="relative flex-1 min-w-0">
                 <div className="overflow-hidden rounded-xl border bg-white shadow-sm" style={{ height: "60vh", minHeight: 400 }}>
-                  <UkMap locations={HUB_LOCATIONS} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
+                  <UkMap locations={allCities} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
                 </div>
                 <MapLegend />
               </div>

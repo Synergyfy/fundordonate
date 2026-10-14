@@ -7,8 +7,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Check, ChevronRight, ChevronLeft, Store, MapPin, Tag, Target, Crown, FileCheck,
+  Check, ChevronRight, ChevronLeft, Store, MapPin, Tag, Target, Crown, FileCheck, Loader2,
 } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
+import { useBusinessOnboarding } from "@/services/business/hook";
 
 const STEPS = [
   { id: 1, label: "Welcome", icon: Store },
@@ -114,6 +116,8 @@ export default function BusinessOnboardingPage() {
     membershipTier: "bronze",
   });
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const onboardMutation = useBusinessOnboarding();
 
   const update = (partial: Partial<OnboardingData>) => setData((d) => ({ ...d, ...partial }));
 
@@ -133,10 +137,34 @@ export default function BusinessOnboardingPage() {
     }
   };
 
-  const handleComplete = () => {
-    // In production, this would submit the onboarding data
-    alert("Onboarding complete! Welcome to FundorDonate, " + data.businessName + "!");
-    navigate("/business-owner");
+  const handleComplete = async () => {
+    try {
+      const city = selectedCity?.name || "Manchester";
+      const borough = selectedBorough?.name || "City Centre";
+      const street = data.highStreetId || selectedBorough?.highStreets?.[0] || "High Street";
+
+      await onboardMutation.mutateAsync({
+        businessName: data.businessName.trim(),
+        businessType: data.businessType,
+        registrationNumber: data.registrationNumber || undefined,
+        description: data.description || undefined,
+        email: user?.email || "business@fundordonate.com",
+        city,
+        localArea: borough,
+        highStreet: street,
+        postcode: "M1 1AA",
+        category: data.categories[0] || "Community",
+        subcategories: data.categories.slice(1),
+        preferredAudience: data.preferredAudience,
+        campaignGoal: data.campaignGoal || undefined,
+        membershipTier: (data.membershipTier.toUpperCase() as any) || "BRONZE",
+      });
+
+      navigate("/dashboard");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to complete onboarding. Please try again.";
+      alert(Array.isArray(msg) ? msg.join(", ") : msg);
+    }
   };
 
   const toggleCategory = (cat: string) => {
@@ -454,9 +482,18 @@ export default function BusinessOnboardingPage() {
           ) : (
             <button
               onClick={handleComplete}
-              className="flex items-center gap-1 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+              disabled={onboardMutation.isPending}
+              className="flex items-center gap-1.5 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
             >
-              <Check className="h-4 w-4" /> Complete Setup
+              {onboardMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Submitting...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> Complete Setup
+                </>
+              )}
             </button>
           )}
         </div>

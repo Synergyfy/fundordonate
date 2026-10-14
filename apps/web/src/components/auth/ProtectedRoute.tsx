@@ -19,8 +19,6 @@ interface ProtectedRouteProps {
   requiredPermission?: Permission;
   /** Required at least one of these permissions */
   requiredAnyPermission?: Permission[];
-  /** Require verified email */
-  requireEmailVerification?: boolean;
 }
 
 // =============================================================================
@@ -28,9 +26,9 @@ interface ProtectedRouteProps {
 // =============================================================================
 
 function getDashboardRoute(user: User): string {
-  if (user.userType === "admin") return "/admin";
-  if (user.userType === "business" && user.role === "fundraiser") return "/fundraiser";
-  return "/dashboard";
+  if (user.userType === "admin" || user.role === "admin") return "/admin";
+  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") return "/dashboard";
+  return "/consumer";
 }
 
 // =============================================================================
@@ -43,7 +41,6 @@ export function ProtectedRoute({
   requiredUserTypes,
   requiredPermission,
   requiredAnyPermission,
-  requireEmailVerification = false,
 }: ProtectedRouteProps) {
   const user = useAuthStore((s) => s.user);
   const authStatus = useAuthStore((s) => s.authStatus);
@@ -65,12 +62,7 @@ export function ProtectedRoute({
     );
   }
 
-  // State C — Email verification required
-  if (requireEmailVerification && !user.emailVerified) {
-    return <Navigate to="/auth/verify-email" replace />;
-  }
-
-  // State D — User is authenticated but lacks authorization (403)
+  // State C — User is authenticated but lacks authorization (403)
   // Check userType authorization
   if (requiredUserTypes && !requiredUserTypes.includes(user.userType)) {
     return <AccessDeniedPage />;

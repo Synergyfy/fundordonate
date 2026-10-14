@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
-import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const login = useAuthStore((s) => s.login);
-  const demoLogin = useAuthStore((s) => s.demoLogin);
+  const loginWithCentralHub = useAuthStore((s) => s.loginWithCentralHub);
   const getPostLoginRedirect = useAuthStore((s) => s.getPostLoginRedirect);
   const user = useAuthStore((s) => s.user);
   const authStatus = useAuthStore((s) => s.authStatus);
@@ -19,54 +13,54 @@ export default function LoginPage() {
   const centralHubEnabled = useAuthStore((s) => s.centralHubEnabled);
   const centralHubLoading = useAuthStore((s) => s.centralHubLoading);
   const checkCentralHub = useAuthStore((s) => s.checkCentralHub);
-  const loginWithCentralHub = useAuthStore((s) => s.loginWithCentralHub);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || undefined;
   const isLoggedIn = authStatus === "authenticated" && user;
+
+  // If already authenticated, redirect straight to the user's dashboard (or requested page)
+  useEffect(() => {
+    if (isLoggedIn) {
+      const dest =
+        from && from !== "/" && from !== "/auth/login" && from !== "/login"
+          ? from
+          : getPostLoginRedirect();
+      navigate(dest, { replace: true });
+    }
+  }, [isLoggedIn, from, getPostLoginRedirect, navigate]);
 
   useEffect(() => {
     checkCentralHub();
   }, [checkCentralHub]);
 
-  // Clear session error on unmount
+  useEffect(() => {
+    if (searchParams.get("reason") === "session-expired") {
+      setError("Your session has expired. Please sign in again.");
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     return () => clearSessionError();
   }, [clearSessionError]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCentralHubLogin = async () => {
     setError("");
-    setIsSubmitting(true);
-
     try {
-      await login(email, password);
-      // Use preserved return path, or fall back to role-based redirect
-      const destination = from || getPostLoginRedirect();
-      navigate(destination, { replace: true });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-            "Invalid email or password";
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
+      const targetPath =
+        from && from !== "/" && from !== "/auth/login" && from !== "/login"
+          ? from
+          : "";
+      await loginWithCentralHub(targetPath);
+    } catch {
+      setError("Unable to reach MCOM Central Hub. Please try again.");
     }
-  };
-
-  const handleDemoLogin = (role: string) => {
-    demoLogin(role);
-    // Demo users get redirected based on their userType/role
-    const destination = getPostLoginRedirect();
-    navigate(destination, { replace: true });
   };
 
   return (
     <div className="flex min-h-screen">
-      {/* Left Panel - Form */}
+      {/* Left Panel - Sign in */}
       <div className="flex w-full items-center justify-center p-8 lg:w-1/2">
         <div className="w-full max-w-md space-y-8">
           <div>
@@ -74,186 +68,85 @@ export default function LoginPage() {
               FundorDonate
             </Link>
             <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
-              Welcome back
+              Sign in
             </h1>
             <p className="mt-2 text-sm text-gray-600">
-              Don't have an account?{" "}
-              <Link to="/auth/register" className="font-medium text-primary-600 hover:text-primary-500">
-                Sign up for free
-              </Link>
+              Accounts are managed by MCOM Solutions. Continue with your Central
+              Hub account — no separate FundorDonate password required.
             </p>
           </div>
 
-          {/* Already logged in banner */}
           {isLoggedIn && (
-            <div className="rounded-xl bg-primary-50 border border-primary-200 p-4">
+            <div className="rounded-xl border border-primary-200 bg-primary-50 p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-primary-800">
-                    Signed in as {user.firstName || user.username}
+                    Signed in as {user.firstName || user.username || user.email}
                   </p>
-                  <p className="text-xs text-primary-600 mt-0.5">
-                    {user.userType === "admin" ? "Administrator" : user.userType === "business" ? "Business" : "Member"}
+                  <p className="mt-0.5 text-xs text-primary-600">
+                    {user.userType === "admin"
+                      ? "Administrator"
+                      : user.userType === "business"
+                        ? "Business"
+                        : "Member"}
                   </p>
                 </div>
                 <button
                   onClick={() => navigate(getPostLoginRedirect(), { replace: true })}
-                  className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
+                  className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-700"
                 >
-                  Continue to Dashboard
+                  Continue
                 </button>
               </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {sessionError && (
-              <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-700 flex items-start gap-2">
-                <svg className="h-4 w-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                {sessionError}
-              </div>
-            )}
-            {error && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>
-            )}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input-field mt-1.5"
-                placeholder="you@example.com"
-                autoComplete="email"
-              />
+          {(error || sessionError) && (
+            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
+              {error || sessionError}
             </div>
+          )}
 
-            <div>
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <Link
-                  to="/auth/forgot-password"
-                  className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative mt-1.5">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-field w-full pr-10"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
+          {centralHubEnabled ? (
+            <button
+              onClick={handleCentralHubLogin}
+              disabled={centralHubLoading}
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+                  fill="currentColor"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="btn-primary w-full"
-            >
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              </svg>
+              {centralHubLoading ? "Connecting to Central Hub…" : "Login with Central Hub Solution"}
             </button>
-          </form>
-
-          {/* Central Hub SSO */}
-          {centralHubEnabled && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-4 text-gray-500">or continue with</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => loginWithCentralHub(from)}
-                disabled={centralHubLoading}
-                className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50"
-              >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="currentColor"/>
-                </svg>
-                {centralHubLoading ? "Connecting..." : "Sign in with Central Hub"}
-              </button>
-            </>
+          ) : (
+            <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-700">
+              Central Hub sign-in is currently unavailable. Please try again later.
+            </div>
           )}
 
-          {/* Demo Access */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-white px-4 text-gray-500">Quick demo access</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {/* Admin */}
-            <button
-              onClick={() => handleDemoLogin("admin")}
-              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-gray-900">Admin Dashboard</div>
-                <div className="text-xs text-gray-500">Platform management, campaigns, users, analytics</div>
-              </div>
-            </button>
-
-            {/* Business Dashboard */}
-            <button
-              onClick={() => handleDemoLogin("business")}
-              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-gray-900">Business Dashboard</div>
-                <div className="text-xs text-gray-500">Campaigns, contributions, leaderboard, rewards</div>
-              </div>
-            </button>
-
-            {/* Consumer Dashboard */}
-            <button
-              onClick={() => handleDemoLogin("donor")}
-              className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-gray-900">Consumer Dashboard</div>
-                <div className="text-xs text-gray-500">Donate, bookmark campaigns, track impact</div>
-              </div>
-            </button>
-          </div>
-
-          <p className="text-center text-xs text-gray-400">
-            Demo mode uses mock data — no real accounts or payments
+          <p className="text-center text-xs text-gray-500">
+            By continuing you agree to our{" "}
+            <Link to="/terms" className="font-medium text-primary-600 hover:text-primary-500">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link to="/privacy" className="font-medium text-primary-600 hover:text-primary-500">
+              Privacy Policy
+            </Link>
+            .
           </p>
+
+          <div className="border-t border-gray-200 pt-6 text-center">
+            <Link
+              to="/admin/login"
+              className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
+            >
+              Administrator sign in
+            </Link>
+          </div>
         </div>
       </div>
 

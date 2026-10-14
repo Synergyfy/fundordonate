@@ -1,81 +1,94 @@
 // =============================================================================
 // Business — My Campaign Detail
-// Frontend-only sub-page for a claimed campaign:
+// Live implementation for a claimed campaign instance:
 //   - progress + business contribution + [Fund My Campaign] (Stripe / PayPal)
-//   - Admin "Changes Required" → only the requested fields are reopened,
-//     resubmission returns the campaign to Pending Review.
+//   - Admin "Changes Required" feedback and resubmission
 // =============================================================================
 
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, CircleAlert, Clock, Gift, PlayCircle, Sparkles,
-  Target, Wallet,
+  Target, Wallet, AlertCircle, RefreshCw,
 } from "lucide-react";
 import {
-  CAMPAIGN_STATUS_META, BUSINESS_IDENTITY, formatGbp,
-} from "@/data/businessCampaignAccess";
-import {
-  contributeToCampaign,
-  getBusinessTemplate,
-  getCampaignInstance,
-  resubmitCampaign,
-} from "@/data/campaignTemplateStore";
-import {
-  gatewayName,
-  type PaymentGateway,
-} from "@/components/business/PaymentGatewaySelector";
+  useCampaignDetail,
+  useSaveCampaignAnswers,
+  useSubmitCampaign,
+} from "@/services/campaign/hook";
 import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
-import type { PaymentResult } from "@/services/payment.service";
 import { DatePicker } from "@/components/ui/DatePicker";
+import type { PaymentResult } from "@/services/payment";
+
+const fmt = (p: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
 export default function MyCampaignDetailPage() {
   const { campaignId } = useParams();
-  const campaign = getCampaignInstance(campaignId);
-  const template = getBusinessTemplate(campaign?.templateId);
+  const { data: campaign, isLoading, error, refetch } = useCampaignDetail(campaignId);
+  const saveMutation = useSaveCampaignAnswers();
+  const submitMutation = useSubmitCampaign();
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [contributed, setContributed] = useState(campaign?.businessContribution ?? 0);
-  const [reward, setReward] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [resubmitting, setResubmitting] = useState(false);
   const [resubmitted, setResubmitted] = useState(false);
-  const [gateway, setGateway] = useState<PaymentGateway>("stripe");
+  const [selfFundedSuccess, setSelfFundedSuccess] = useState<string | null>(null);
 
-  if (!campaign) {
+  if (isLoading) {
     return (
-      <div className="rounded-xl border bg-white p-10 text-center">
-        <p className="font-semibold text-gray-900">Campaign not found.</p>
-        <Link to="/dashboard/campaign-centre" className="mt-3 inline-block text-sm font-semibold text-primary-700">
-          ← Back to Campaign Centre
-        </Link>
+      <div className="mx-auto max-w-3xl space-y-6 animate-pulse">
+        <div className="h-6 w-32 rounded bg-gray-200" />
+        <div className="h-20 rounded-xl bg-gray-200" />
+        <div className="h-64 rounded-xl bg-gray-200" />
       </div>
     );
   }
 
-  const status = resubmitted && campaign.status === "changes_requested" ? "pending_review" : campaign.status;
-  const meta = CAMPAIGN_STATUS_META[status];
-  const pct = campaign.target > 0 ? Math.min(100, Math.round((campaign.raised / campaign.target) * 100)) : 0;
-  const changesOpen = campaign.status === "changes_requested" && !resubmitted;
-  const allAnswered = campaign.changes.every((c) => (answers[c.fieldId] ?? "").trim().length > 0);
+  if (error || !campaign) {
+    return (
+      <div className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-red-50 p-10 text-center">
+        <AlertCircle className="mx-auto h-10 w-10 text-red-600 mb-2" />
+        <p className="font-semibold text-red-900">Campaign not found or failed to load.</p>
+        <div className="mt-4 flex justify-center gap-3">
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </button>
+          <Link
+            to="/dashboard/campaign-centre"
+            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            ← Back to Campaign Centre
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-  const handlePaymentSuccess = (payment: PaymentResult) => {
-    const amount = template?.selfFunding.amount ?? 100;
-    const rewardName = template?.selfFunding.rewardName ?? "E-Gift Card";
-    if (campaignId) contributeToCampaign(campaignId, amount, rewardName);
-    setContributed((v) => v + amount);
-    setReward(rewardName);
-    setGateway(payment.gateway);
+  const template = campaign.template;
+  const status = resubmitted ? "PENDING_REVIEW" : campaign.status;
+  const pct = campaign.target > 0 ? Math.min(100, Math.round((campaign.raised / campaign.target) * 100)) : 0;
+  const changesOpen = (campaign.status === "CHANGES_REQUESTED" || campaign.status === "changes_requested") && !resubmitted;
+  const allAnswered = campaign.changes.length === 0 || campaign.changes.every((c) => (answers[c.fieldId] ?? "").trim().length > 0);
+
+  const handlePaymentSuccess = async (payment: PaymentResult) => {
+    if (!campaignId) return;
+    const amount = campaign?.template.selfFunding.amount || 10000;
+    await refetch();
+    setSelfFundedSuccess(`${fmt(amount)} contributed successfully via ${payment.gateway}!`);
   };
 
-  const handleResubmit = () => {
-    setResubmitting(true);
-    setTimeout(() => {
-      if (campaignId) resubmitCampaign(campaignId, answers);
-      setResubmitting(false);
-      setResubmitted(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 1000);
+  const handleResubmit = async () => {
+    if (!campaignId) return;
+    const answerEntries = Object.entries(answers).map(([fieldId, value]) => ({ fieldId, value }));
+    if (answerEntries.length > 0) {
+      await saveMutation.mutateAsync({ campaignId, dto: { answers: answerEntries } });
+    }
+    await submitMutation.mutateAsync(campaignId);
+    setResubmitted(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -90,15 +103,20 @@ export default function MyCampaignDetailPage() {
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{campaign.title}</h1>
-            <p className="text-sm text-gray-500">
-              {template?.name} · {BUSINESS_IDENTITY.name}
-            </p>
+            <p className="text-sm text-gray-500">{template.name}</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${meta.color}`}>{meta.label}</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+            status === "ACTIVE" ? "bg-green-100 text-green-700" :
+            status === "PENDING_REVIEW" ? "bg-yellow-100 text-yellow-800" :
+            status === "CHANGES_REQUESTED" ? "bg-orange-100 text-orange-700" :
+            "bg-gray-100 text-gray-600"
+          }`}>
+            {status.replace("_", " ")}
+          </span>
         </div>
       </div>
 
-      {/* Changes required */}
+      {/* Changes required notice */}
       {changesOpen && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-5">
           <p className="flex items-center gap-2 text-sm font-bold text-orange-900">
@@ -109,7 +127,7 @@ export default function MyCampaignDetailPage() {
           </p>
           <div className="mt-4 space-y-3">
             {campaign.changes.map((c) => {
-              const field = template?.fields.find((f) => f.id === c.fieldId);
+              const field = template.fields.find((f) => f.id === c.fieldId);
               return (
                 <div key={c.fieldId} className="rounded-lg border bg-white p-4">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900">
@@ -126,13 +144,13 @@ export default function MyCampaignDetailPage() {
                       value={answers[c.fieldId] ?? ""}
                       onChange={(e) => setAnswers((p) => ({ ...p, [c.fieldId]: e.target.value }))}
                       placeholder="Update your answer…"
-                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                     />
                   ) : field?.inputType === "date" ? (
                     <DatePicker
                       value={answers[c.fieldId] ?? ""}
                       onChange={(e) => setAnswers((p) => ({ ...p, [c.fieldId]: e.target.value }))}
-                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                     />
                   ) : (
                     <input
@@ -140,7 +158,7 @@ export default function MyCampaignDetailPage() {
                       value={answers[c.fieldId] ?? ""}
                       onChange={(e) => setAnswers((p) => ({ ...p, [c.fieldId]: e.target.value }))}
                       placeholder="Update your answer…"
-                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-primary-500"
                     />
                   )}
                 </div>
@@ -149,11 +167,11 @@ export default function MyCampaignDetailPage() {
           </div>
           <button
             onClick={handleResubmit}
-            disabled={!allAnswered || resubmitting}
-            className="mt-4 flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!allAnswered || submitMutation.isPending}
+            className="mt-4 flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
           >
             <PlayCircle className="h-4 w-4" />
-            {resubmitting ? "Resubmitting…" : "Resubmit for Review"}
+            {submitMutation.isPending ? "Resubmitting…" : "Resubmit for Review"}
           </button>
           {!allAnswered && (
             <p className="mt-2 text-xs text-orange-800">Answer every requested field to resubmit.</p>
@@ -167,7 +185,7 @@ export default function MyCampaignDetailPage() {
             <Clock className="h-4 w-4" /> Resubmitted — Pending Review
           </p>
           <p className="mt-1 text-sm text-blue-800">
-            Your updates are with the Admin. You will be notified once a decision is made.
+            Your updates have been sent to the Admin team. You will be notified once reviewed.
           </p>
         </div>
       )}
@@ -176,11 +194,11 @@ export default function MyCampaignDetailPage() {
       <div className="rounded-xl border bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
           <Target className="h-4 w-4 text-primary-600" />
-          <p className="text-sm font-bold text-gray-900">Progress</p>
+          <p className="text-sm font-bold text-gray-900">Funding Progress</p>
         </div>
         <div className="mb-4 flex items-center justify-between text-sm">
-          <span className="font-semibold text-gray-900">{formatGbp(campaign.raised)}</span>
-          <span className="text-gray-500">of {formatGbp(campaign.target)} target</span>
+          <span className="font-semibold text-gray-900">{fmt(campaign.raised)}</span>
+          <span className="text-gray-500">of {fmt(campaign.target)} target</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-gray-200">
           <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
@@ -188,15 +206,15 @@ export default function MyCampaignDetailPage() {
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-gray-50 p-3 text-center">
             <p className="text-[10px] uppercase tracking-wide text-gray-500">Target</p>
-            <p className="text-sm font-bold text-gray-900">{formatGbp(campaign.target)}</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(campaign.target)}</p>
           </div>
           <div className="rounded-lg bg-gray-50 p-3 text-center">
             <p className="text-[10px] uppercase tracking-wide text-gray-500">Raised</p>
-            <p className="text-sm font-bold text-gray-900">{formatGbp(campaign.raised)}</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(campaign.raised)}</p>
           </div>
           <div className="rounded-lg bg-gray-50 p-3 text-center">
-            <p className="text-[10px] uppercase tracking-wide text-gray-500">Business Contribution</p>
-            <p className="text-sm font-bold text-gray-900">{formatGbp(contributed)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-gray-500">Your Self-Funding</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(campaign.businessContribution)}</p>
           </div>
         </div>
       </div>
@@ -207,27 +225,26 @@ export default function MyCampaignDetailPage() {
           <Wallet className="h-4 w-4" /> Fund My Campaign
         </p>
         <p className="mt-1 text-sm text-orange-800">
-          This is Contribution B — it funds your own campaign and is separate from any unlock / eligibility
-          contribution.
+          Fund your own campaign from your business account to kickstart momentum and unlock configured rewards.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          {contributed > (campaign.businessContribution ?? 0) ? (
-            <span className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700">
-              <CheckCircle2 className="h-4 w-4" /> {formatGbp(contributed)} funded via {gatewayName(gateway)}
+          {selfFundedSuccess ? (
+            <span className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700 border border-green-200">
+              <CheckCircle2 className="h-4 w-4" /> {selfFundedSuccess}
             </span>
           ) : (
             <button
               onClick={() => setCheckoutOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"
+              className="flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 shadow-xs"
             >
               <Gift className="h-4 w-4" />
-              Fund {formatGbp(template?.selfFunding.amount ?? 100)}
+              Fund {fmt(template.selfFunding.amount || 10000)}
             </button>
           )}
         </div>
-        {reward && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700">
-            <Sparkles className="h-4 w-4" /> Reward triggered: {reward}
+        {campaign.rewardTriggered && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700 border border-green-200">
+            <Sparkles className="h-4 w-4" /> Reward triggered: {campaign.rewardTriggered}
           </div>
         )}
       </div>
@@ -236,7 +253,7 @@ export default function MyCampaignDetailPage() {
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
         title="Fund My Campaign"
-        amount={template?.selfFunding.amount ?? 100}
+        amount={(template.selfFunding.amount || 10000) / 100}
         campaignId={campaignId}
         onSuccess={handlePaymentSuccess}
       />

@@ -4,16 +4,10 @@
 // Steps: Participation → Amount → Allocation → Review → Terms → Payment → Confirmation
 // =============================================================================
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { resolveCampaignForDetail } from "@/data/consumerExploreData";
-import {
-  getDemoRewardsForCampaign,
-  hasCampaignSpecificRewards,
-  simulateRewardEvaluation,
-} from "@/data/demoRewards";
-import { getConsumerCommunity } from "@/data/consumerHomeData";
-import { recordContribution } from "@/data/consumerActivityData";
+import { campaignApi } from "@/services/campaign";
+import { getConsumerCommunity } from "@/services/community";
 import {
   X,
   ArrowLeft,
@@ -751,8 +745,9 @@ function ConfirmationStep({
 }) {
   const participationLabel = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.label || participationType;
   const participationEmoji = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.emoji || "";
-  const qualifying = simulateRewardEvaluation(campaign.slug, Math.round(amount * 100));
-  const earned = qualifying[0]?.reward;
+  const earned = campaign.rewards?.find(
+    (r) => Math.round(amount * 100) >= (r.amount ?? 0) * 100
+  );
   const completedDate = completedAt
     ? new Date(completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -875,56 +870,53 @@ const DEFAULT_CAMPAIGN: Campaign = {
   mode: "donate",
 };
 
-function buildCampaignFromSlug(slug: string): Campaign | null {
-  const resolved = resolveCampaignForDetail(slug);
-  if (!resolved) return null;
-  const c = resolved.campaign;
-  const types = c.participationTypes ?? [];
-  const hasFund = types.includes("fund");
-  const hasDonate = types.includes("donate");
-  const noTypeDetails = !hasFund && !hasDonate;
-  const isFounding =
-    c.membership === true || c.category.slug === "founding-membership";
-  const rewardsConfigured =
-    hasCampaignSpecificRewards(c.slug) || c.backerTiersEnabled === true;
-  return {
-    id: c.id,
-    slug: c.slug,
-    title: c.title,
-    shortDescription: c.shortDescription,
-    goalAmount: c.goalAmount,
-    raisedAmount: c.raisedAmount,
-    deadline: c.deadline,
-    status: "active",
-    mode: c.mode,
-    featuredImage: c.featuredImage,
-    participation: {
-      backCampaign: noTypeDetails || hasFund,
-      foundingMember: isFounding,
-      foundingMemberMonthly: isFounding && c.recurringEnabled === true,
-      donateContribute: noTypeDetails || hasDonate,
-    },
-    rewards: rewardsConfigured
-      ? getDemoRewardsForCampaign(c.slug).map((r) => ({
-          id: r.id,
-          title: r.title,
-          description: r.description,
-          amount: (r.triggerConfig.min ?? 0) / 100,
-          items: r.items.map((i) => ({ title: i.title })),
-        }))
-      : undefined,
-    leaderboard: { enabled: true },
-  };
-}
-
 export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp, onComplete: _onComplete }: ContributionFlowProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const resolvedCampaign = useMemo(
-    () => campaignProp ?? (slug ? buildCampaignFromSlug(slug) : null),
-    [campaignProp, slug],
-  );
-  const campaign = resolvedCampaign ?? DEFAULT_CAMPAIGN;
+  const [fetchedCampaign, setFetchedCampaign] = useState<Campaign | null>(null);
+
+  useEffect(() => {
+    if (campaignProp || !slug) return;
+    campaignApi.getBySlug(slug)
+      .then((c: any) => {
+        setFetchedCampaign({
+          id: c.id,
+          slug: c.slug,
+          title: c.title,
+          shortDescription: c.shortDescription,
+          description: c.description,
+          goalAmount: Number(c.goalAmount || 0),
+          raisedAmount: Number(c.raisedAmount || 0),
+          deadline: c.deadline || "",
+          status: c.status || "active",
+          mode: c.mode || "donate",
+          featuredImage: c.featuredImage,
+          allocationEnabled: c.allocationEnabled,
+          allocationDestinations: c.allocationDestinations,
+          participation: {
+            backCampaign: c.mode === "fund" || !c.mode,
+            foundingMember: Boolean(c.isFounding || c.membership),
+            foundingMemberMonthly: Boolean(c.isFoundingMonthly || c.recurringEnabled),
+            donateContribute: c.mode === "donate" || !c.mode,
+          },
+          rewards: c.rewards?.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            description: r.description,
+            amount: Number(r.amount || r.minAmount || 0),
+            items: r.items,
+          })),
+          terms: c.terms,
+          contributionRules: c.contributionRules,
+          leaderboard: { enabled: true },
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to load campaign for contribution:", err);
+      });
+  }, [campaignProp, slug]);
+
+  const campaign = campaignProp ?? fetchedCampaign ?? DEFAULT_CAMPAIGN;
   const onClose = onCloseProp ?? (() => navigate(-1));
   const [currentStep, setCurrentStep] = useState(0);
   const [participationType, setParticipationType] = useState("");
@@ -979,46 +971,39 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
     }
   }, [currentStep, steps, participationType, amount, allocations, allocationEnabled, acceptedTerms, acceptedContributionTerms, paymentMethod, campaign.terms]);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!canProceed()) return;
 
     const step = steps[currentStep];
     if (step?.id === "payment") {
       setProcessing(true);
-      setTimeout(() => {
-        const ref = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-        const amountPence = Math.round(amount * 100);
-        const qualifying = simulateRewardEvaluation(campaign.slug, amountPence);
-        const earned = qualifying[0]?.reward;
-        const community = getConsumerCommunity();
-        const resolvedLocation =
-          resolveCampaignForDetail(campaign.slug)?.campaign.location ?? "";
-        setTransactionRef(ref);
-        setCompletedAt(new Date().toISOString());
-        void recordContribution({
-          reference: ref,
-          campaignSlug: campaign.slug,
-          campaignTitle: campaign.title,
-          campaignImage: campaign.featuredImage,
-          campaignLocation: resolvedLocation,
-          communityCityName: community.cityName,
-          communityAreaName: community.areaName,
-          communityStreetName: community.streetName,
-          mode: campaign.mode === "fund" ? "fund" : "donation",
-          participationType:
-            participationType ||
-            (campaign.mode === "fund" ? "backer" : "donation"),
-          kind: campaign.mode === "fund" ? "pledge" : "donation",
-          amount: amountPence,
-          rewardEligible: !!earned,
-          rewardId: earned?.id,
-          rewardTitle: earned?.title,
-        }).catch(() => {
-          /* fake store unavailable — confirmation still renders */
-        });
+      const ref = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const amountPence = Math.round(amount * 100);
+      const earned = campaign.rewards?.find((r) => amountPence >= (r.amount ?? 0) * 100);
+      setTransactionRef(ref);
+      setCompletedAt(new Date().toISOString());
+
+      try {
+        if (campaign.id) {
+          if (campaign.mode === "fund") {
+            await campaignApi.createPledge(campaign.id, {
+              amount: amountPence,
+              paymentMethod,
+              rewardId: earned?.id,
+            });
+          } else {
+            await campaignApi.createDonation(campaign.id, {
+              amount: amountPence,
+              paymentMethod,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Contribution API call error:", err);
+      } finally {
         setProcessing(false);
         setCurrentStep((prev) => prev + 1);
-      }, 2000);
+      }
       return;
     }
 

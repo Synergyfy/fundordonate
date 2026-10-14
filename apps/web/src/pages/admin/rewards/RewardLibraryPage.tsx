@@ -30,10 +30,8 @@ import {
   DIGITAL_TYPE_ORDER, DIGITAL_TYPE_META, AVAILABILITY_META,
   getDigitalAssets, getPhysicalAssets, physicalInStock,
   type DigitalAssetType, type PhysicalAsset,
-} from "@/data/assetStore";
-import {
   getMcomPlatforms, MCOM_GROUP_META,
-} from "@/data/mcomAssetCatalogue";
+} from "@/services/assets";
 
 // ---------------------------------------------------------------------------
 // Types

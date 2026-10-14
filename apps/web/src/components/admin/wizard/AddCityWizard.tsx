@@ -11,17 +11,10 @@ import {
   Building2, Users, Store, Target, CheckCircle, RefreshCw, Plus,
   TrendingUp, AlertCircle,
 } from "lucide-react";
-import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
-import {
-  getCitySetup,
-  setAreaTerminology,
-  setBoundary,
-  setAreaState,
-  setStreetState,
-  addHighStreet,
-  addLocalArea,
-  type LocationOrigin,
-} from "@/data/locationRegistry";
+import { adminApi } from "@/services/admin";
+import { getCommunityRecommendations } from "@/services/recommendations";
+
+export type LocationOrigin = "geographic data" | "manual" | "recommendation";
 
 // ───────────────────── Types ─────────────────────
 
@@ -214,74 +207,49 @@ export function AddCityWizard() {
    * Geographic data only suggests layers — nothing here becomes official
    * unless the admin walked through the wizard and confirmed it.
    */
-  const persistConfirmations = () => {
+  const persistConfirmations = async () => {
     const cityName = (data.cityName || data.selectedCity || "").trim();
     if (!cityName) return;
     const citySlug = cityName.toLowerCase().replace(/\s+/g, "-");
 
-    // City-specific naming (Borough / District / Local Area / ...)
-    setAreaTerminology(citySlug, data.areaTerminology || "Local Area");
+    try {
+      const cityLoc = await adminApi.createLocation({
+        name: cityName,
+        type: "CITY",
+        slug: citySlug,
+        metadata: {
+          areaTerminology: data.areaTerminology || "Local Area",
+          boundaryMode: data.boundaryMode,
+          radiusMiles: data.radiusMiles,
+          makingProgressRules: data.makingProgressRules,
+          activeRules: data.activeRules,
+        },
+      });
 
-    // Operating area (boundary) — confirmed on the review step
-    setBoundary(citySlug, {
-      mode: data.boundaryMode,
-      radiusMiles: data.radiusMiles,
-      confirmed: true,
-    });
-
-    // Local areas — included = confirmed, excluded = rejected.
-    // Empty list means the step was never touched → leave the seeded defaults.
-    for (const area of data.localAreas) {
-      if (area.included) {
-        if (getCitySetup(citySlug).addedAreas.some((a) => a.slug === area.slug)) {
-          setAreaState(citySlug, area.slug, "confirmed");
-        } else if (area.source === "Admin added") {
-          addLocalArea({
-            citySlug,
+      for (const area of data.localAreas) {
+        if (area.included) {
+          const areaLoc = await adminApi.createLocation({
             name: area.name,
-            type: area.type,
-            source: "manual",
-            state: "confirmed",
+            type: "BOROUGH",
+            slug: area.slug,
+            parentId: cityLoc.id,
+            metadata: { type: area.type, source: area.source },
           });
-          setAreaState(citySlug, area.slug, "confirmed");
-        } else {
-          setAreaState(citySlug, area.slug, "confirmed");
+
+          const areaStreets = data.highStreets.filter((hs) => hs.localAreaSlug === area.slug && hs.confirmed);
+          for (const hs of areaStreets) {
+            await adminApi.createLocation({
+              name: hs.name,
+              type: "HIGH_STREET",
+              slug: hs.slug,
+              parentId: areaLoc.id,
+              metadata: { postcodes: hs.postcodes, suggestedBy: hs.suggestedBy },
+            });
+          }
         }
-      } else {
-        setAreaState(citySlug, area.slug, "rejected");
       }
-    }
-
-    // High streets — only reviewed streets get an explicit state; untouched
-    // ones stay "suggested" (geographic data is never official on its own).
-    const originFor = (suggestedBy: string): LocationOrigin =>
-      suggestedBy.startsWith("Community")
-        ? "recommendation"
-        : suggestedBy === "Geographic data"
-        ? "geographic data"
-        : "manual";
-
-    for (const hs of data.highStreets) {
-      const state =
-        hs.status === "REJECTED" ? "rejected" : hs.confirmed ? "confirmed" : "suggested";
-      const inGeography = getHighStreetsForArea(citySlug, hs.localAreaSlug).some(
-        (s) => s.slug === hs.slug
-      );
-      const setup = getCitySetup(citySlug);
-      const alreadyAdded = setup.addedStreets.some((s) => s.slug === hs.slug);
-      if (inGeography || alreadyAdded) {
-        setStreetState(citySlug, hs.slug, state);
-      } else {
-        addHighStreet({
-          citySlug,
-          areaSlug: hs.localAreaSlug,
-          name: hs.name,
-          postcodes: hs.postcodes,
-          source: originFor(hs.suggestedBy),
-          suggestedBy: hs.suggestedBy,
-          state,
-        });
-      }
+    } catch (err) {
+      console.error("Failed to persist city creation via adminApi:", err);
     }
   };
 
@@ -829,38 +797,14 @@ function StepLocalAreas({ data, update }: { data: CitySetupData; update: (u: Par
   // Area terminology options
   const areaTypes = ["Borough", "District", "Local Area", "Council Area", "Other"];
 
-  // Get discovered local areas from highStreetData
+  // Discovered or initial local areas
   const discoveredAreas = useMemo(() => {
-    const areas = getLocalAreasForCity(citySlug);
-    if (areas.length > 0) {
-      return areas.map((area) => ({
-        name: area.name,
-        slug: area.slug,
-        included: true,
-        type: data.areaTerminology || "Borough",
-        status: "NOT_ACTIVATED",
-        source: "Geographic data",
-        highStreets: area.highStreetsList.map((hs) => ({
-          name: hs.name,
-          slug: hs.slug,
-          localAreaSlug: area.slug,
-          confirmed: false,
-          suggested: true,
-          status: "SUGGESTED",
-          suggestedBy: "Geographic data",
-          postcodes: [],
-        })),
-      }));
-    }
-    // Fallback demo data if city not in highStreetData
     return [
-      { name: `${data.areaTerminology || "Local Area"} 1`, slug: "area-1", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 2`, slug: "area-2", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 3`, slug: "area-3", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 4`, slug: "area-4", included: false, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 5`, slug: "area-5", included: false, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 1`, slug: "area-1", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 2`, slug: "area-2", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 3`, slug: "area-3", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
     ];
-  }, [citySlug, data.areaTerminology]);
+  }, [data.areaTerminology]);
 
   // Initialize local areas if empty
   const localAreas = data.localAreas.length > 0 ? data.localAreas : discoveredAreas;
@@ -1214,11 +1158,21 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
   const [newStreet, setNewStreet] = useState({ name: "", localArea: "", postcode: "" });
   const [newPostcode, setNewPostcode] = useState("");
 
-  // Demo recommendations
-  const DEMO_RECOMMENDATIONS: HighStreetRecommendation[] = [
-    { id: "rec-1", name: "Chapel Walk", postcode: "SW1", localArea: "Westminster", city: data.cityName || "London", businessCount: 4, consumerCount: 3, status: "new" },
-    { id: "rec-2", name: "Market Street", postcode: "N1", localArea: "Islington", city: data.cityName || "London", businessCount: 2, consumerCount: 5, status: "new" },
-  ];
+  // Community recommendations
+  const recommendations: HighStreetRecommendation[] = useMemo(() => {
+    return getCommunityRecommendations()
+      .filter((r) => !data.cityName || r.cityName.toLowerCase() === data.cityName.toLowerCase())
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        postcode: r.postcodes?.[0] || "",
+        localArea: r.areaName || "",
+        city: r.cityName || data.cityName || "",
+        businessCount: 1,
+        consumerCount: 1,
+        status: (r.status === "pending" ? "new" : r.status) as any,
+      }));
+  }, [data.cityName]);
 
   // Get all high streets from included local areas
   const allHighStreets = useMemo(() => {
@@ -1226,31 +1180,17 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     const streets: HighStreetSetup[] = [];
 
     for (const area of includedAreas) {
-      const areaData = getHighStreetsForArea(citySlug, area.slug);
-      if (areaData.length > 0) {
-        for (const hs of areaData) {
-          streets.push({
-            name: hs.name,
-            slug: hs.slug,
-            localAreaSlug: area.slug,
-            confirmed: false,
-            suggested: true,
-            status: "SUGGESTED",
-            suggestedBy: "Geographic data",
-            postcodes: [],
-          });
-        }
-      } else if (area.highStreets.length > 0) {
+      if (area.highStreets && area.highStreets.length > 0) {
         streets.push(...area.highStreets.map((hs) => ({
           ...hs,
           status: hs.confirmed ? "CONFIRMED" : "SUGGESTED",
-          suggestedBy: "Geographic data",
-          postcodes: [],
+          suggestedBy: hs.suggestedBy || "Discovered",
+          postcodes: hs.postcodes || [],
         })));
       }
     }
     return streets;
-  }, [citySlug, data.localAreas]);
+  }, [data.localAreas]);
 
   // Initialize high streets if empty
   const highStreets = data.highStreets.length > 0 ? data.highStreets : allHighStreets;
@@ -1307,9 +1247,7 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     setShowAddModal(false);
   };
 
-  // Accepting a community recommendation never creates an official location —
-  // it enters the wizard list as SUGGESTED for the admin to confirm below.
-  const pendingRecs = DEMO_RECOMMENDATIONS.filter((r) => !acceptedRecIds.includes(r.id));
+  const pendingRecs = recommendations.filter((r) => !acceptedRecIds.includes(r.id));
 
   const acceptRecommendation = (rec: HighStreetRecommendation) => {
     const slug = rec.name.toLowerCase().replace(/\s+/g, "-");

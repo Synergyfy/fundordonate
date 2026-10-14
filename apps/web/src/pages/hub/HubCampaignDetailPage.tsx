@@ -7,10 +7,8 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
-import { getDemoCampaignsForHighStreet } from "@/data/highStreetData";
-import { getAdminCampaignBySlug, adminCampaignToHubCampaign } from "@/data/adminCampaigns";
-import { getDemoRewardsForCampaign, simulateRewardEvaluation } from "@/data/demoRewards";
+import { campaignApi } from "@/services/campaign";
+import { seasonApi } from "@/services/season";
 import { PostPaymentRewardCard } from "@/components/campaign/PostPaymentRewardCard";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import type { BreadcrumbItem } from "@/types/uk-hub";
@@ -26,7 +24,7 @@ import { TerminalPaymentInstructions } from "@/components/campaign/TerminalPayme
 import { StripeSandboxForm } from "@/components/campaign/StripeSandboxForm";
 import { PayPalSandboxForm } from "@/components/campaign/PayPalSandboxForm";
 import { ContributionDestination } from "@/components/campaign/ContributionDestination";
-import { MEMBERSHIP_TIERS, type MembershipVariant, type TierLevel, type AccessLevel, ACCESS_LABELS } from "@/data/membershipTiers";
+import { MEMBERSHIP_TIERS, type MembershipVariant, type TierLevel, type AccessLevel, ACCESS_LABELS } from "@/constants/membershipTiers";
 import { useCountdown } from "@/hooks/useCountdown";
 import {
   Calendar, ArrowLeft, X, CheckCircle,
@@ -54,44 +52,33 @@ export default function HubCampaignDetailPage() {
     campaignSlug: string;
   }>();
 
+  const isBusiness = audienceType === "business";
+  const cityName = (citySlug || "").replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  const areaName = (localAreaSlug || "").replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  const streetName = (highStreetSlug || "").replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  const allCampaigns: any[] = [];
+
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],
     queryFn: () => seasonApi.getCurrent(),
     placeholderData: null,
   });
 
-  const cityName = (citySlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-  const areaName = (localAreaSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-  const streetName = (highStreetSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-  const isBusiness = audienceType === "business";
+  const { data: campaignData, isLoading: campaignLoading } = useQuery({
+    queryKey: ["public-campaign-detail", campaignSlug],
+    queryFn: () => campaignApi.getBySlug(campaignSlug!),
+    enabled: !!campaignSlug,
+  });
 
-  const allCampaigns = useMemo(
-    () => getDemoCampaignsForHighStreet(citySlug || "", localAreaSlug || "", highStreetSlug || ""),
-    [citySlug, localAreaSlug, highStreetSlug],
-  );
+  const campaign = useMemo(() => {
+    if (!campaignData) return null;
+    return (campaignData as any).campaign || campaignData;
+  }, [campaignData]);
 
-  const adminCampaign = useMemo(
-    () => getAdminCampaignBySlug(campaignSlug || ""),
-    [campaignSlug],
-  );
-
-  const campaign = useMemo(
-    () => adminCampaign
-      ? adminCampaignToHubCampaign(adminCampaign)
-      : allCampaigns.find(c => {
-          if (c.slug !== campaignSlug) return false;
-          if (audienceType === "business") return c.targetAudience === "business";
-          if (audienceType === "consumer") return c.targetAudience === "consumer";
-          return true;
-        }) ?? null,
-    [adminCampaign, allCampaigns, campaignSlug, audienceType],
-  );
-
-  // Campaign rewards (demo data)
-  const campaignRewards = useMemo(
-    () => campaign ? getDemoRewardsForCampaign(campaign.slug) : [],
-    [campaign],
-  );
+  // Campaign rewards
+  const campaignRewards = useMemo(() => {
+    return campaign?.rewards || [];
+  }, [campaign]);
 
   const campaignListPath = `/uk-hub-activation/${citySlug}/${localAreaSlug}/${highStreetSlug}/${audienceType}`;
 
@@ -135,6 +122,17 @@ export default function HubCampaignDetailPage() {
     { label: areaName, slug: localAreaSlug || "", fullPath: `${citySlug}/${localAreaSlug}`, type: "BOROUGH" },
     { label: streetName, slug: highStreetSlug || "", fullPath: `${citySlug}/${localAreaSlug}/${highStreetSlug}`, type: "HIGH_STREET" },
   ];
+
+  if (campaignLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading campaign details...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!campaign) {
     return (
@@ -180,16 +178,22 @@ export default function HubCampaignDetailPage() {
   // Evaluate rewards when payment completes
   useEffect(() => {
     if (backerStep === "complete" && campaign && backerAmount > 0) {
-      const matches = simulateRewardEvaluation(campaign.slug, backerAmount * 100);
-      setEarnedRewards(matches.map(m => ({
-        entitlementId: `ent-${Date.now()}-${m.reward.id}`,
-        rewardTitle: m.reward.title,
-        rewardDescription: m.reward.description,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        items: m.reward.items,
-      })));
+      const qualifying = (campaignRewards as any[]).filter((r: any) => {
+        const minPence = r.minAmount || r.triggerConfig?.min || 0;
+        return (backerAmount * 100) >= minPence;
+      });
+      const highest = qualifying[qualifying.length - 1];
+      if (highest) {
+        setEarnedRewards([{
+          entitlementId: `ent-${Date.now()}-${highest.id}`,
+          rewardTitle: highest.title,
+          rewardDescription: highest.description,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          items: highest.items || [{ title: highest.title, physicalType: "digital" }],
+        }]);
+      }
     }
-  }, [backerStep, campaign, backerAmount]);
+  }, [backerStep, campaign, backerAmount, campaignRewards]);
 
   const resetModal = () => {
     setShowJoinModal(false);
@@ -281,7 +285,7 @@ export default function HubCampaignDetailPage() {
           <div className="lg:col-span-2">
             <CampaignImageGallery
               featuredImage={campaign.featuredImage || undefined}
-              images={campaign.media?.map((m, i) => ({ id: m.id, url: m.url, alt: m.alt || "", order: i })) || []}
+              images={campaign.media?.map((m: any, i: number) => ({ id: m.id, url: m.url, alt: m.alt || "", order: i })) || []}
               title={campaign.title}
             />
           </div>

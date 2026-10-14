@@ -6,8 +6,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/auth.store";
-import { foundingApi } from "@/services/founding.service";
-import { backerApi } from "@/services/backer.service";
+import { foundingApi } from "@/services/founding";
+import { backerApi } from "@/services/backer";
 import { ContributorStatus } from "@/components/profile/ContributorStatus";
 import { VCardRecognitionDisplay } from "@/components/terminal/VCardRecognitionDisplay";
 import { LifetimeStatsDisplay } from "@/components/profile/LifetimeStatsDisplay";

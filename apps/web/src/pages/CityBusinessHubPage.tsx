@@ -6,16 +6,9 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
-import {
-  getChildLocations, DEMO_HUB_ACTIVITY, ALL_LOCATIONS,
-  resolveSeedLocation, buildSyntheticLocation,
-} from "@/data/ukHubData";
-import {
-  getHubLocationBySlug, getDemoCampaignsForLocation,
-} from "@/data/hubActivation";
-import { getCityStats } from "@/data/highStreetData";
-import type { HubLocation, HubActivity, BreadcrumbItem } from "@/types/uk-hub";
+import { seasonApi } from "@/services/season";
+import { locationService } from "@/services/location";
+import type { BreadcrumbItem } from "@/types/uk-hub";
 import { LOCATION_TYPE_META } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import { Leaderboard } from "@/components/campaign/Leaderboard";
@@ -25,22 +18,6 @@ import {
   Target, TrendingUp, ChevronDown, ChevronUp,
   Trophy, Gift, Zap, Handshake, Heart,
 } from "lucide-react";
-
-const NOW = new Date().toISOString();
-
-function mapActivityToHubActivity(activity: string[], locId: string): HubActivity[] {
-  return activity.map((text, i) => ({
-    id: `ha-${locId}-map-${i}`,
-    locationId: locId,
-    activityType: "MILESTONE" as const,
-    title: text,
-    content: null,
-    publicationStatus: "PUBLISHED" as const,
-    publishedAt: NOW,
-    visibilityScope: "LOCATION" as const,
-    createdAt: NOW,
-  }));
-}
 
 const fmtDate = (d: string) => {
   const date = new Date(d);
@@ -68,9 +45,25 @@ export default function CityBusinessHubPage() {
     placeholderData: null,
   });
 
-  const seed = resolveSeedLocation(slug, slug);
-  const mapLoc = getHubLocationBySlug(slug) ?? (seed ? getHubLocationBySlug(seed.slug) : undefined);
-  const location: HubLocation | null = seed ?? (mapLoc ? buildSyntheticLocation(mapLoc) : null);
+  const { data: hierarchy, isLoading } = useQuery({
+    queryKey: ["city-hierarchy", slug],
+    queryFn: () => locationService.getCityWithHierarchy(slug),
+    enabled: !!slug,
+  });
+
+  const location = (hierarchy as any)?.city || hierarchy || null;
+  const campaigns: any[] = [];
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading city business hub...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!location) {
     return (
@@ -87,17 +80,8 @@ export default function CityBusinessHubPage() {
   }
 
   const ancestors: BreadcrumbItem[] = [];
-  let current: HubLocation | null = location;
-  while (current?.parentId) {
-    const parent = ALL_LOCATIONS.find(l => l.id === current!.parentId);
-    if (parent) {
-      ancestors.unshift({ label: parent.name, slug: parent.slug, fullPath: parent.fullPath || parent.slug, type: parent.type });
-      current = parent;
-    } else break;
-  }
+  const children = hierarchy?.localAreas || [];
 
-  const children = getChildLocations(location.id);
-  
   const firstChild = children[0];
   const childType = firstChild?.type ?? "LOCAL_AREA";
   const metaKey = childType as keyof typeof LOCATION_TYPE_META;
@@ -105,18 +89,21 @@ export default function CityBusinessHubPage() {
   const localAreaLabel = childMeta.plural;
   const localAreaLabelSingular = childMeta.label;
 
-  const seededActivity = DEMO_HUB_ACTIVITY.filter(a => a.locationId === location.id);
-  const activity = seededActivity.length > 0
-    ? seededActivity
-    : mapLoc ? mapActivityToHubActivity(mapLoc.activity, location.id) : [];
+  const activity = (location.activity || []).map((text: string, i: number) => ({
+    id: `ha-${location.id}-${i}`,
+    locationId: location.id,
+    activityType: "MILESTONE" as const,
+    title: text,
+    content: null,
+    publicationStatus: "PUBLISHED" as const,
+    publishedAt: new Date().toISOString(),
+    visibilityScope: "LOCATION" as const,
+    createdAt: new Date().toISOString(),
+  }));
 
-  const campaigns = mapLoc ? getDemoCampaignsForLocation(mapLoc) : [];
   const activationPct = location.publicStatus === "ACTIVE" ? 100 : location.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
-
-  // Use unified high street data for stable counters
-  const cityStats = getCityStats(slug);
-  const totalBusinesses = cityStats?.totalBusinesses ?? (location.foundingBusinessAllocated * 10);
-  const totalHighStreets = cityStats?.totalHighStreets ?? 0;
+  const totalBusinesses = location.businessesCount || children.reduce((s: number, a: any) => s + (a.businessesCount || 10), 0) || 50;
+  const totalHighStreets = children.reduce((s: number, a: any) => s + (a.highStreetsList?.length || 0), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -361,7 +348,7 @@ export default function CityBusinessHubPage() {
 
         {children.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-            {children.map(child => {
+            {children.map((child: any) => {
               const childActivationPct = child.publicStatus === "ACTIVE" ? 100 : child.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
               const childBusinesses = child.foundingBusinessAllocated * 10;
               const childHighStreets = Math.floor(childActivationPct / 20);

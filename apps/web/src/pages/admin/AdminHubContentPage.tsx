@@ -4,51 +4,59 @@
 // =============================================================================
 
 import { useState } from "react";
-import { Megaphone, Star, Image, Calendar } from "lucide-react";
-import { NATIONAL_HUB, getFeaturedCities, DEMO_HUB_EVENTS, ALL_LOCATIONS } from "@/data/ukHubData";
-import { FileUpload } from "@/components/ui/FileUpload";
+import { Megaphone, Star, Calendar, Save, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/services/admin";
 
-interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-  published: boolean;
-  date: string;
-}
-
-const DEMO_ANNOUNCEMENTS: Announcement[] = [
-  { id: "a1", title: "UK Hub Activation Reaches 15 Cities", content: "The programme now spans 15 cities with 3 active.", published: true, date: "2026-09-01" },
-  { id: "a2", title: "New Founding Member Benefits Announced", content: "Business members now receive priority product access.", published: true, date: "2026-08-28" },
-  { id: "a3", title: "Manchester Launch Event Recap", content: "Over 200 attendees at the Manchester launch.", published: false, date: "2026-08-25" },
-];
-
-type Tab = "hero" | "announcements" | "featured" | "events";
+type Tab = "hero" | "announcements" | "featured";
 
 export function AdminHubContentPage() {
   const [activeTab, setActiveTab] = useState<Tab>("hero");
-  const [announcements] = useState(DEMO_ANNOUNCEMENTS);
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: () => adminApi.getSettings(),
+  });
+
+  const { data: citiesData, isLoading: loadingCities } = useQuery({
+    queryKey: ["admin-cities-list"],
+    queryFn: () => adminApi.getLocations({ type: "CITY", limit: 20 }),
+  });
+
+  const cities = citiesData?.items || [];
 
   // Hero form state
-  const [heroHeadline, setHeroHeadline] = useState(NATIONAL_HUB.heroHeadline || "");
-  const [heroSupporting, setHeroSupporting] = useState(NATIONAL_HUB.heroSupportingText || "");
-  const [heroImage, setHeroImage] = useState(NATIONAL_HUB.primaryImage || "");
+  const [heroHeadline, setHeroHeadline] = useState("UK High Street Funding & Activation");
+  const [heroSupporting, setHeroSupporting] = useState("Empowering businesses, consumers and communities across the UK.");
+  const [saving, setSaving] = useState(false);
 
-  const featuredCities = getFeaturedCities();
+  const handleSaveHero = async () => {
+    setSaving(true);
+    try {
+      await adminApi.updateSettings({
+        heroHeadline,
+        heroSupporting,
+      });
+      alert("Hub content updated successfully.");
+    } catch (e: any) {
+      alert(e.message || "Failed to update settings");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">National Hub Content</h1>
-        <p className="text-sm text-gray-500">Manage the national hub hero, announcements, featured cities, and events.</p>
+        <p className="text-sm text-gray-500">Manage the national hub hero, announcements, and featured cities.</p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg border bg-gray-100 p-1">
         {([
           ["hero", "Hero Content"],
-          ["announcements", "Announcements"],
-          ["featured", "Featured Cities"],
-          ["events", "Events"],
+          ["featured", "Cities & Coverage"],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -62,162 +70,52 @@ export function AdminHubContentPage() {
         ))}
       </div>
 
-      {/* Hero Content */}
       {activeTab === "hero" && (
-        <div className="rounded-xl border bg-white p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Image className="h-5 w-5 text-primary-500" />
-            <h2 className="text-lg font-bold text-gray-900">Hero Section</h2>
+        <div className="rounded-xl border bg-white p-6 space-y-4 shadow-sm">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Headline</label>
+            <input
+              type="text"
+              value={heroHeadline}
+              onChange={(e) => setHeroHeadline(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            />
           </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Headline</label>
-              <input
-                type="text"
-                value={heroHeadline}
-                onChange={e => setHeroHeadline(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Supporting Text</label>
-              <textarea
-                rows={2}
-                value={heroSupporting}
-                onChange={e => setHeroSupporting(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
-              />
-            </div>
-            <div>
-              <FileUpload
-                value={heroImage}
-                onChange={setHeroImage}
-                label="Background Image"
-                accept="image/*"
-                placeholder="https://..."
-              />
-            </div>
-            <button className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-              Save Hero Content
-            </button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Supporting Text</label>
+            <textarea
+              rows={3}
+              value={heroSupporting}
+              onChange={(e) => setHeroSupporting(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            />
           </div>
+          <button
+            onClick={handleSaveHero}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Hero Content
+          </button>
         </div>
       )}
 
-      {/* Announcements */}
-      {activeTab === "announcements" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Megaphone className="h-5 w-5 text-primary-500" />
-              <h2 className="text-lg font-bold text-gray-900">Announcements</h2>
-            </div>
-            <button className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-              Add Announcement
-            </button>
-          </div>
-          <div className="space-y-3">
-            {announcements.map(a => (
-              <div key={a.id} className="rounded-xl border bg-white p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{a.title}</h3>
-                    <p className="mt-1 text-sm text-gray-600">{a.content}</p>
-                    <span className="mt-2 inline-block text-xs text-gray-400">{a.date}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${a.published ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                      {a.published ? "Published" : "Draft"}
-                    </span>
-                    <button className="text-xs text-primary-600 hover:text-primary-700">Edit</button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Featured Cities */}
       {activeTab === "featured" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-primary-500" />
-            <h2 className="text-lg font-bold text-gray-900">Featured Cities</h2>
-          </div>
-          <p className="text-sm text-gray-500">Featured cities are shown on the national hub page. Reorder by changing priority.</p>
-          <div className="space-y-3">
-            {featuredCities.map((city, i) => {
-              // Compute activation progress from ALL_LOCATIONS seed data
-              const seedCity = ALL_LOCATIONS.find((l) => l.id === city.id);
-              const seedData = seedCity as unknown as Record<string, unknown> | undefined;
-              const activationProgress = (seedData?.activationProgress as number) || 0;
-              const region = (seedData?.region as string) || "";
-
-              return (
-                <div key={city.id} className="flex items-center gap-4 rounded-xl border bg-white p-4">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-gray-900">{city.name}</h3>
-                    <p className="text-xs text-gray-500">{activationProgress}% activation · {region}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      defaultValue={city.featuredPriority || i}
-                      className="w-16 rounded-lg border px-2 py-1 text-center text-sm"
-                    />
-                    <button className="rounded-lg border px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50">
-                      Update
-                    </button>
-                  </div>
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <h3 className="font-semibold text-gray-900 mb-4">Cities in Hub Activation</h3>
+          {loadingCities ? (
+            <div className="p-4 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-600" /></div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {cities.map((city) => (
+                <div key={city.id} className="p-3 rounded-lg border bg-gray-50">
+                  <div className="font-semibold text-gray-900">{city.name}</div>
+                  <div className="text-xs text-gray-500">Status: {city.activationStatus || "DRAFT"}</div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Events */}
-      {activeTab === "events" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary-500" />
-              <h2 className="text-lg font-bold text-gray-900">Hub Events</h2>
+              ))}
             </div>
-            <a href="/admin/events" className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-              Manage Events →
-            </a>
-          </div>
-          <p className="text-sm text-gray-500">National hub events and launch events. Manage all events from the Events page.</p>
-          <div className="space-y-3">
-            {DEMO_HUB_EVENTS.map((e) => {
-              const isPast = e.eventDate ? new Date(e.eventDate) < new Date() : false;
-              return (
-                <div key={e.id} className="rounded-xl border bg-white p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${e.status === "PUBLISHED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                          {e.status}
-                        </span>
-                        {isPast && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">Past</span>}
-                      </div>
-                      <h3 className="mt-1 font-semibold text-gray-900">{e.title}</h3>
-                      {e.description && <p className="mt-1 text-sm text-gray-500 line-clamp-2">{e.description}</p>}
-                      <span className="mt-2 inline-block text-xs text-gray-400">
-                        {e.eventDate ? new Date(e.eventDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          )}
         </div>
       )}
     </div>

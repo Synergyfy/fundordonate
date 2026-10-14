@@ -5,11 +5,43 @@
 // =============================================================================
 
 import {
-  CheckCircle2, Gift as GiftIcon, KeyRound, Lock, PlayCircle, ShieldCheck, Unlock, Wallet,
+  CheckCircle2,
+  Gift as GiftIcon,
+  KeyRound,
+  Lock,
+  PlayCircle,
+  ShieldCheck,
+  Unlock,
+  Wallet,
 } from "lucide-react";
-import { formatGbp, requirementProgress, type BusinessTemplate } from "@/data/businessCampaignAccess";
+import type { BusinessTemplateView } from "@/services/campaign/type";
 
-function RequirementRow({ label, hint, met }: { label: string; hint: string; met: boolean }) {
+const formatGbp = (n: number) =>
+  new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  }).format(n > 1000 ? n / 100 : n);
+
+const requirementProgress = (template: { requirements?: { met: boolean }[] }) => {
+  const reqs = template.requirements || [];
+  const met = reqs.filter((r) => r.met).length;
+  return {
+    met,
+    total: reqs.length,
+    complete: reqs.length === 0 || met === reqs.length,
+  };
+};
+
+function RequirementRow({
+  label,
+  hint,
+  met,
+}: {
+  label: string;
+  hint: string;
+  met: boolean;
+}) {
   return (
     <li className="flex items-start gap-2.5 py-1.5">
       {met ? (
@@ -18,7 +50,9 @@ function RequirementRow({ label, hint, met }: { label: string; hint: string; met
         <div className="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-gray-300" />
       )}
       <div className="min-w-0">
-        <p className={`text-sm font-medium ${met ? "text-gray-900" : "text-gray-700"}`}>{label}</p>
+        <p className={`text-sm font-medium ${met ? "text-gray-900" : "text-gray-700"}`}>
+          {label}
+        </p>
         <p className="text-xs text-gray-500">{hint}</p>
       </div>
     </li>
@@ -26,7 +60,7 @@ function RequirementRow({ label, hint, met }: { label: string; hint: string; met
 }
 
 export interface BusinessTemplateCardProps {
-  t: BusinessTemplate;
+  t: BusinessTemplateView | any;
   /** Admin preview: identical card, actions disabled. */
   preview?: boolean;
   claiming?: boolean;
@@ -46,6 +80,9 @@ export function BusinessTemplateCard({
   const { met, total, complete } = requirementProgress(t);
   const isClaiming = claiming;
 
+  const accessLabel = t.accessType || "Open";
+  const hasContributionReq = t.contributionRequirement?.required;
+
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -59,12 +96,17 @@ export function BusinessTemplateCard({
             )}
           </div>
           <p className="mt-0.5 text-xs text-gray-500">
-            {t.season} · {t.accessType} access · {t.approval === "admin_review" ? "Admin approval required" : "Automatic approval"}
+            {t.season} · {accessLabel} access ·{" "}
+            {t.approval === "admin_review"
+              ? "Admin approval required"
+              : "Automatic approval"}
           </p>
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            complete ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            complete
+              ? "bg-green-100 text-green-700"
+              : "bg-amber-100 text-amber-700"
           }`}
         >
           {complete ? "AVAILABLE" : "LOCKED"}
@@ -78,27 +120,35 @@ export function BusinessTemplateCard({
         Permission to use · Admin owns this master template
       </p>
 
-      <ul className="mb-4 divide-y divide-gray-100">
-        {t.requirements.map((r) => (
-          <RequirementRow key={r.id} label={r.label} hint={r.hint} met={r.met} />
-        ))}
-      </ul>
+      {t.requirements && t.requirements.length > 0 && (
+        <ul className="mb-4 divide-y divide-gray-100">
+          {t.requirements.map((r: any) => (
+            <RequirementRow key={r.id} label={r.label} hint={r.hint} met={r.met} />
+          ))}
+        </ul>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-4 text-xs text-gray-600">
-        <span className="flex items-center gap-1">
-          <GiftIcon className="h-3.5 w-3.5 text-primary-600" />
-          {t.rewards.length} rewards {t.mcomAssets.length > 0 && `· ${t.mcomAssets.length} internal assets`}
-        </span>
-        {t.contributionRequirement.required && (
+        {t.rewards && (
+          <span className="flex items-center gap-1">
+            <GiftIcon className="h-3.5 w-3.5 text-primary-600" />
+            {t.rewards.length} rewards{" "}
+            {t.mcomAssets && t.mcomAssets.length > 0 &&
+              `· ${t.mcomAssets.length} internal assets`}
+          </span>
+        )}
+        {hasContributionReq && (
           <span className="flex items-center gap-1">
             <Wallet className="h-3.5 w-3.5 text-orange-500" />
             Required contribution {formatGbp(t.contributionRequirement.amount)}
           </span>
         )}
-        <span className="flex items-center gap-1">
-          <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
-          {met}/{total} requirements met
-        </span>
+        {t.requirements && t.requirements.length > 0 && (
+          <span className="flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
+            {met}/{total} requirements met
+          </span>
+        )}
       </div>
 
       {complete ? (

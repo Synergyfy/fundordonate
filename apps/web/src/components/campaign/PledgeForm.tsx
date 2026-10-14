@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { PaymentMethodSelector, type PaymentMethodType } from "./PaymentMethodSelector";
 import { ContributionDestination } from "./ContributionDestination";
 

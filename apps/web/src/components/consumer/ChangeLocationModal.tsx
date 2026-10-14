@@ -6,8 +6,8 @@ import {
   getStreetOptions,
   type ExploreScope,
   type ScopeOption,
-} from "@/data/consumerExploreData";
-import type { ConsumerCommunity } from "@/data/consumerHomeData";
+} from "@/services/explore";
+import type { ConsumerCommunity } from "@/services/community";
 
 export interface LocationApplyPayload {
   scope: ExploreScope;

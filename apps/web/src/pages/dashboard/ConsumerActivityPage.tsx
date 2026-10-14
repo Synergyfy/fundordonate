@@ -9,12 +9,35 @@ import {
   Target,
   Trophy,
 } from "lucide-react";
-import {
-  computeImpact,
-  listContributions,
-  type ConsumerContribution,
-} from "@/data/consumerActivityData";
-import { resolveCampaignForDetail } from "@/data/consumerExploreData";
+import { userDashboardApi } from "@/services/user-dashboard";
+
+export interface ConsumerContribution {
+  id: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+  campaignId: string;
+  campaignSlug: string;
+  campaignTitle: string;
+  campaignLocation: string;
+  campaignImage?: string;
+  mode: string;
+  paymentMethod: string;
+  reference?: string;
+}
+
+function computeImpact(items: ConsumerContribution[]) {
+  const campaignsSupported = new Set(items.map((i) => i.campaignSlug)).size;
+  const totalContributions = items.reduce((sum, i) => sum + i.amount, 0);
+  const communitiesSupported = new Set(items.map((i) => i.campaignLocation).filter(Boolean)).size || (items.length > 0 ? 1 : 0);
+  const highStreetsSupported = new Set(items.map((i) => i.campaignLocation).filter(Boolean)).size || (items.length > 0 ? 1 : 0);
+  return {
+    campaignsSupported,
+    totalContributions,
+    communitiesSupported,
+    highStreetsSupported,
+  };
+}
 
 type TabId = "contributions" | "campaigns" | "impact";
 
@@ -117,19 +140,16 @@ function buildCampaignGroups(items: ConsumerContribution[]): {
       existing.latestStatus = c.status;
       continue;
     }
-    const resolved = resolveCampaignForDetail(c.campaignSlug);
-    const deadline = resolved?.campaign.deadline;
     map.set(c.campaignSlug, {
       slug: c.campaignSlug,
-      title: resolved?.campaign.title ?? c.campaignTitle,
-      location: resolved?.campaign.location ?? c.campaignLocation,
-      image: resolved?.campaign.featuredImage ?? c.campaignImage,
+      title: c.campaignTitle,
+      location: c.campaignLocation,
+      image: c.campaignImage,
       contributed: c.amount,
       latestStatus: c.status,
-      goal: resolved?.campaign.goalAmount ?? 0,
-      raised: resolved?.campaign.raisedAmount ?? 0,
-      deadline,
-      ended: !!deadline && new Date(deadline).getTime() <= Date.now(),
+      goal: 100000,
+      raised: c.amount,
+      ended: false,
     });
   }
   const all = [...map.values()];
@@ -340,12 +360,26 @@ export function ConsumerActivityPage() {
 
   useEffect(() => {
     let cancelled = false;
-    listContributions()
-      .then((list) => {
-        if (!cancelled) {
-          setItems(list);
-          setLoading(false);
-        }
+    userDashboardApi.getDonations()
+      .then((res: any) => {
+        if (cancelled) return;
+        const raw = res?.items || (Array.isArray(res) ? res : []);
+        const list = raw.map((d: any) => ({
+          id: d.id,
+          reference: d.id?.slice(0, 8)?.toUpperCase(),
+          amount: d.amount || 0,
+          status: (d.status || "completed").toLowerCase(),
+          createdAt: d.createdAt || new Date().toISOString(),
+          campaignId: d.campaign?.id || d.campaignId || "",
+          campaignSlug: d.campaign?.id || d.campaignId || "",
+          campaignTitle: d.campaign?.title || "Community Campaign",
+          campaignLocation: d.business?.city || "Local High Street",
+          campaignImage: d.campaign?.imageUrl,
+          mode: "donation",
+          paymentMethod: d.paymentMethod || "card",
+        }));
+        setItems(list);
+        setLoading(false);
       })
       .catch(() => {
         if (!cancelled) {

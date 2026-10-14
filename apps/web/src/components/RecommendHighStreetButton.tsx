@@ -5,11 +5,11 @@
 // =============================================================================
 
 import { useState, type FormEvent } from "react";
-import { MapPin, X, CheckCircle2, Loader2, Send } from "lucide-react";
+import { MapPin, CheckCircle2, X, Loader2, Send } from "lucide-react";
 import {
   submitLocationRecommendation,
   type RecommendationAudience,
-} from "@/data/locationRecommendations";
+} from "@/services/recommendations";
 
 interface Props {
   role: RecommendationAudience;

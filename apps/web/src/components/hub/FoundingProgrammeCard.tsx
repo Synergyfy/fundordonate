@@ -6,7 +6,7 @@
 import { Link } from "react-router-dom";
 import type { FoundingProgramme } from "@/types/uk-hub";
 import { FOUNDING_STATUS_META } from "@/types/uk-hub";
-import { getMetalStartingPrices, getProgrammeWindow } from "@/data/ukHubData";
+import { getMetalStartingPrices, getProgrammeWindow } from "@/utils/foundingProgramme";
 
 export const FOUNDING_BENEFIT_LABELS: Record<string, string> = {
   early_access: "Early Access",

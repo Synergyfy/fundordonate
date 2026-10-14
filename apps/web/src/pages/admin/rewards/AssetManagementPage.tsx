@@ -10,14 +10,12 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import {
   getMcomPlatforms, setMcomPlatformConnected, getMcomPlatformAssets, updateMcomPlatform,
   MCOM_GROUP_META, type McomPlatform, type McomPlatformGroup,
-} from "@/data/mcomAssetCatalogue";
-import {
   DIGITAL_TYPE_ORDER, DIGITAL_TYPE_META, AVAILABILITY_META,
   getDigitalAssets, saveDigitalAsset, setDigitalAssetStatus, deleteDigitalAsset, duplicateDigitalAsset,
   getPhysicalAssets, savePhysicalAsset, setPhysicalAssetStatus, deletePhysicalAsset, duplicatePhysicalAsset,
   physicalInStock,
   type DigitalAsset, type DigitalAssetType, type PhysicalAsset, type AssetStatus,
-} from "@/data/assetStore";
+} from "@/services/assets";
 
 type AssetTab = "digital" | "physical" | "mcom" | "external";
 
@@ -549,8 +547,9 @@ function PhysicalAssetsTab({ assets, stats, search, onSearchChange, onEdit, onDu
             <tbody className="divide-y divide-gray-50">
               {filtered.map((asset) => {
                 const inStock = physicalInStock(asset);
-                const pct = asset.quantityMaxIssued > 0
-                  ? Math.round((asset.quantityAvailable / asset.quantityMaxIssued) * 100)
+                const maxIssued = asset.quantityMaxIssued ?? 0;
+                const pct = maxIssued > 0
+                  ? Math.round((asset.quantityAvailable / maxIssued) * 100)
                   : 0;
                 return (
                   <tr key={asset.id} className="hover:bg-gray-50">
@@ -618,7 +617,7 @@ function InternalAssetsTab({ platforms, group, onGroupChange, onToggleConnect }:
   onToggleConnect: (id: string, connected: boolean) => void;
 }) {
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const meta = MCOM_GROUP_META[group];
+  const meta = (MCOM_GROUP_META as Record<string, any>)[group];
   const viewing = viewingId ? platforms.find((p) => p.id === viewingId) : undefined;
 
   const connectedCount = platforms.filter((p) => p.connected).length;
@@ -640,7 +639,7 @@ function InternalAssetsTab({ platforms, group, onGroupChange, onToggleConnect }:
       {/* MCOM | 247GBS sub-tabs */}
       <div className="mb-4 flex gap-2 rounded-xl bg-gray-100 p-1.5">
         {(Object.keys(MCOM_GROUP_META) as McomPlatformGroup[]).map((g) => {
-          const gMeta = MCOM_GROUP_META[g];
+          const gMeta = (MCOM_GROUP_META as Record<string, any>)[g];
           const count = getMcomPlatforms(g).length;
           return (
             <button
@@ -775,7 +774,7 @@ function InternalAssetPanel({ platform, group, onBack, onToggleConnect }: {
   platform: McomPlatform; group: McomPlatformGroup;
   onBack: () => void; onToggleConnect: (id: string, connected: boolean) => void;
 }) {
-  const meta = MCOM_GROUP_META[group];
+  const meta = (MCOM_GROUP_META as Record<string, any>)[group];
   const [description, setDescription] = useState(platform.description);
   const [status, setStatus] = useState<"active" | "inactive">(platform.status);
   const [saved, setSaved] = useState(false);
@@ -1053,9 +1052,10 @@ const emptyDigital = (): DigitalAsset => ({
 
 const emptyPhysical = (): PhysicalAsset => ({
   id: "", name: "", description: "", imageUrl: "",
-  quantityAvailable: 0, quantityMaxIssued: 0,
-  fulfilment: "", deliveryMethod: "both", claimInstructions: "",
-  startDate: "", endDate: "", expiryDays: null, status: "draft",
+  quantityAvailable: 0, quantityTotal: 0, quantityMaxIssued: 0,
+  fulfilment: "", deliveryMethod: "both", collectionAddress: "", claimInstructions: "",
+  startDate: "", endDate: "", expiryDays: undefined, status: "draft",
+  createdAt: new Date().toISOString(),
 });
 
 function AssetModal({ assetType, asset, onClose, onSave }: {
@@ -1284,7 +1284,7 @@ function AssetModal({ assetType, asset, onClose, onSave }: {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Expiry (days after claim)</label>
-                  <input type="number" min="0" className={inputClass} value={physicalForm.expiryDays ?? ""} onChange={(e) => setPhysicalForm({ ...physicalForm, expiryDays: e.target.value === "" ? null : Number(e.target.value) })} placeholder="None" />
+                  <input type="number" min="0" className={inputClass} value={physicalForm.expiryDays ?? ""} onChange={(e) => setPhysicalForm({ ...physicalForm, expiryDays: e.target.value === "" ? undefined : Number(e.target.value) })} placeholder="None" />
                 </div>
                 <div>
                   <label className={labelClass}>Status</label>

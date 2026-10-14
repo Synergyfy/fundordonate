@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Crown, Info, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { MembershipLevel, MembershipStatus, MembershipTier } from "@fundordonate/types";
-import {
-  getMembership,
-  type ConsumerMembership,
-} from "@/data/consumerYouData";
+import { userDashboardApi } from "@/services/user-dashboard";
+
+export interface ConsumerMembership {
+  id: string;
+  tier: MembershipTier;
+  level: MembershipLevel;
+  status: MembershipStatus;
+  startDate: string;
+  endDate: string;
+  autoRenew: boolean;
+}
 
 const TIER_LABELS: Record<MembershipTier, string> = {
   bronze: "Bronze",
@@ -63,9 +70,22 @@ export function ConsumerMembershipPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getMembership()
-      .then((m) => {
-        if (!cancelled) setMembership(m);
+    userDashboardApi.getProfile()
+      .then((profile: any) => {
+        if (cancelled) return;
+        const rawTier = (profile.membershipTier || "bronze").toLowerCase();
+        const tier: MembershipTier = ["bronze", "silver", "gold", "platinum"].includes(rawTier)
+          ? (rawTier as MembershipTier)
+          : "bronze";
+        setMembership({
+          id: profile.id,
+          tier,
+          level: "standard",
+          status: "active",
+          startDate: profile.createdAt || new Date(new Date().getFullYear(), 0, 1).toISOString(),
+          endDate: new Date(new Date().getFullYear(), 11, 31).toISOString(),
+          autoRenew: true,
+        });
       })
       .catch(() => {
         /* shown as no-membership state */

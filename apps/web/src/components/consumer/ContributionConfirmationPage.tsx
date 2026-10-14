@@ -16,10 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  listContributions,
-  type ConsumerContribution,
-} from "@/data/consumerActivityData";
+import { userDashboardApi } from "@/services/user-dashboard";
 
 // ── Types ──
 
@@ -94,15 +91,37 @@ export function ContributionConfirmationPage({
 }: ContributionConfirmationPageProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [fallback, setFallback] = useState<ConsumerContribution | null>(null);
+  const [fallback, setFallback] = useState<{
+    reference: string;
+    campaignSlug: string;
+    campaignTitle: string;
+    amount: number;
+    participationType: string;
+    rewardTitle?: string;
+    status?: string;
+    createdAt?: string;
+    rewardEligible?: boolean;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("ref") || transactionRefProp) return;
     let cancelled = false;
-    listContributions()
-      .then((list) => {
-        if (!cancelled) setFallback(list[0] ?? null);
+    userDashboardApi.getDonations()
+      .then((res: any) => {
+        if (!cancelled) {
+          const list = res?.items || (Array.isArray(res) ? res : []);
+          if (list[0]) {
+            setFallback({
+              reference: list[0].id?.slice(0, 8)?.toUpperCase(),
+              campaignSlug: list[0].campaign?.id || "",
+              campaignTitle: list[0].campaign?.title || "",
+              amount: list[0].amount || 0,
+              participationType: "backer",
+              rewardTitle: "Supporter Reward",
+            });
+          }
+        }
       })
       .catch(() => {
         /* show defaults */

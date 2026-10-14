@@ -6,14 +6,14 @@
 import { useParams, Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import {
   ArrowLeft, ArrowRight, CheckCircle, Star, Trophy,
   Calendar, Clock, Heart, Sparkles,
   ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
-import { MEMBERSHIP_TIERS, type MembershipVariant, type AccessLevel } from "@/data/membershipTiers";
+import { MEMBERSHIP_TIERS, type MembershipVariant, type AccessLevel } from "@/constants/membershipTiers";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);

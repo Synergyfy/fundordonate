@@ -4,9 +4,9 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { hubProgressApi, type NationalProgressData } from "@/services/hubProgress.service";
+import { hubProgressApi, type NationalProgressData } from "@/services/hub-progress";
 import { ProgressRing } from "@/components/hub/ProgressRing";
-import { formatCurrency, formatNumber } from "@/data/ukHubData";
+import { formatCurrency, formatNumber } from "@/utils/formatters";
 
 export function NationalProgress() {
   const [data, setData] = useState<NationalProgressData | null>(null);

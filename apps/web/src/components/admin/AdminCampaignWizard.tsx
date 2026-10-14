@@ -6,8 +6,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { adminApi } from "@/services/admin.service";
-import { getSplitDestinations } from "@/data/ukHubData";
+import { adminApi } from "@/services/admin";
+import { getSplitDestinations } from "@/services/founding/foundingConfig";
 import {
   RewardManager,
   RewardFormData,

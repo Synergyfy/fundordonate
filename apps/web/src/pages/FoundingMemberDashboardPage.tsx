@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { foundingApi, type FoundingMembership } from "@/services/founding.service";
+import { foundingApi, type FoundingMembership } from "@/services/founding";
 import { FoundingMemberBadge, getFoundingBadgeType } from "@/components/hub/FoundingMemberBadge";
 import {
   ArrowRight, Calendar, Star, Users, Trophy, Gift,

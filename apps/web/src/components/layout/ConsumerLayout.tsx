@@ -9,7 +9,8 @@ import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Activity, Compass, Gift, Home, User } from "lucide-react";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
-import { syncUnreadBadge } from "@/data/consumerNotificationsData";
+import { syncUnreadBadge } from "@/services/consumer";
+import { TrialBanner } from "@/components/trial/TrialBanner";
 
 const NAV_ITEMS = [
   { to: "/consumer", label: "Home", icon: Home, end: true },
@@ -39,7 +40,7 @@ export function ConsumerLayout() {
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
       {/* Desktop compact rail — same five areas as the bottom nav */}
-      <aside className="hidden w-48 shrink-0 border-r border-gray-200 bg-white lg:block">
+      <aside className="hidden w-48 shrink-0 border-r border-gray-200 bg-white lg:block sticky top-0 h-screen self-start overflow-y-auto">
         <nav className="space-y-1 p-3">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -70,6 +71,7 @@ export function ConsumerLayout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-gray-50 pb-24 lg:pb-6">
         <div className="p-4 lg:p-6">
+          <TrialBanner />
           <Outlet />
         </div>
       </main>

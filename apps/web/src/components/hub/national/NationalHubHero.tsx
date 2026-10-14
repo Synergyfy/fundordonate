@@ -3,7 +3,11 @@
 // =============================================================================
 
 import { Link } from "react-router-dom";
-import { NATIONAL_HUB } from "@/data/ukHubData";
+
+const HERO_DATA = {
+  heroHeadline: "UK Hub Activation Programme",
+  heroSupportingText: "Connecting cities, businesses and communities across the United Kingdom.",
+};
 
 export function NationalHubHero() {
   return (
@@ -13,10 +17,10 @@ export function NationalHubHero() {
         <div className="max-w-3xl">
           <p className="text-sm font-medium uppercase tracking-wider text-primary-400">UK Hub Activation Programme</p>
           <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
-            {NATIONAL_HUB.heroHeadline || "UK Hub Activation Programme"}
+            {HERO_DATA.heroHeadline}
           </h1>
           <p className="mt-4 text-lg text-gray-300">
-            {NATIONAL_HUB.heroSupportingText || "Connecting cities, businesses and communities across the United Kingdom."}
+            {HERO_DATA.heroSupportingText}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link

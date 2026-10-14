@@ -65,11 +65,10 @@ export const CampaignTrackingPage = lazy(() => import("@/components/consumer/Cam
 // =============================================================================
 
 export const LoginPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.LoginPage })));
+export const AdminLoginPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.AdminLoginPage })));
 export const RegisterPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.RegisterPage })));
-export const ForgotPasswordPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.ForgotPasswordPage })));
-export const ResetPasswordPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.ResetPasswordPage })));
-export const VerifyEmailPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.VerifyEmailPage })));
 export const CentralHubCallbackPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.CentralHubCallbackPage })));
+export const UpgradePage = lazy(() => import("@/pages/auth").then(m => ({ default: m.UpgradePage })));
 
 // =============================================================================
 // Admin Pages

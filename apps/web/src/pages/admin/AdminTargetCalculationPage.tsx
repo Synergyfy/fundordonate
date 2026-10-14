@@ -10,7 +10,7 @@ import {
   type TargetCalculation,
   type TargetCalculationConfig,
   type BulkImportResult,
-} from "@/services/targetCalculation.service";
+} from "@/services/target-calculation";
 import { ArrowLeft, Calculator, Upload, Check, Settings, RefreshCw, Edit, Save } from "lucide-react";
 
 const formatCurrency = (pence: number) =>

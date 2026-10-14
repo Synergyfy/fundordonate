@@ -1,13 +1,10 @@
 import { create } from "zustand";
-import { authApi } from "@/services/auth.service";
-import { centralHubService } from "@/services/central-hub.service";
-import { SESSION_EXPIRED_EVENT } from "@/lib/api";
+import { authApi } from "@/services/auth";
 import {
-  isDemoMode,
-  getDemoUser,
-  enableDemoMode,
-  disableDemoMode,
-} from "@/lib/demo";
+  centralHubService,
+  type LocalEntitlement,
+} from "@/services/central-hub";
+import { SESSION_EXPIRED_EVENT } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/config";
 
 // =============================================================================
@@ -17,7 +14,7 @@ import { STORAGE_KEYS } from "@/lib/config";
 export interface User {
   id: string;
   email: string;
-  username: string;
+  username: string | null;
   firstName?: string | null;
   lastName?: string | null;
   avatar?: string | null;
@@ -25,6 +22,10 @@ export interface User {
   userType: string;
   businessId?: string | null;
   emailVerified: boolean;
+  membershipLevel?: string | null;
+  membershipPlanName?: string | null;
+  membershipStatus?: string | null;
+  subscription?: LocalEntitlement | null;
 }
 
 /**
@@ -35,8 +36,17 @@ export interface User {
  */
 export type AuthStatus = "initializing" | "authenticated" | "unauthenticated";
 
+export interface CentralHubCallbackOutcome {
+  success: boolean;
+  returnPath: string;
+  reason?: string;
+  upgradeUrl?: string;
+  error?: string;
+}
+
 interface AuthState {
   user: User | null;
+  entitlement: LocalEntitlement | null;
   authStatus: AuthStatus;
   sessionError: string | null;
   centralHubEnabled: boolean;
@@ -46,23 +56,22 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
 
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: {
-    email: string;
-    username: string;
-    password: string;
-    firstName?: string;
-    lastName?: string;
-    userType?: "donor" | "fundraiser" | "business" | "consumer";
-  }) => Promise<void>;
+  adminLogin: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   setUser: (user: User | null) => void;
   clearAuth: (sessionErrorMessage?: string) => void;
-  demoLogin: (role: string) => void;
   checkCentralHub: () => Promise<void>;
   loginWithCentralHub: (returnPath?: string) => Promise<void>;
-  handleCentralHubCallback: (code: string) => Promise<{ success: boolean; returnPath: string; error?: string }>;
+  handleCentralHubCallback: (
+    code: string,
+    state: string,
+  ) => Promise<CentralHubCallbackOutcome>;
+  handleDirectSsoToken: (token: string) => Promise<CentralHubCallbackOutcome>;
+  refreshEntitlement: () => Promise<{
+    hasAccess: boolean;
+    entitlement: LocalEntitlement | null;
+  }>;
   getPostLoginRedirect: () => string;
   clearSessionError: () => void;
 }
@@ -76,15 +85,13 @@ interface AuthState {
  * Uses userType (account type) for primary routing, role (capability) for refinement.
  */
 function resolvePostLoginRoute(user: User): string {
-  switch (user.userType) {
-    case "admin":
-      return "/admin";
-    case "business":
-      return "/dashboard";
-    case "consumer":
-    default:
-      return "/consumer";
+  if (user.userType === "admin" || user.role === "admin") {
+    return "/admin";
   }
+  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") {
+    return "/dashboard";
+  }
+  return "/consumer";
 }
 
 // =============================================================================
@@ -93,6 +100,7 @@ function resolvePostLoginRoute(user: User): string {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
+  entitlement: null,
   authStatus: "initializing",
   sessionError: null,
   centralHubEnabled: false,
@@ -106,23 +114,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return get().authStatus === "authenticated";
   },
 
-  login: async (email, password) => {
-    const result = await authApi.login(email, password);
-    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
+  adminLogin: async (email, password) => {
+    const result = await authApi.adminLogin(email, password);
+    if (result.accessToken) {
+      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.accessToken);
+    }
+    if (result.refreshToken) {
+      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.refreshToken);
+    }
     set({
       user: result.user,
-      authStatus: "authenticated",
-      sessionError: null,
-    });
-  },
-
-  register: async (data) => {
-    const result = await authApi.register(data);
-    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
-    set({
-      user: result.user,
+      entitlement: result.user.subscription ?? null,
       authStatus: "authenticated",
       sessionError: null,
     });
@@ -130,48 +132,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-    if (refreshToken) {
-      try {
-        await authApi.logout(refreshToken);
-      } catch {
-        // Ignore logout errors — proceed with local cleanup
-      }
+    try {
+      await centralHubService.logout(refreshToken || undefined);
+    } catch {
+      // Ignore logout errors — proceed with local cleanup
     }
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-    disableDemoMode();
     set({
       user: null,
+      entitlement: null,
       authStatus: "unauthenticated",
       sessionError: null,
     });
   },
 
   loadUser: async () => {
-    // Check for demo mode first
-    if (isDemoMode()) {
-      const demoRole = localStorage.getItem(STORAGE_KEYS.DEMO_ROLE);
-      const demoUser = getDemoUser(demoRole || "donor");
-      if (demoUser) {
-        set({
-          user: demoUser as User,
-          authStatus: "authenticated",
-          sessionError: null,
-        });
-        return;
-      }
-    }
-
-    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    if (!token) {
-      set({ authStatus: "unauthenticated" });
-      return;
-    }
-
     try {
-      const { user } = await authApi.getMe();
+      const user = await authApi.getMe();
+      if (!user || !user.id) {
+        throw new Error("No active session");
+      }
       set({
         user,
+        entitlement: user.subscription ?? null,
         authStatus: "authenticated",
         sessionError: null,
       });
@@ -180,6 +164,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
       set({
         user: null,
+        entitlement: null,
         authStatus: "unauthenticated",
       });
     }
@@ -188,6 +173,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => {
     set({
       user,
+      entitlement: user?.subscription ?? null,
       authStatus: user ? "authenticated" : "unauthenticated",
     });
   },
@@ -195,27 +181,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearAuth: (sessionErrorMessage) => {
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-    disableDemoMode();
     set({
       user: null,
+      entitlement: null,
       authStatus: "unauthenticated",
       sessionError: sessionErrorMessage || null,
     });
-  },
-
-  demoLogin: (role: string) => {
-    // Enable demo mode BEFORE resolving the demo user. getDemoUser() gates on
-    // isDemoMode() being true, so the flags must be set first or every demo
-    // login returns null and the user bounces back to the homepage.
-    enableDemoMode(role);
-    const demoUser = getDemoUser(role);
-    if (demoUser) {
-      set({
-        user: demoUser as User,
-        authStatus: "authenticated",
-        sessionError: null,
-      });
-    }
   },
 
   checkCentralHub: async () => {
@@ -227,56 +198,96 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  loginWithCentralHub: async (returnPath = "/") => {
+  loginWithCentralHub: async (returnPath = "") => {
     set({ centralHubLoading: true });
     try {
-      await centralHubService.redirectToCentralHub(returnPath);
+      await centralHubService.beginLogin(returnPath);
     } catch {
       set({ centralHubLoading: false });
-      throw new Error("Failed to connect to Central Hub");
+      throw new Error("Failed to connect to MCOM Central Hub");
     }
   },
 
-  handleCentralHubCallback: async (code: string) => {
+  handleCentralHubCallback: async (code, state) => {
     set({ centralHubLoading: true });
     try {
-      const returnPath = centralHubService.getReturnPath();
-      const validatedPath = centralHubService.validateReturnPath(returnPath)
-        ? returnPath
-        : "/";
-
-      const result = await centralHubService.handleCallback(code);
+      const result = await centralHubService.handleCallback(code, state);
+      const returnPath = centralHubService.consumeReturnPath();
 
       if (result.success && result.user) {
         if (result.tokens) {
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
           localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
         }
-
         set({
-          user: result.user as User,
+          user: result.user,
+          entitlement: result.entitlement ?? result.user.subscription ?? null,
           authStatus: "authenticated",
           centralHubLoading: false,
           sessionError: null,
         });
-
-        return { success: true, returnPath: validatedPath };
+        return { success: true, returnPath };
       }
 
       set({ centralHubLoading: false });
-      return { success: false, returnPath: validatedPath, error: result.error || "Central Hub authentication failed" };
-    } catch (err) {
-      set({ centralHubLoading: false });
-      const returnPath = centralHubService.getReturnPath();
-      const validatedPath = centralHubService.validateReturnPath(returnPath)
-        ? returnPath
-        : "/";
       return {
         success: false,
-        returnPath: validatedPath,
-        error: err instanceof Error ? err.message : "Central Hub authentication failed",
+        returnPath,
+        reason: result.reason,
+        upgradeUrl: result.upgradeUrl,
+        error: result.reason ? undefined : "Central Hub authentication failed",
+      };
+    } catch (err) {
+      set({ centralHubLoading: false });
+      return {
+        success: false,
+        returnPath: centralHubService.consumeReturnPath(),
+        error:
+          err instanceof Error
+            ? err.message
+            : "Central Hub authentication failed",
       };
     }
+  },
+
+  handleDirectSsoToken: async (token) => {
+    set({ centralHubLoading: true });
+    try {
+      const result = await centralHubService.handleDirectToken(token);
+      if (result.success && result.user) {
+        if (result.tokens) {
+          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
+        }
+        set({
+          user: result.user,
+          entitlement: result.entitlement ?? result.user.subscription ?? null,
+          authStatus: "authenticated",
+          centralHubLoading: false,
+          sessionError: null,
+        });
+        return { success: true, returnPath: result.returnPath || "/" };
+      }
+      set({ centralHubLoading: false });
+      return {
+        success: false,
+        returnPath: result.returnPath || "/",
+        error: result.error || "Direct SSO authentication failed",
+      };
+    } catch (err) {
+      set({ centralHubLoading: false });
+      return {
+        success: false,
+        returnPath: "/",
+        error: err instanceof Error ? err.message : "Direct SSO authentication failed",
+      };
+    }
+  },
+
+  refreshEntitlement: async () => {
+    const result = await centralHubService.refreshEntitlement();
+    set({ entitlement: result.entitlement });
+    return result;
   },
 
   getPostLoginRedirect: () => {
@@ -284,7 +295,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) return "/";
     return resolvePostLoginRoute(user);
   },
-
   clearSessionError: () => {
     set({ sessionError: null });
   },

@@ -6,11 +6,11 @@
 
 import { useState, useEffect } from "react";
 import type { HubLocation } from "@/types/uk-hub";
-import { getEffectiveStatus, getActivationProgress } from "@/services/locationResolver";
+import { getEffectiveStatus, getActivationProgress } from "@/services/location";
 import { LOCATION_PUBLIC_STATUS_META } from "@/types/uk-hub";
-import { hubProgressApi, type BoroughStatsData } from "@/services/hubProgress.service";
+import { hubProgressApi, type BoroughStatsData } from "@/services/hub-progress";
 import { ProgressRing } from "@/components/hub/ProgressRing";
-import { formatCurrency, formatNumber } from "@/data/ukHubData";
+import { formatCurrency, formatNumber } from "@/utils/formatters";
 
 interface CityProgressProps {
   location: HubLocation;
@@ -43,8 +43,8 @@ export function CityProgress({ location, bizProg, consProg, liveMode = true }: C
   const activationProgress = getActivationProgress(location);
 
   // Use live stats when available, fallback to props
-  const fundingRaised = liveStats?.fundingRaised ?? location.fundingRaised;
-  const fundingTarget = liveStats?.fundingTarget ?? location.fundingTarget;
+  const fundingRaised = (liveStats?.fundingRaised ?? location.fundingRaised) ?? 0;
+  const fundingTarget = (liveStats?.fundingTarget ?? location.fundingTarget) ?? 0;
   const fundingPct = fundingTarget > 0
     ? Math.min(Math.round((fundingRaised / fundingTarget) * 100), 100)
     : 0;

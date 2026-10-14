@@ -6,7 +6,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import {
   ArrowRight, Calendar, Target, Trophy, Gift,
   Store, Users, Megaphone, TrendingUp, Sparkles,

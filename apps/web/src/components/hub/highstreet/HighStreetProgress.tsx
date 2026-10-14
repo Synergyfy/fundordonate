@@ -5,9 +5,9 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { hubProgressApi, type HighStreetStatsData } from "@/services/hubProgress.service";
+import { hubProgressApi, type HighStreetStatsData } from "@/services/hub-progress";
 import { ProgressRing } from "@/components/hub/ProgressRing";
-import { formatCurrency, formatNumber } from "@/data/ukHubData";
+import { formatCurrency, formatNumber } from "@/utils/formatters";
 
 interface HighStreetProgressProps {
   locationId: string;

@@ -52,10 +52,9 @@ import {
   ContributionConfirmationPage,
   LoginPage,
   RegisterPage,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-  VerifyEmailPage,
   CentralHubCallbackPage,
+  AdminLoginPage,
+  UpgradePage,
   DashboardHome,
   CampaignsManagement,
   DonationsManagement,
@@ -227,6 +226,7 @@ import {
 
 // Non-lazy components (small, used frequently)
 import { CampaignBuilder } from "@/components/campaign/CampaignBuilder";
+import { PaymentReturnPage } from "@/pages/payment/PaymentReturnPage";
 
 // Wrapper to force CityHubPage re-mount on every navigation
 function CityHubPageWrapper() {
@@ -358,16 +358,17 @@ function App() {
           <Route path="/donate/checkout" element={<DonationCheckoutPage />} />
           <Route path="/pledge" element={<PledgeCheckoutPage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
+          <Route path="/payment/return" element={<PaymentReturnPage />} />
           <Route path="/payment-failed" element={<PaymentFailurePage />} />
         </Route>
 
         {/* ─── Auth routes ─── */}
         <Route path="/auth/login" element={<PublicLayout><LoginPage /></PublicLayout>} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/auth/register" element={<GuestRoute><PublicLayout><RegisterPage /></PublicLayout></GuestRoute>} />
-        <Route path="/auth/forgot-password" element={<PublicLayout><ForgotPasswordPage /></PublicLayout>} />
-        <Route path="/auth/reset-password" element={<PublicLayout><ResetPasswordPage /></PublicLayout>} />
-        <Route path="/auth/verify-email" element={<PublicLayout><VerifyEmailPage /></PublicLayout>} />
+        <Route path="/auth/callback" element={<CentralHubCallbackPage />} />
         <Route path="/auth/central-hub/callback" element={<CentralHubCallbackPage />} />
+        <Route path="/upgrade" element={<PublicLayout><UpgradePage /></PublicLayout>} />
         <Route path="/auth/session-expired" element={<SessionExpiredMessage />} />
 
         {/* ─── Protected campaign creation ─── */}

@@ -6,10 +6,9 @@
 import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
-import { getDemoCampaignsForHighStreet } from "@/data/highStreetData";
-import { getAdminCampaignsForLocation, adminCampaignToHubCampaign } from "@/data/adminCampaigns";
-import { getAreaTerminology } from "@/data/ukHubData";
+import { campaignApi } from "@/services/campaign";
+import { seasonApi } from "@/services/season";
+import { getAreaTerminology } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import type { BreadcrumbItem } from "@/types/uk-hub";
 import {
@@ -38,27 +37,16 @@ export default function BusinessCampaignListPage() {
   const areaName = (localAreaSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   const streetName = (highStreetSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 
-  // Campaigns covering this high street — admin campaigns via their coverage
-  // set (city/area/street cascade), plus the street's demo campaigns.
-  const allCampaigns = useMemo(() => {
-    const covered = getAdminCampaignsForLocation(
-      citySlug || "",
-      localAreaSlug || "",
-      highStreetSlug || "",
-    ).map((c) => adminCampaignToHubCampaign(c));
-    const demo = getDemoCampaignsForHighStreet(citySlug || "", localAreaSlug || "", highStreetSlug || "");
-    const seen = new Set<string>();
-    return [...covered, ...demo].filter((c) => {
-      if (seen.has(c.slug)) return false;
-      seen.add(c.slug);
-      return true;
-    });
-  }, [citySlug, localAreaSlug, highStreetSlug]);
+  const { data: campaignResponse } = useQuery({
+    queryKey: ["public-campaigns-street", "business", citySlug, localAreaSlug, highStreetSlug],
+    queryFn: () =>
+      (campaignApi.list as any)({ audience: "business", location: highStreetSlug || localAreaSlug || citySlug, limit: 50 }),
+  });
 
-  const campaigns = useMemo(
-    () => allCampaigns.filter(c => c.targetAudience === "business" || c.targetAudience === "both"),
-    [allCampaigns],
-  );
+  const campaigns = useMemo(() => {
+    const list = (campaignResponse?.items ?? (campaignResponse as any)?.data ?? []) as any[];
+    return list.filter((c: any) => c.targetAudience === "business" || c.targetAudience === "both" || !c.targetAudience);
+  }, [campaignResponse]);
 
   const breadcrumbs: BreadcrumbItem[] = [
     { label: cityName, slug: citySlug || "", fullPath: citySlug || "", type: "CITY" },

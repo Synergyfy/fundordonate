@@ -9,7 +9,7 @@ import {
   MapPin, Calendar, Star, TrendingUp, Gift,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const CONSUMER_BENEFITS = [

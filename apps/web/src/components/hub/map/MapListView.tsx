@@ -5,8 +5,8 @@
 
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-import type { HubLocation } from "@/data/hubActivation";
-import { HUB_STATUS_META } from "@/data/hubActivation";
+import type { HubLocation } from "@/types/uk-hub";
+import { HUB_STATUS_META } from "@/types/uk-hub";
 import { HubStatusBadge } from "../HubStatusBadge";
 
 interface MapListViewProps {
@@ -28,7 +28,8 @@ export function MapListView({ locations, onSelect, selectedSlug, className }: Ma
   return (
     <div className={`space-y-2 ${className || ""}`}>
       {locations.map(l => {
-        const meta = HUB_STATUS_META[l.status];
+        const statusKey = l.status || "needs_activation";
+        const meta = HUB_STATUS_META[statusKey] || HUB_STATUS_META.needs_activation;
         const isSelected = l.slug === selectedSlug;
         return (
           <button
@@ -54,7 +55,7 @@ export function MapListView({ locations, onSelect, selectedSlug, className }: Ma
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold text-gray-900">{l.name}</span>
-                <HubStatusBadge status={l.status} />
+                <HubStatusBadge status={statusKey} />
               </div>
               <p className="mt-0.5 line-clamp-1 text-xs text-gray-500">{l.shortDescription}</p>
               <div className="mt-1 flex items-center gap-3 text-xs text-gray-400">

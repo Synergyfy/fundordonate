@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getSplitDestinations } from "@/data/ukHubData";
+import { getSplitDestinations } from "@/services/location";
 
 type SplitLevel = "CITY" | "BOROUGH" | "HIGH_STREET";
 type SplitMode = "FUND" | "DONATE";

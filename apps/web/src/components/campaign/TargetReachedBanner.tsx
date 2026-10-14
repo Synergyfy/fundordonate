@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { Link } from "react-router-dom";
-import { formatCurrency } from "@/data/ukHubData";
+import { formatCurrency } from "@/utils/formatters";
 
 interface TargetReachedBannerProps {
   campaignTitle: string;

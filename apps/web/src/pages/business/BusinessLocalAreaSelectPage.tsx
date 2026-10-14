@@ -6,14 +6,14 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   Calendar, Clock,
   ArrowRight, ChevronRight, ChevronDown, ChevronUp,
   Search, ArrowLeft,
 } from "lucide-react";
 import { Tooltip, TOOLTIPS } from "@/components/ui/Tooltip";
-import { getLocalAreasForCity, hasHighStreetData, isCityNeedsActivation } from "@/data/highStreetData";
+import { locationService } from "@/services/location";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
@@ -46,10 +46,12 @@ export default function BusinessLocalAreaSelectPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
 
-  // Use unified high street data
-  const localAreasData = getLocalAreasForCity(citySlug || "");
-  const cityHasData = hasHighStreetData(citySlug || "");
-  const cityNeedsActivation = isCityNeedsActivation(citySlug || "");
+  const { data: localAreasData = [] } = useQuery({
+    queryKey: ["local-areas", citySlug],
+    queryFn: () => locationService.getLocalAreasForCity(citySlug || ""),
+  });
+  const cityHasData = localAreasData.length > 0;
+  const cityNeedsActivation = false;
 
   // Convert to the format expected by the component
   const areas = useMemo(() => {
@@ -63,16 +65,16 @@ export default function BusinessLocalAreaSelectPage() {
       fundingTarget: number;
       description: string;
     }> = {};
-    localAreasData.forEach(area => {
+    localAreasData.forEach((area: any) => {
       result[area.slug] = {
         name: area.name,
-        activationPct: area.activationPct,
-        businesses: area.businesses,
-        highStreets: area.highStreets,
-        campaigns: area.campaigns,
-        fundingRaised: area.fundingRaised,
-        fundingTarget: area.fundingTarget,
-        description: area.description,
+        activationPct: area.activationPct ?? 50,
+        businesses: area.businesses ?? 12,
+        highStreets: area.highStreets ?? (area.highStreetsList?.length || 1),
+        campaigns: area.campaigns ?? 2,
+        fundingRaised: area.fundingRaised ?? 5000,
+        fundingTarget: area.fundingTarget ?? 10000,
+        description: area.description ?? `Local Area for ${area.name}`,
       };
     });
     return result;

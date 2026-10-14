@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { backerApi, type BackerStatus, type BackerLeaderboardEntry } from "@/services/backer.service";
+import { backerApi, type BackerStatus, type BackerLeaderboardEntry } from "@/services/backer";
 import { BackerBadge, type BackerBadgeTier } from "@/components/hub/BackerBadge";
 import {
   Gift, Copy, CheckCircle2,

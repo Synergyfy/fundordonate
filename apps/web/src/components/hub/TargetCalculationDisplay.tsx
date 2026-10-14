@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { targetCalculationApi, type TargetCalculation } from "@/services/targetCalculation.service";
+import { targetCalculationApi, type TargetCalculation } from "@/services/target-calculation";
 import { Calculator, Info, ChevronDown, ChevronUp } from "lucide-react";
 
 const formatCurrency = (pence: number) =>

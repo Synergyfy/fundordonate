@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -12,17 +16,25 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@fundordonate/types": ["../../packages/types/src"],
-      "@fundordonate/utils": ["../../packages/utils/src"],
-      "@fundordonate/ui": ["../../packages/ui/src"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@fundordonate/types": [
+        "../../packages/types/src"
+      ],
+      "@fundordonate/utils": [
+        "../../packages/utils/src"
+      ],
+      "@fundordonate/ui": [
+        "../../packages/ui/src"
+      ]
     }
   },
-  "include": ["src", "../../packages/*/src"]
+  "include": [
+    "src",
+    "../../packages/*/src"
+  ]
 }

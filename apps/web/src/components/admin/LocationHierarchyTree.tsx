@@ -27,8 +27,9 @@ function TreeNode({ location, allLocations, depth, selectedId, onSelect }: TreeN
   const [expanded, setExpanded] = useState(depth < 2);
   const children = allLocations.filter(l => l.parentId === location.id);
   const hasChildren = children.length > 0;
-  const statusMeta = LOCATION_PUBLIC_STATUS_META[location.publicStatus];
-  const typeMeta = LOCATION_TYPE_META[location.type];
+  const publicStatus = location.publicStatus || "NEEDS_ACTIVATION";
+  const statusMeta = LOCATION_PUBLIC_STATUS_META[publicStatus] || LOCATION_PUBLIC_STATUS_META.NEEDS_ACTIVATION;
+  const typeMeta = (LOCATION_TYPE_META as any)[location.type] || LOCATION_TYPE_META.CITY;
   const isSelected = location.id === selectedId;
 
   return (

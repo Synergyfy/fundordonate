@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { campaignApi } from "@/services/campaign.service";
-import { DEMO_CAMPAIGNS, getDemoFeatured } from "@/data/demo";
+import { campaignApi } from "@/services/campaign";
 import type { PublicCampaign } from "./CampaignCard";
 
 export type CampaignLoadStatus = "loading" | "success" | "error";
@@ -10,15 +9,12 @@ interface UsePublicCampaignsOptions {
   mode?: string;
   /** Maximum number of campaigns to return. */
   limit: number;
-  /** Use the full demo campaign list (not just the curated featured set). */
-  demoAll?: boolean;
 }
 
 /**
- * Loads public campaigns: API first, demo fallback if the backend is
- * unavailable so a section is never left blank.
+ * Loads public campaigns from the live campaign API.
  */
-export function usePublicCampaigns({ mode, limit, demoAll = false }: UsePublicCampaignsOptions) {
+export function usePublicCampaigns({ mode, limit }: UsePublicCampaignsOptions) {
   const [status, setStatus] = useState<CampaignLoadStatus>("loading");
   const [campaigns, setCampaigns] = useState<PublicCampaign[]>([]);
 
@@ -29,35 +25,13 @@ export function usePublicCampaigns({ mode, limit, demoAll = false }: UsePublicCa
       const items = (Array.isArray(res) ? res : ((res as unknown as { items?: unknown[] })?.items || [])) as PublicCampaign[];
       let list = Array.isArray(items) ? items : [];
       if (mode) list = list.filter((c) => c.mode === mode);
-      if (list.length === 0) {
-        // API reachable but nothing published — show the empty state.
-        setCampaigns([]);
-        setStatus("success");
-        return;
-      }
       setCampaigns(list.slice(0, limit));
       setStatus("success");
     } catch {
-      // Backend unavailable — fall back to demo campaigns so the section is never blank.
-      const source = mode
-        ? DEMO_CAMPAIGNS.filter((c) => c.mode === mode)
-        : demoAll
-          ? DEMO_CAMPAIGNS
-          : getDemoFeatured();
-      const fallback = source as unknown as PublicCampaign[];
-      if (fallback.length > 0) {
-        setCampaigns(fallback.slice(0, limit));
-        setStatus("success");
-      } else if (mode) {
-        // Filter has no matching campaigns — empty state, not an error.
-        setCampaigns([]);
-        setStatus("success");
-      } else {
-        setCampaigns([]);
-        setStatus("error");
-      }
+      setCampaigns([]);
+      setStatus("error");
     }
-  }, [limit, mode, demoAll]);
+  }, [limit, mode]);
 
   useEffect(() => {
     load();

@@ -101,7 +101,7 @@ export default function BusinessProfilePublicPage() {
             <h2 className="text-lg font-bold text-gray-900">Active Campaigns</h2>
           </div>
           <div className="divide-y">
-            {business.campaigns.map((c) => {
+            {business.campaigns.filter((c) => c.status === "ACTIVE").map((c) => {
               const pct = Math.min(100, Math.round((c.raised / c.target) * 100));
               return (
                 <Link key={c.id} to={`/campaigns/${c.id}`} className="block p-4 hover:bg-gray-50">

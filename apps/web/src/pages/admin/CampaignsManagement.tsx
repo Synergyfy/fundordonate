@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { adminApi } from "@/services/admin.service";
+import { adminApi } from "@/services/admin";
 import { CampaignStatusBadge } from "@/components/ui/CampaignStatusBadge";
 import type {
   CampaignStatus as CampaignStatusType,

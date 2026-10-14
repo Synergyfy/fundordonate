@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   ArrowLeft, Calendar, Clock, Users,
   ChevronRight, Megaphone, TrendingUp, Star, Trophy, Gift,
@@ -14,8 +14,15 @@ import {
   Shield, Store, Award, Play, ChevronLeft, X, Plus, Minus,
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
-import { getDemoCampaignsForLocation, HUB_LOCATIONS } from "@/data/hubActivation";
-import type { CampaignMedia } from "@/data/demo";
+import { campaignApi } from "@/services/campaign";
+
+export interface CampaignMedia {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  alt?: string;
+  poster?: string;
+}
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
@@ -70,19 +77,16 @@ export default function CampaignDetailPage() {
   const isConsumerContext = location.pathname.includes("/consumer/") || location.pathname.includes("/c-campaigns/");
   const isBusinessContext = location.pathname.includes("/business/") || location.pathname.includes("/b-campaigns/");
 
-  const mapLoc = useMemo(
-    () => HUB_LOCATIONS.find(l => l.slug === citySlug) ?? null,
-    [citySlug],
-  );
-
-  const campaigns = useMemo(() => {
-    if (!mapLoc) return [];
-    return getDemoCampaignsForLocation(mapLoc);
-  }, [mapLoc]);
+  const { data: campaignData, isLoading: campaignLoading } = useQuery({
+    queryKey: ["campaign", campaignSlug],
+    queryFn: () => campaignApi.getBySlug(campaignSlug!),
+    enabled: !!campaignSlug,
+  });
 
   const campaign = useMemo(() => {
-    return campaigns.find(c => c.slug === campaignSlug) ?? null;
-  }, [campaigns, campaignSlug]);
+    if (!campaignData) return null;
+    return (campaignData as any).campaign || campaignData;
+  }, [campaignData]);
 
   const [selectedMedia, setSelectedMedia] = useState<CampaignMedia | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -103,6 +107,17 @@ export default function CampaignDetailPage() {
   const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
   const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
+
+  if (campaignLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading campaign...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!campaign) {
     return (
@@ -212,7 +227,7 @@ export default function CampaignDetailPage() {
                 {/* Thumbnails */}
                 {campaign.media.length > 1 && (
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {campaign.media.map((item) => (
+                    {campaign.media.map((item: any) => (
                       <button
                         key={item.id}
                         onClick={() => setSelectedMedia(item)}
@@ -556,7 +571,7 @@ export default function CampaignDetailPage() {
             onClick={() => {
               const media = campaign?.media;
               if (!media) return;
-              const idx = media.findIndex(m => m.id === selectedMedia.id);
+              const idx = media.findIndex((m: any) => m.id === selectedMedia.id);
               const prev = idx > 0 ? media[idx - 1] : media[media.length - 1];
               if (prev) setSelectedMedia(prev);
             }}
@@ -568,7 +583,7 @@ export default function CampaignDetailPage() {
             onClick={() => {
               const media = campaign?.media;
               if (!media) return;
-              const idx = media.findIndex(m => m.id === selectedMedia.id);
+              const idx = media.findIndex((m: any) => m.id === selectedMedia.id);
               const next = idx < media.length - 1 ? media[idx + 1] : media[0];
               if (next) setSelectedMedia(next);
             }}

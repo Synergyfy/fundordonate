@@ -8,7 +8,7 @@ import {
   NOTIFICATION_CATEGORIES,
   type ConsumerNotification,
   type NotificationCategory,
-} from "@/data/consumerNotificationsData";
+} from "@/services/consumer";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 
 const formatDate = (iso: string) =>

@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import type { HubLocation } from "@/types/uk-hub";
 import { LOCATION_PUBLIC_STATUS_META } from "@/types/uk-hub";
 import { ProgressRing } from "./ProgressRing";
-import { formatCurrency } from "@/data/ukHubData";
+import { formatCurrency } from "@/utils/formatters";
 
 interface LocationCardProps {
   location: HubLocation;
@@ -16,13 +16,19 @@ interface LocationCardProps {
 }
 
 export function LocationCard({ location, variant = "default", className }: LocationCardProps) {
-  const effectiveStatus = location.statusOverride || location.publicStatus;
-  const statusMeta = LOCATION_PUBLIC_STATUS_META[effectiveStatus];
-  const fundingPct = location.fundingTarget > 0
-    ? Math.min(Math.round((location.fundingRaised / location.fundingTarget) * 100), 100)
+  const effectiveStatus = location.statusOverride || location.publicStatus || "NEEDS_ACTIVATION";
+  const statusMeta = LOCATION_PUBLIC_STATUS_META[effectiveStatus] || LOCATION_PUBLIC_STATUS_META.NEEDS_ACTIVATION;
+  const target = location.fundingTarget ?? 0;
+  const raised = location.fundingRaised ?? 0;
+  const fundingPct = target > 0
+    ? Math.min(Math.round((raised / target) * 100), 100)
     : 0;
-  const bizRemaining = Math.max(0, location.foundingBusinessTotal - location.foundingBusinessAllocated);
-  const consRemaining = Math.max(0, location.foundingConsumerTotal - location.foundingConsumerAllocated);
+  const bizTotal = location.foundingBusinessTotal ?? 50;
+  const bizAllocated = location.foundingBusinessAllocated ?? 0;
+  const consTotal = location.foundingConsumerTotal ?? 200;
+  const consAllocated = location.foundingConsumerAllocated ?? 0;
+  const bizRemaining = Math.max(0, bizTotal - bizAllocated);
+  const consRemaining = Math.max(0, consTotal - consAllocated);
 
   if (variant === "compact") {
     return (

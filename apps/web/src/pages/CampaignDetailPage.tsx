@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams, Link, Navigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { useParams, Link } from "react-router-dom";
+import { campaignApi } from "@/services/campaign";
 import { useAuthStore } from "@/stores/auth.store";
-import { DEMO_CAMPAIGNS } from "@/data/demo";
-import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
-import { getAdminCampaignBySlug, getAdminCampaignPublicPath } from "@/data/adminCampaigns";
 import { CampaignDetailBody, type DetailCampaign } from "@/components/campaign/CampaignDetailBody";
 import { RelatedCampaigns } from "@/components/campaign/RelatedCampaigns";
 import { DonationForm } from "@/components/campaign/DonationForm";
@@ -21,124 +18,24 @@ export function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
-  const [adminPath, setAdminPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug) return;
-
-    // Admin-created campaigns live on the rich hub campaign page.
-    const adminCampaign = getAdminCampaignBySlug(slug);
-    if (adminCampaign) {
-      setAdminPath(getAdminCampaignPublicPath(adminCampaign));
-      setLoading(false);
-      return;
-    }
-
-    setAdminPath(null);
     setLoading(true);
     setError(null);
 
     campaignApi
       .getBySlug(slug)
-      .then(setCampaign)
-      .catch(() => {
-        // Try DEMO_CAMPAIGNS first, then search all hubActivation campaigns
-        const demo = DEMO_CAMPAIGNS.find((c) => c.slug === slug);
-        if (demo) {
-          setCampaign({
-            id: demo.id,
-            slug: demo.slug,
-            title: demo.title,
-            shortDescription: demo.shortDescription,
-            description: demo.shortDescription,
-            goalAmount: demo.goalAmount,
-            raisedAmount: demo.raisedAmount,
-            deadline: demo.deadline,
-            status: "published",
-            mode: demo.mode,
-            featuredImage: demo.featuredImage,
-            settings: "{}",
-            createdAt: new Date().toISOString(),
-            author: { id: "demo-user", firstName: demo.author.firstName, lastName: demo.author.lastName, username: `${demo.author.firstName.toLowerCase()}-${demo.author.lastName.toLowerCase()}` },
-            category: demo.category ? { id: `cat-${demo.category.slug}`, name: demo.category.name, slug: demo.category.slug } : undefined,
-            tags: Array.isArray(demo.tags) ? demo.tags.map((t) => ({ tag: { id: `tag-${t}`, name: t, slug: t } })) : undefined,
-            _count: { donations: demo._count?.donations || 0, pledges: demo._count?.pledges || 0, comments: 0, bookmarks: 0 },
-            parentId: demo.parentId,
-            parentSlug: demo.parentSlug,
-            parentTitle: demo.parentTitle,
-            location: demo.location,
-            campaignType: demo.campaignType,
-            participationTypes: demo.participationTypes ? JSON.stringify(demo.participationTypes) : undefined,
-            backerTiersEnabled: demo.backerTiersEnabled,
-            recurringEnabled: demo.recurringEnabled,
-            isSelfFunding: demo.isSelfFunding,
-            selfFundingLevel: demo.selfFundingLevel,
-            ownerContribution: demo.ownerContribution,
-            campaignTarget: demo.campaignTarget,
-            children: DEMO_CAMPAIGNS.filter(c => c.parentId === demo.id).map(c => ({
-              id: c.id,
-              slug: c.slug,
-              title: c.title,
-              shortDescription: c.shortDescription,
-              goalAmount: c.goalAmount,
-              raisedAmount: c.raisedAmount,
-              deadline: c.deadline,
-              mode: c.mode,
-              featuredImage: c.featuredImage,
-              _count: { donations: c._count?.donations || 0, pledges: c._count?.pledges || 0 },
-            })),
-          } as Campaign);
-        } else {
-          // Search all hubActivation campaigns
-          let found = false;
-          for (const location of HUB_LOCATIONS) {
-            const locationCampaigns = getDemoCampaignsForLocation(location);
-            const match = locationCampaigns.find((c) => c.slug === slug);
-            if (match) {
-              setCampaign({
-                id: match.id,
-                slug: match.slug,
-                title: match.title,
-                shortDescription: match.shortDescription,
-                description: match.shortDescription,
-                goalAmount: match.goalAmount,
-                raisedAmount: match.raisedAmount,
-                deadline: match.deadline,
-                status: "published",
-                mode: match.mode,
-                featuredImage: match.featuredImage,
-                media: match.media,
-                settings: "{}",
-                createdAt: new Date().toISOString(),
-                author: { id: "demo-user", firstName: match.author.firstName, lastName: match.author.lastName, username: `${match.author.firstName.toLowerCase()}-${match.author.lastName.toLowerCase()}` },
-                category: match.category ? { id: `cat-${match.category.slug}`, name: match.category.name, slug: match.category.slug } : undefined,
-                tags: Array.isArray(match.tags) ? match.tags.map((t: string) => ({ tag: { id: `tag-${t}`, name: t, slug: t } })) : undefined,
-                _count: { donations: match._count?.donations || 0, pledges: match._count?.pledges || 0, comments: 0, bookmarks: 0 },
-                parentId: match.parentId,
-                parentSlug: match.parentSlug,
-                parentTitle: match.parentTitle,
-                location: match.location,
-                campaignType: match.campaignType,
-                participationTypes: match.participationTypes ? JSON.stringify(match.participationTypes) : undefined,
-                backerTiersEnabled: match.backerTiersEnabled,
-                isSelfFunding: match.isSelfFunding,
-                selfFundingLevel: match.selfFundingLevel,
-              } as Campaign);
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            setError("Campaign not found");
-          }
-        }
+      .then((data: any) => {
+        setCampaign(data?.campaign || data);
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        setError(err?.message || "Campaign not found");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [slug]);
-
-  if (adminPath) {
-    return <Navigate to={adminPath} replace />;
-  }
 
   if (loading) {
     return (

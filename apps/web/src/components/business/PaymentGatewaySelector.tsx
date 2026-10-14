@@ -4,8 +4,8 @@
 // required contribution, self-funding, and campaign contribution payments.
 // =============================================================================
 
-import { CreditCard, Wallet } from "lucide-react";
-import type { PaymentGateway } from "@/services/payment.service";
+import { CreditCard, Wallet, Coins } from "lucide-react";
+import type { PaymentGateway } from "@/services/payment";
 
 export type { PaymentGateway };
 
@@ -21,6 +21,13 @@ const GATEWAYS: {
   icon: typeof CreditCard;
   active: string;
 }[] = [
+  {
+    id: "wallet",
+    label: "MCOM Wallet",
+    hint: "Prepaid MCOM credits",
+    icon: Coins,
+    active: "border-amber-400 bg-amber-50 text-amber-700",
+  },
   {
     id: "stripe",
     label: "Stripe",
@@ -38,6 +45,7 @@ const GATEWAYS: {
 ];
 
 export function gatewayName(gateway: PaymentGateway): string {
+  if (gateway === "wallet") return "MCOM Wallet";
   return gateway === "stripe" ? "Stripe" : "PayPal";
 }
 
@@ -47,7 +55,7 @@ export function PaymentGatewaySelector({ value, onChange }: Props) {
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
         Payment gateway
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {GATEWAYS.map((g) => {
           const Icon = g.icon;
           const active = value === g.id;

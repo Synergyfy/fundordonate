@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { seasonApi, type SeasonReview } from "@/services/season.service";
+import { seasonApi, type SeasonReview } from "@/services/season";
 import {
   Calendar, AlertTriangle, CheckCircle, Copy, ArrowRight,
 } from "lucide-react";

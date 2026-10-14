@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { Heart, Gift, ChevronDown } from "lucide-react";
 
 interface SupporterItem {

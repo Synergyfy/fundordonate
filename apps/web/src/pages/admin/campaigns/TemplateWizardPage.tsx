@@ -68,21 +68,19 @@ import {
   LIBRARY_REWARDS,
   REWARD_CATEGORY_META,
   SOURCE_META,
+  MCOM_GROUP_META,
+  getMcomPlatforms,
   type DeliveryMethod,
   type LibraryReward,
   type RewardAudience,
   type RewardCategory,
-} from "@/data/templateRewardLibrary";
-import {
-  getMcomPlatforms,
-  MCOM_GROUP_META,
-} from "@/data/mcomAssetCatalogue";
+} from "@/types/rewards";
 import {
   getAdminTemplateById,
   saveTemplate,
   type MasterTemplate,
   type TemplateLifecycle,
-} from "@/data/campaignTemplateStore";
+} from "@/services/templates";
 
 // ---------------------------------------------------------------------------
 // Types

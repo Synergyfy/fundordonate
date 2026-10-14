@@ -2,59 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, ChevronDown, ChevronUp, Mail, Send } from "lucide-react";
-import { DEMO_FAQ } from "@/data/demo";
-
-interface FaqEntry {
-  q: string;
-  a: string;
-}
-
-interface FaqCategory {
-  id: string;
-  label: string;
-  questions: FaqEntry[];
-}
-
-function pick(...titles: string[]): FaqEntry[] {
-  return titles
-    .map((title) => DEMO_FAQ.find((f) => f.q === title))
-    .filter((f): f is FaqEntry => !!f);
-}
-
-const FAQ_CATEGORIES: FaqCategory[] = [
-  {
-    id: "general",
-    label: "General",
-    questions: pick(
-      "What is FundOrDonate?",
-      "How does cost-neutral community funding work?",
-      "What is the Mobile VCard integration?",
-    ),
-  },
-  {
-    id: "campaigns",
-    label: "Campaigns",
-    questions: pick(
-      "How do I start a Local Hub campaign?",
-      "How do I receive funds?",
-    ),
-  },
-  {
-    id: "payments",
-    label: "Contributions & Payments",
-    questions: pick("What are the fees?"),
-  },
-  {
-    id: "rewards",
-    label: "Rewards",
-    questions: pick("What is a Founding Membership?"),
-  },
-  {
-    id: "account",
-    label: "Account",
-    questions: pick("How do I contact support?"),
-  },
-];
+import { FAQ_CATEGORIES, type FaqCategory, type FaqEntry } from "@/constants/faq";
 
 const CONTACT_TOPICS = [
   { id: "general", label: "General question" },

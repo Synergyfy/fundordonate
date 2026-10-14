@@ -9,17 +9,9 @@
 import React from "react";
 import { useLocation, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
-import {
-  getChildLocations, ALL_LOCATIONS,
-  resolveSeedLocation, buildSyntheticLocation,
-  getAreaTerminology,
-} from "@/data/ukHubData";
-import {
-  getHubLocationBySlug, getDemoCampaignsForLocation,
-} from "@/data/hubActivation";
-import { getCityStats, getHighStreetData, getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
-import type { HubLocation, BreadcrumbItem } from "@/types/uk-hub";
+import { seasonApi } from "@/services/season";
+import { locationService } from "@/services/location";
+import { getAreaTerminology, type HubLocation, type BreadcrumbItem } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import {
   Calendar, Clock, Store, Users, ArrowLeft, MapPin,
@@ -62,301 +54,16 @@ const fmtCurrency = (v: number) =>
 
 const fmtNumber = (n: number) => new Intl.NumberFormat("en-GB").format(n);
 
-// Build breadcrumb chain from location upwards
-function buildAncestors(location: HubLocation): BreadcrumbItem[] {
-  const ancestors: BreadcrumbItem[] = [];
-  let current: HubLocation | null = location;
-  while (current?.parentId) {
-    // Check ALL_LOCATIONS first, then build a synthetic parent from HUB_LOCATIONS
-    let parent = ALL_LOCATIONS.find(l => l.id === current!.parentId);
-    if (!parent) {
-      const parentSlug = current!.parentId.replace(/^city-/, "");
-      const mapLoc = getHubLocationBySlug(parentSlug);
-      if (mapLoc) parent = buildSyntheticLocation(mapLoc);
-    }
-    if (parent) {
-      ancestors.unshift({ label: parent.name, slug: parent.slug, fullPath: parent.fullPath || parent.slug, type: parent.type });
-      current = parent;
-    } else break;
-  }
-  return ancestors;
-}
-
-// Build a HIGH_STREET HubLocation from HighStreetData
-function buildHighStreetLocation(
-  hs: { name: string; slug: string; description: string; status: string; fundingTarget: number; fundingRaised: number; totalBusinesses: number; participatingBusinesses: number },
-  parentId: string,
-  citySlug: string,
-  areaSlug: string,
-): HubLocation {
-  return {
-    id: `hs-${citySlug}-${areaSlug}-${hs.slug}`,
-    name: hs.name,
-    slug: hs.slug,
-    type: "HIGH_STREET",
-    parentId,
-    shortDescription: hs.description,
-    description: hs.description,
-    heroHeadline: hs.name,
-    heroSupportingText: `High Street`,
-    internalLifecycle: hs.status === "active" ? "ACTIVE" : "LAUNCHING",
-    publicStatus: hs.status === "active" ? "ACTIVE" : hs.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION",
-    statusOverride: null,
-    isActive: hs.status === "active",
-    isPublic: true,
-    mapVisible: false,
-    latitude: null,
-    longitude: null,
-    mapZoomLevel: 15,
-    primaryImage: null,
-    secondaryImage: null,
-    fullPath: `${citySlug}/${areaSlug}/${hs.slug}`,
-    isFeaturedNationally: false,
-    featuredPriority: 0,
-    fundingTarget: hs.fundingTarget,
-    fundingRaised: hs.fundingRaised,
-    activationThreshold: 80,
-    foundingBusinessTotal: hs.totalBusinesses,
-    foundingBusinessAllocated: hs.participatingBusinesses,
-    foundingConsumerTotal: hs.totalBusinesses * 2,
-    foundingConsumerAllocated: hs.participatingBusinesses * 2,
-    createdAt: "",
-    updatedAt: "",
-  };
-}
-
-// Build a LOCAL_AREA HubLocation from LocalAreaData
-function buildLocalAreaLocation(
-  area: { name: string; slug: string; description: string; status: string; businesses: number; fundingTarget: number; fundingRaised: number },
-  parentId: string,
-  citySlug: string,
-): HubLocation {
-  return {
-    id: `area-${citySlug}-${area.slug}`,
-    name: area.name,
-    slug: area.slug,
-    type: "LOCAL_AREA",
-    parentId,
-    shortDescription: area.description,
-    description: area.description,
-    heroHeadline: area.name,
-    heroSupportingText: `Local Area`,
-    internalLifecycle: area.status === "active" ? "ACTIVE" : "LAUNCHING",
-    publicStatus: area.status === "active" ? "ACTIVE" : area.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION",
-    statusOverride: null,
-    isActive: area.status === "active",
-    isPublic: true,
-    mapVisible: false,
-    latitude: null,
-    longitude: null,
-    mapZoomLevel: 12,
-    primaryImage: null,
-    secondaryImage: null,
-    fullPath: `${citySlug}/${area.slug}`,
-    isFeaturedNationally: false,
-    featuredPriority: 0,
-    fundingTarget: area.fundingTarget,
-    fundingRaised: area.fundingRaised,
-    activationThreshold: 80,
-    foundingBusinessTotal: area.businesses,
-    foundingBusinessAllocated: Math.floor(area.businesses * 0.6),
-    foundingConsumerTotal: area.businesses * 2,
-    foundingConsumerAllocated: Math.floor(area.businesses * 1.2),
-    createdAt: "",
-    updatedAt: "",
-  };
-}
-
-// Resolve the deepest location from the full path segments
-function resolveDeepestLocation(segments: string[]): { location: HubLocation; depth: number } | null {
-  const citySlug = segments[0] || "";
-
-  // Strip UI-only segments (c-campaigns, b-campaigns) that aren't real locations
-  const filteredSegments = segments.filter(s => s !== "c-campaigns" && s !== "b-campaigns");
-
-  // First, find the deepest known seed/map location (city, borough)
-  let bestResult: { location: HubLocation; depth: number } | null = null;
-  for (let i = filteredSegments.length - 1; i >= 0; i--) {
-    const trySlug = filteredSegments[i]!;
-    const seed = resolveSeedLocation(trySlug, trySlug);
-    if (seed) { bestResult = { location: seed, depth: i }; break; }
-    const mapLoc = getHubLocationBySlug(trySlug);
-    if (mapLoc) { bestResult = { location: buildSyntheticLocation(mapLoc), depth: i }; break; }
-  }
-
-  if (!bestResult) return null;
-
-  // Walk forward from the known location through ALL remaining segments
-  let current = bestResult.location;
-  let currentDepth = bestResult.depth;
-
-  while (currentDepth + 1 < filteredSegments.length) {
-    const nextSlug = filteredSegments[currentDepth + 1]!;
-
-    if (current.type === "CITY" || current.type === "BOROUGH" || current.type === "LOCAL_AREA") {
-      // Try HIGH_STREET first (BOROUGH/LOCAL_AREA → HIGH_STREET)
-      if (current.type !== "CITY") {
-        const hs = getHighStreetData(citySlug, current.slug, nextSlug);
-        if (hs) {
-          current = buildHighStreetLocation(hs, current.id, citySlug, current.slug);
-          currentDepth++;
-          continue;
-        }
-      }
-      // Try LOCAL_AREA (CITY → LOCAL_AREA, or BOROUGH → generated sub-area)
-      const areas = getLocalAreasForCity(current.type === "CITY" ? (citySlug || current.slug) : current.slug);
-      const matchingArea = areas.find(a => a.slug === nextSlug);
-      if (matchingArea) {
-        current = buildLocalAreaLocation(matchingArea, current.id, citySlug || current.slug);
-        currentDepth++;
-        continue;
-      }
-      // Try generated high streets via getHighStreetsForArea for any location
-      const highStreets = getHighStreetsForArea(citySlug, current.type === "CITY" ? nextSlug : current.slug);
-      const matchingHS = highStreets.find(hs => hs.slug === nextSlug);
-      if (matchingHS) {
-        const areaSlug = current.type === "CITY" ? nextSlug : current.slug;
-        current = buildHighStreetLocation(matchingHS, current.id, citySlug, areaSlug);
-        currentDepth++;
-        continue;
-      }
-    }
-
-    // Can't resolve this segment — stop
-    break;
-  }
-
-  return { location: current, depth: currentDepth };
-}
-
-// Get children for a location based on its type in the hierarchy
-function getLocationChildren(
-  location: HubLocation,
-  segments: string[],
-): { children: HubLocation[]; childLinkPrefix: string; sectionTitle: string } {
-  const citySlug = segments[0] || "";
-
-  // CITY → show boroughs/sub-areas from ALL_LOCATIONS, or generated local areas
-  if (location.type === "CITY") {
-    let locChildren = getChildLocations(location.id);
-    // If no children in ALL_LOCATIONS, generate from getLocalAreasForCity
-    if (locChildren.length === 0) {
-      const generatedAreas = getLocalAreasForCity(citySlug || location.slug);
-      locChildren = generatedAreas.map((area) => ({
-        id: `area-${citySlug || location.slug}-${area.slug}`,
-        name: area.name,
-        slug: area.slug,
-        type: "LOCAL_AREA" as HubLocation["type"],
-        parentId: location.id,
-        shortDescription: area.description,
-        description: area.description,
-        heroHeadline: area.name,
-        heroSupportingText: `Local Area — ${location.name}`,
-        internalLifecycle: area.status === "active" ? "ACTIVE" : "LAUNCHING",
-        publicStatus: area.status === "active" ? "ACTIVE" : area.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION",
-        statusOverride: null,
-        isActive: area.status === "active",
-        isPublic: true,
-        mapVisible: false,
-        latitude: null,
-        longitude: null,
-        mapZoomLevel: 12,
-        primaryImage: null,
-        secondaryImage: null,
-        fullPath: `${citySlug || location.slug}/${area.slug}`,
-        isFeaturedNationally: false,
-        featuredPriority: 0,
-        fundingTarget: area.fundingTarget,
-        fundingRaised: area.fundingRaised,
-        activationThreshold: 80,
-        foundingBusinessTotal: area.businesses,
-        foundingBusinessAllocated: Math.floor(area.businesses * 0.6),
-        foundingConsumerTotal: area.businesses * 2,
-        foundingConsumerAllocated: Math.floor(area.businesses * 1.2),
-        createdAt: "",
-        updatedAt: "",
-      }));
-    }
-    const hasBoroughs = locChildren.some(c => c.type === "BOROUGH");
-    const areaTerm = getAreaTerminology(citySlug || location.slug);
-    return {
-      children: locChildren,
-      childLinkPrefix: `/uk-hub-activation/${location.slug}`,
-      sectionTitle: hasBoroughs ? `${areaTerm}s in ${location.name}` : `${areaTerm}s in ${location.name}`,
-    };
-  }
-
-  // BOROUGH or LOCAL_AREA → show high streets using getHighStreetsForArea (consistent with getHighStreetData)
-  if (location.type === "BOROUGH" || location.type === "LOCAL_AREA") {
-    const highStreets = getHighStreetsForArea(citySlug, location.slug);
-    if (highStreets.length > 0) {
-      const hsChildren: HubLocation[] = highStreets.map((hs) => ({
-        id: `hs-${citySlug}-${location.slug}-${hs.slug}`,
-        name: hs.name,
-        slug: hs.slug,
-        type: "HIGH_STREET" as HubLocation["type"],
-        parentId: location.id,
-        shortDescription: hs.description,
-        description: hs.description,
-        heroHeadline: hs.name,
-        heroSupportingText: `High Street — ${location.name}`,
-        internalLifecycle: hs.status === "active" ? "ACTIVE" : "LAUNCHING",
-        publicStatus: hs.status === "active" ? "ACTIVE" : hs.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION",
-        statusOverride: null,
-        isActive: hs.status === "active",
-        isPublic: true,
-        mapVisible: false,
-        latitude: null,
-        longitude: null,
-        mapZoomLevel: 15,
-        primaryImage: null,
-        secondaryImage: null,
-        fullPath: `${citySlug}/${location.slug}/${hs.slug}`,
-        isFeaturedNationally: false,
-        featuredPriority: 0,
-        fundingTarget: hs.fundingTarget,
-        fundingRaised: hs.fundingRaised,
-        activationThreshold: 80,
-        foundingBusinessTotal: hs.totalBusinesses,
-        foundingBusinessAllocated: hs.participatingBusinesses,
-        foundingConsumerTotal: hs.totalBusinesses * 2,
-        foundingConsumerAllocated: hs.participatingBusinesses * 2,
-        createdAt: "",
-        updatedAt: "",
-      }));
-      return {
-        children: hsChildren,
-        childLinkPrefix: `/uk-hub-activation/${citySlug}/${location.slug}`,
-        sectionTitle: `High Streets in ${location.name}`,
-      };
-    }
-    // Fallback: try ALL_LOCATIONS children (sub-areas of boroughs)
-    const locChildren = getChildLocations(location.id);
-    if (locChildren.length > 0) {
-      return {
-        children: locChildren,
-        childLinkPrefix: `/uk-hub-activation/${citySlug}/${location.slug}`,
-        sectionTitle: `Local Areas in ${location.name}`,
-      };
-    }
-    return { children: [], childLinkPrefix: "", sectionTitle: `Areas in ${location.name}` };
-  }
-
-  // HIGH STREET → show Business/Consumer choice (rendered directly in JSX)
-  if (location.type === "HIGH_STREET") {
-    return { children: [], childLinkPrefix: "", sectionTitle: "" };
-  }
-
-  return { children: [], childLinkPrefix: "", sectionTitle: `Areas in ${location.name}` };
-}
-
 // ───────────────────── Page ─────────────────────
 
 export default function CityHubPage() {
   const loc = useLocation();
   // Strip the route prefix to get the path segments after /uk-hub-activation/
   const locationPath = loc.pathname.replace(/^\/uk-hub-activation\/?/, "");
-  const segments = locationPath.split("/").filter(Boolean);
+  const segments = locationPath.split("/").filter(s => Boolean(s) && s !== "c-campaigns" && s !== "b-campaigns");
+  const citySlug = segments[0] || "";
+  const areaSlug = segments[1] || "";
+  const streetSlug = segments[2] || "";
 
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],
@@ -366,17 +73,116 @@ export default function CityHubPage() {
 
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
+  const campaigns: any[] = [];
 
-  // Resolve deepest location from full path
-  const resolved = resolveDeepestLocation(segments);
-  const location = resolved?.location ?? null;
+  const { data: hierarchy, isLoading: hierarchyLoading } = useQuery({
+    queryKey: ["city-hierarchy", citySlug],
+    queryFn: () => locationService.getCityWithHierarchy(citySlug),
+    enabled: !!citySlug,
+  });
+
+  const { location, ancestors, children, childLinkPrefix, sectionTitle, isHighStreet } = React.useMemo(() => {
+    if (!hierarchy) {
+      return { location: null, ancestors: [], children: [], childLinkPrefix: "", sectionTitle: "", isHighStreet: false };
+    }
+    const city = (hierarchy as any).city || hierarchy;
+    const areaTerm = getAreaTerminology(citySlug);
+
+    if (!areaSlug) {
+      return {
+        location: city,
+        ancestors: [],
+        children: (hierarchy.localAreas || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          slug: a.slug,
+          type: "LOCAL_AREA" as const,
+          publicStatus: a.publicStatus || (a.status === "active" ? "ACTIVE" : a.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"),
+          shortDescription: a.description || `Local Area in ${city.name}`,
+        })),
+        childLinkPrefix: `/uk-hub-activation/${citySlug}`,
+        sectionTitle: `${areaTerm}s in ${city.name}`,
+        isHighStreet: false,
+      };
+    }
+
+    const matchedArea = (hierarchy.localAreas || []).find((a: any) => a.slug === areaSlug);
+    const areaLocation = matchedArea || {
+      id: `area-${citySlug}-${areaSlug}`,
+      name: areaSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+      slug: areaSlug,
+      type: "LOCAL_AREA" as const,
+      publicStatus: "MAKING_PROGRESS",
+      shortDescription: `Local Area in ${city.name}`,
+      fundingTarget: 250000,
+      fundingRaised: 120000,
+      foundingBusinessAllocated: 15,
+      foundingConsumerAllocated: 30,
+    };
+
+    if (!streetSlug) {
+      const highStreets = matchedArea?.highStreetsList || [];
+      return {
+        location: areaLocation,
+        ancestors: [{ label: city.name, slug: city.slug, fullPath: city.slug, type: "CITY" as const }],
+        children: highStreets.map((hs: any) => ({
+          id: hs.id,
+          name: hs.name,
+          slug: hs.slug,
+          type: "HIGH_STREET" as const,
+          publicStatus: hs.publicStatus || (hs.status === "active" ? "ACTIVE" : hs.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"),
+          shortDescription: hs.description || `High Street in ${areaLocation.name}`,
+        })),
+        childLinkPrefix: `/uk-hub-activation/${citySlug}/${areaSlug}`,
+        sectionTitle: `High Streets in ${areaLocation.name}`,
+        isHighStreet: false,
+      };
+    }
+
+    const matchedStreet = matchedArea?.highStreetsList?.find((hs: any) => hs.slug === streetSlug);
+    const streetLocation = matchedStreet || {
+      id: `hs-${citySlug}-${areaSlug}-${streetSlug}`,
+      name: streetSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+      slug: streetSlug,
+      type: "HIGH_STREET" as const,
+      publicStatus: "ACTIVE",
+      description: `Welcome to ${streetSlug.replace(/-/g, " ")}, a vibrant community high street.`,
+      fundingTarget: 50000,
+      fundingRaised: 22000,
+      foundingBusinessAllocated: 8,
+      foundingConsumerAllocated: 16,
+    };
+
+    return {
+      location: streetLocation,
+      ancestors: [
+        { label: city.name, slug: city.slug, fullPath: city.slug, type: "CITY" as const },
+        { label: areaLocation.name, slug: areaLocation.slug, fullPath: `${city.slug}/${areaLocation.slug}`, type: "LOCAL_AREA" as const },
+      ],
+      children: [],
+      childLinkPrefix: "",
+      sectionTitle: "",
+      isHighStreet: true,
+    };
+  }, [hierarchy, citySlug, areaSlug, streetSlug]);
+
+  if (hierarchyLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading hub location...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!location) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-300">Location Not Found</h1>
-          <p className="mt-4 text-gray-600">The hub location "{locationPath}" doesn't exist.</p>
+          <p className="mt-4 text-gray-600">The hub location "${locationPath}" doesn't exist.</p>
           <Link to="/uk-hub-activation" className="btn-primary mt-6 inline-block">
             ← Back to UK Hub
           </Link>
@@ -385,20 +191,11 @@ export default function CityHubPage() {
     );
   }
 
-  const ancestors = buildAncestors(location);
-  const { children, childLinkPrefix, sectionTitle } = getLocationChildren(location, segments);
-
-  const isHighStreet = location.type === "HIGH_STREET";
-  const citySlug = segments[0] || location.slug;
-  const mapLoc = getHubLocationBySlug(citySlug);
-  const campaigns = mapLoc ? getDemoCampaignsForLocation(mapLoc) : [];
   const activationPct = location.publicStatus === "ACTIVE" ? 100 : location.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
-
-  const cityStats = getCityStats(citySlug);
-  const totalBusinesses = cityStats?.totalBusinesses ?? (location.foundingBusinessAllocated * 10);
-  const totalConsumers = cityStats?.totalConsumers ?? (location.foundingConsumerAllocated * 10);
-  const totalHighStreets = cityStats?.totalHighStreets ?? 0;
-  const totalLocalAreas = cityStats?.totalLocalAreas ?? children.length;
+  const totalBusinesses = (location as any).businessesCount || (location as any).businesses || children.length * 10 || 12;
+  const totalConsumers = totalBusinesses * 12;
+  const totalHighStreets = (hierarchy?.localAreas || []).reduce((acc: number, a: any) => acc + (a.highStreetsList?.length || 0), 0);
+  const totalLocalAreas = hierarchy?.localAreas?.length || children.length;
   const parentPath = ancestors.length > 0
     ? `/uk-hub-activation/${ancestors.map(a => a.slug).join("/")}`
     : "/uk-hub-activation";
@@ -630,7 +427,7 @@ export default function CityHubPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {children.map((child) => {
+              {children.map((child: any) => {
                 const childActivation = child.publicStatus === "ACTIVE" ? 100 : child.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
                 const childLink = `${childLinkPrefix}/${child.slug}`;
                 return (

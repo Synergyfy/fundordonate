@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { leaderboardApi, type Leaderboard, type LeaderboardEntry } from "@/services/leaderboard.service";
+import { leaderboardApi, type Leaderboard, type LeaderboardEntry } from "@/services/leaderboard";
 import { Trophy, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { getLeaderboardEntryAriaLabel } from "@/utils/accessibility";
 

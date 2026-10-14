@@ -11,7 +11,7 @@ import {
   Shield, Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const fmt = (p: number) =>

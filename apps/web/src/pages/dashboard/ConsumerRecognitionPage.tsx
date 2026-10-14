@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Award, Flag, Heart, Info, Medal } from "lucide-react";
-import {
-  listRecognitions,
-  type ConsumerRecognition,
-  type RecognitionIcon,
-} from "@/data/consumerYouData";
+import { userDashboardApi } from "@/services/user-dashboard";
+
+export type RecognitionIcon = "heart" | "flag" | "award";
+
+export interface ConsumerRecognition {
+  id: string;
+  title: string;
+  description: string;
+  context: string;
+  earnedDate: string;
+  icon: RecognitionIcon;
+}
 
 const ICONS: Record<RecognitionIcon, typeof Heart> = {
   heart: Heart,
@@ -26,12 +33,33 @@ export function ConsumerRecognitionPage() {
 
   useEffect(() => {
     let cancelled = false;
-    listRecognitions()
-      .then((list) => {
-        if (!cancelled) {
-          setItems(list);
-          setLoading(false);
+    userDashboardApi.getDonations()
+      .then((res: any) => {
+        if (cancelled) return;
+        const donations = res?.items || (Array.isArray(res) ? res : []);
+        const list: ConsumerRecognition[] = [];
+        if (donations.length > 0) {
+          list.push({
+            id: "rec-first",
+            title: "First Community Contribution",
+            description: "Supported a local high street campaign and contributed to community growth.",
+            context: donations[0].campaign?.title || "Local Campaign",
+            earnedDate: donations[0].createdAt || new Date().toISOString(),
+            icon: "heart",
+          });
         }
+        if (donations.length >= 3) {
+          list.push({
+            id: "rec-champion",
+            title: "High Street Champion",
+            description: "Contributed to 3 or more local campaigns across your community.",
+            context: "High Street Network",
+            earnedDate: donations[2].createdAt || new Date().toISOString(),
+            icon: "award",
+          });
+        }
+        setItems(list);
+        setLoading(false);
       })
       .catch(() => {
         if (!cancelled) {

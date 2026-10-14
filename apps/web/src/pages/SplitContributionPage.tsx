@@ -4,9 +4,9 @@
 // or Donate — or the full amount to a single cause.
 // =============================================================================
 
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getLocationBySlug, getLocationById } from "@/data/ukHubData";
+import { locationService } from "@/services/location";
 import { SplitContribution } from "@/components/hub/SplitContribution";
 
 const HOW_STEPS = [
@@ -19,17 +19,23 @@ const HOW_STEPS = [
 export default function SplitContributionPage() {
   const [searchParams] = useSearchParams();
   const cityParam = searchParams.get("city");
+  const [scopedCity, setScopedCity] = useState<any>(undefined);
 
-  const scopedCity = useMemo(() => {
-    if (!cityParam) return undefined;
-    const loc = getLocationBySlug(cityParam);
-    if (!loc) return undefined;
-    if (loc.type === "CITY") return loc;
-    if (loc.parentId) {
-      const parent = getLocationById(loc.parentId);
-      if (parent && parent.type === "CITY") return parent;
+  useEffect(() => {
+    if (!cityParam) {
+      setScopedCity(undefined);
+      return;
     }
-    return undefined;
+    locationService.getLocationBySlug(cityParam).then((loc) => {
+      if (!loc) return;
+      if (loc.type === "CITY") {
+        setScopedCity(loc);
+      } else if (loc.parentId) {
+        locationService.getLocationById(loc.parentId).then((parent) => {
+          if (parent && parent.type === "CITY") setScopedCity(parent);
+        });
+      }
+    });
   }, [cityParam]);
 
   return (

@@ -7,36 +7,44 @@ import {
   MapPin,
   Search,
 } from "lucide-react";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
+import { campaignService } from "@/services/campaign";
 import {
   getAreaOptions,
   getCityOptions,
-  getCampaignsForScope,
   getStreetOptions,
   scopeToPath,
   type ExploreScope,
-} from "@/data/consumerExploreData";
-import { getConsumerCommunity, setConsumerCommunity } from "@/data/consumerHomeData";
+} from "@/services/explore";
+import { getConsumerCommunity, setConsumerCommunity } from "@/services/community";
 import {
   ChangeLocationModal,
   type LocationApplyPayload,
 } from "@/components/consumer/ChangeLocationModal";
-import type { DemoCampaign } from "@/data/demo";
+import { formatCurrency, formatDate } from "@/utils/formatters";
 
-const formatCurrency = (pence: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+interface ExploreCampaignItem {
+  id: string;
+  slug: string;
+  title: string;
+  shortDescription?: string;
+  mode: string;
+  raisedAmount: number;
+  goalAmount: number;
+  location: string;
+  featuredImage?: string;
+  deadline?: string;
+}
 
 const getModeLabel = (mode: string) => (mode === "fund" ? "Fund" : "Donate");
 
-function getCampaignStatus(deadline: string): { label: string; active: boolean } {
+function getCampaignStatus(deadline?: string): { label: string; active: boolean } {
+  if (!deadline) return { label: "Active", active: true };
   const active = new Date(deadline).getTime() > Date.now();
   return { label: active ? "Active" : "Ended", active };
 }
 
-function ConsumerCampaignCard({ campaign }: { campaign: DemoCampaign }) {
+function ConsumerCampaignCard({ campaign }: { campaign: ExploreCampaignItem }) {
   const pct =
     campaign.goalAmount > 0
       ? Math.min(100, Math.round((campaign.raisedAmount / campaign.goalAmount) * 100))
@@ -152,7 +160,7 @@ export function ConsumerExplorePage() {
   }>();
   const navigate = useNavigate();
   const [season, setSeason] = useState<Season | null>(null);
-  const [campaigns, setCampaigns] = useState<DemoCampaign[]>([]);
+  const [campaigns, setCampaigns] = useState<ExploreCampaignItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -183,16 +191,32 @@ export function ConsumerExplorePage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setCampaigns(
-        getCampaignsForScope({ citySlug: scopeCity, areaSlug: scopeArea, streetSlug: scopeStreet }),
-      );
-      setLoading(false);
-    }, 300);
+    campaignService.list({ status: "ACTIVE", limit: 30 })
+      .then((res: any) => {
+        if (cancelled) return;
+        const items = res?.items || (Array.isArray(res) ? res : []);
+        const mapped = items.map((c: any) => ({
+          id: c.id,
+          slug: c.slug || c.id,
+          title: c.title,
+          mode: (c.category || "donation").toLowerCase(),
+          raisedAmount: c.raisedAmount || 0,
+          goalAmount: c.targetAmount || 1000,
+          location: c.location?.name || "UK High Street",
+          featuredImage: c.imageUrl || "",
+          deadline: c.endDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+        }));
+        setCampaigns(mapped);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCampaigns([]);
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
   }, [scopeCity, scopeArea, scopeStreet]);
 

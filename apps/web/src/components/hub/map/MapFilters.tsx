@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { Filter, Building2, UserRound, X } from "lucide-react";
-import type { HubStatus } from "@/data/hubActivation";
+import type { HubStatus } from "@/types/uk-hub";
 
 export interface MapFiltersState {
   status: HubStatus | "all";
