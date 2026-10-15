@@ -11,13 +11,14 @@ interface Props {
 export function DonationAmountStep({ amount, onChange }: Props) {
   const [customMode, setCustomMode] = useState(false);
   const [customValue, setCustomValue] = useState(
-    amount > 0 && !PRESET_AMOUNTS.includes(amount) ? String(amount / 100) : ""
+    amount > 0 && !PRESET_AMOUNTS.includes(amount / 100) ? String(amount / 100) : ""
   );
 
   const selectPreset = (value: number) => {
     setCustomMode(false);
     setCustomValue("");
-    onChange(value);
+    // Presets are pounds; the canonical amount state is pence.
+    onChange(value * 100);
   };
 
   const handleCustomChange = (val: string) => {
@@ -44,12 +45,12 @@ export function DonationAmountStep({ amount, onChange }: Props) {
             type="button"
             onClick={() => selectPreset(value)}
             className={`rounded-lg border-2 px-3 py-2.5 text-center text-sm font-medium transition-all ${
-              amount === value && !customMode
+              amount === value * 100 && !customMode
                 ? "border-primary-500 bg-primary-50 text-primary-700"
                 : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            ${value >= 1000 ? `${value / 1000}k` : value}
+            £{value >= 1000 ? `${value / 1000}k` : value}
           </button>
         ))}
       </div>
@@ -77,7 +78,7 @@ export function DonationAmountStep({ amount, onChange }: Props) {
       {amount > 0 && (
         <div className="rounded-lg bg-primary-50 px-4 py-3">
           <p className="text-sm text-primary-700">
-            Your donation of <span className="font-semibold">${(amount / 100).toFixed(2)}</span> will make a difference.
+            Your donation of <span className="font-semibold">£{(amount / 100).toFixed(2)}</span> will make a difference.
           </p>
         </div>
       )}

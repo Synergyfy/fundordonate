@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import api from "@/services/api";
 
 interface Tag {
   id: string;
@@ -19,8 +19,8 @@ export function TagManager() {
   const fetchTags = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/tags");
-      setTags(res.data.data);
+      const res = await api.get<Tag[]>("/tags");
+      setTags(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error(err);
     } finally {

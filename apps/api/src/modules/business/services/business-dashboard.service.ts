@@ -58,7 +58,7 @@ export class BusinessDashboardService {
       contributionAgg,
       activeCampaignCount,
       backerCount,
-      rewardsCount,
+      campaignIdRows,
       recentCampaigns,
       teaserTemplate,
       rankInfo,
@@ -90,11 +90,10 @@ export class BusinessDashboardService {
         },
       }),
 
-      // Total earned rewards
-      this.prisma.businessEarnedReward.count({
-        where: {
-          businessId,
-        },
+      // Campaign ids (used to count rewards issued for this business)
+      this.prisma.businessCampaign.findMany({
+        where: { businessId },
+        select: { id: true },
       }),
 
       // Recent active campaigns
@@ -136,6 +135,14 @@ export class BusinessDashboardService {
     ]);
 
     const totalContributed = contributionAgg._sum.amount ?? 0;
+
+    // Rewards issued for this business's campaigns (MCOM Rewards + local mirror)
+    const campaignIds = campaignIdRows.map((c) => c.id);
+    const rewardsCount = campaignIds.length
+      ? await this.prisma.rewardIssuance.count({
+          where: { campaignId: { in: campaignIds } },
+        })
+      : 0;
 
     return {
       stats: {

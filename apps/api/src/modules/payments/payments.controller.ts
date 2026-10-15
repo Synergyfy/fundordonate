@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -82,13 +83,19 @@ export class PaymentsController {
   async handleWebhook(
     @Req() req: Request & { rawBody?: Buffer },
     @Headers("x-mcom-webhook-signature") signature: string,
-    @Body() body: any,
+    @Body() body: Record<string, unknown>,
   ) {
     const rawBody =
       req.rawBody ||
       (Buffer.isBuffer(req.body)
         ? req.body
-        : Buffer.from(typeof body === "string" ? body : JSON.stringify(body)));
+        : typeof req.body === "string"
+        ? Buffer.from(req.body, "utf8")
+        : null);
+
+    if (!rawBody) {
+      throw new BadRequestException("Raw request payload is required for HMAC verification");
+    }
 
     return this.paymentsService.processWebhook(rawBody, signature);
   }

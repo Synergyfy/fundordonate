@@ -20,6 +20,10 @@ interface Transaction {
 export function ThankYouPage() {
   const [searchParams] = useSearchParams();
   const uid = searchParams.get("uid");
+  const reference = searchParams.get("reference");
+  const amountParam = searchParams.get("amount");
+  const campaignParam = searchParams.get("campaign");
+  const statusParam = searchParams.get("status");
   const type = searchParams.get("type") || "donation";
   const method = searchParams.get("method");
   const [transaction, setTransaction] = useState<Transaction | null>(null);
@@ -29,6 +33,25 @@ export function ThankYouPage() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    // New MCOM Pay flow: the charge reference is passed directly, so we can
+    // render the confirmation without a legacy donation/pledge lookup.
+    if (reference) {
+      setTransaction({
+        uid: reference,
+        amount: Number(amountParam) || 0,
+        status: statusParam || "completed",
+        createdAt: new Date().toISOString(),
+        campaign: {
+          id: "",
+          title: campaignParam || "Campaign",
+          slug: "",
+        },
+      });
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     if (!uid) {
       setError("No transaction found");
       setLoading(false);
@@ -47,7 +70,7 @@ export function ThankYouPage() {
       }
     };
     fetchTransaction();
-  }, [uid, type]);
+  }, [uid, reference, amountParam, campaignParam, statusParam, type]);
 
   const handleDownloadReceipt = async () => {
     if (!uid) return;
@@ -238,7 +261,8 @@ export function ThankYouPage() {
           </div>
         </div>
 
-        {/* Receipt & E-Card */}
+        {/* Receipt & E-Card (legacy uid-backed transactions only) */}
+        {uid && (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-gray-900">Receipt & E-Card</h3>
           <div className="mt-3 space-y-3">
@@ -269,6 +293,7 @@ export function ThankYouPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Actions */}
         <div className="mt-4 flex gap-3">

@@ -15,12 +15,8 @@ export const CONFIG = {
   APP_URL: env.VITE_APP_URL || window.location.origin,
   DEMO_MODE: env.VITE_DEMO_MODE === "true",
   NODE_ENV: env.MODE || "development",
-  STRIPE_PUBLISHABLE_KEY:
-    env.VITE_STRIPE_PUBLISHABLE_KEY ||
-    "pk_test_51LXA6lGFql92GKp5ASHqWrABsdtBL3WDjEh6lFltPqt210uSaUfRU4U79mqU5RUhOBV4Ks3aRpF21BnnClQbBhmN000b359X8G",
-  PAYPAL_CLIENT_ID:
-    env.VITE_PAYPAL_CLIENT_ID ||
-    "AeHmWJvBfMkb15hjVIrL88K8mLO9zzaCVC_b53EXSQ-6c163aYzXuV05QZtMsENzoaXK_G0lqyIDDpAY",
+  STRIPE_PUBLISHABLE_KEY: env.VITE_STRIPE_PUBLISHABLE_KEY || "",
+  PAYPAL_CLIENT_ID: env.VITE_PAYPAL_CLIENT_ID || "",
 } as const;
 
 // =============================================================================

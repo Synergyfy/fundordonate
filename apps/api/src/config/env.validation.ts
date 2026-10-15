@@ -39,6 +39,15 @@ const envSchema = z.object({
     .default("false"),
   MCOM_SERVICE_BASE_URL: z.string().optional(),
   MCOM_SERVICE_SCOPES: z.string().optional(),
+
+  // ── Ecosystem peer: MCOM Rewards (direct app-to-app) ──
+  MCOM_REWARDS_BASE_URL: z.string().url().default("http://localhost:4000"),
+  MCOM_REWARDS_AUDIENCE: z.string().default("mcom-rewards"),
+  MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET: z.string().optional(),
+
+  // ── Reward reconciliation safety net ──
+  REWARDS_RECONCILE_ENABLED: z.enum(["true", "false"]).default("true"),
+  REWARDS_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(900000),
 });
 
 export type Env = z.infer<typeof envSchema>;

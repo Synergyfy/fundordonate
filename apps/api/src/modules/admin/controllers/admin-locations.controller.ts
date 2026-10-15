@@ -68,6 +68,24 @@ export class AdminLocationsController {
     return this.locationsService.updateRollupConfig(dto);
   }
 
+  @Post("rollup-config/preview")
+  @ApiOperation({
+    summary: "Preview rollup computation without applying it",
+  })
+  @ApiResponse({ status: 200, description: "Successfully previewed rollup" })
+  async previewRollup() {
+    return this.locationsService.previewRollup();
+  }
+
+  @Post("rollup-config/run")
+  @ApiOperation({
+    summary: "Run the rollup computation and persist activation progress",
+  })
+  @ApiResponse({ status: 200, description: "Rollup completed" })
+  async runRollup() {
+    return this.locationsService.runRollup();
+  }
+
   @Get(":id")
   @ApiOperation({
     summary: "Get hub location details with parent, children, and business stats",

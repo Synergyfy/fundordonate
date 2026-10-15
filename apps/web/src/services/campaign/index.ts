@@ -53,6 +53,7 @@ export const campaignService = {
     tag?: string;
     campaignTypeId?: string;
     seasonId?: string;
+    locationId?: string;
     sortBy?: string;
     sortOrder?: string;
   }): Promise<PaginatedResponse<Campaign>> {
@@ -311,7 +312,7 @@ export const campaignService = {
     try {
       return await api.post("/spillover-rules", rule);
     } catch {
-      return { id: "demo", ...rule };
+      return null;
     }
   },
 

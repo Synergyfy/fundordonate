@@ -237,7 +237,6 @@ export class AdminParticipantsService {
           select: {
             campaigns: true,
             contributions: true,
-            earnedRewards: true,
           },
         },
       },
@@ -247,11 +246,24 @@ export class AdminParticipantsService {
       throw new NotFoundException(`Business with ID ${id} not found`);
     }
 
+    // Rewards issued for this business's campaigns (legacy earnedRewards retired).
+    const campaignIds = (
+      await this.prisma.businessCampaign.findMany({
+        where: { businessId: id },
+        select: { id: true },
+      })
+    ).map((c) => c.id);
+    const rewardsCount = campaignIds.length
+      ? await this.prisma.rewardIssuance.count({
+          where: { campaignId: { in: campaignIds } },
+        })
+      : 0;
+
     return {
       ...business,
       campaignCount: business._count.campaigns,
       contributionCount: business._count.contributions,
-      rewardsCount: business._count.earnedRewards,
+      rewardsCount,
     };
   }
 
@@ -329,7 +341,7 @@ export class AdminParticipantsService {
       ];
     }
 
-    const [total, items] = await Promise.all([
+    const [total, items, foundingCount, activeMembersCount] = await Promise.all([
       this.prisma.user.count({ where }),
       this.prisma.user.findMany({
         where,
@@ -350,6 +362,18 @@ export class AdminParticipantsService {
           },
         },
       }),
+      this.prisma.user.count({
+        where: {
+          ...where,
+          membershipTier: { contains: "FOUNDING", mode: "insensitive" },
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          ...where,
+          membershipStatus: "ACTIVE",
+        },
+      }),
     ]);
 
     return {
@@ -358,6 +382,8 @@ export class AdminParticipantsService {
         donationsCount: c._count.contributions,
       })),
       total,
+      foundingCount,
+      activeMembersCount,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
@@ -387,7 +413,7 @@ export class AdminParticipantsService {
       ];
     }
 
-    const [total, items] = await Promise.all([
+    const [total, users] = await Promise.all([
       this.prisma.user.count({ where }),
       this.prisma.user.findMany({
         where,
@@ -401,25 +427,37 @@ export class AdminParticipantsService {
           lastName: true,
           membershipTier: true,
           createdAt: true,
-          contributions: {
-            where: { status: ContributionStatus.COMPLETED },
-            select: { amount: true },
-          },
         },
       }),
     ]);
 
+    const userIds = users.map((u) => u.id);
+    const agg = userIds.length > 0
+      ? await this.prisma.contribution.groupBy({
+          by: ["backerId"],
+          where: { backerId: { in: userIds }, status: ContributionStatus.COMPLETED },
+          _sum: { amount: true },
+          _count: { id: true },
+        })
+      : [];
+    const aggMap = new Map(
+      agg.map((a) => [a.backerId!, { count: a._count.id, total: a._sum.amount ?? 0 }]),
+    );
+
     return {
-      items: items.map((b) => ({
-        id: b.id,
-        email: b.email,
-        firstName: b.firstName,
-        lastName: b.lastName,
-        membershipTier: b.membershipTier,
-        createdAt: b.createdAt,
-        contributionsCount: b.contributions.length,
-        totalContributed: b.contributions.reduce((sum, c) => sum + c.amount, 0),
-      })),
+      items: users.map((b) => {
+        const stats = aggMap.get(b.id) ?? { count: 0, total: 0 };
+        return {
+          id: b.id,
+          email: b.email,
+          firstName: b.firstName,
+          lastName: b.lastName,
+          membershipTier: b.membershipTier,
+          createdAt: b.createdAt,
+          contributionsCount: stats.count,
+          totalContributed: stats.total,
+        };
+      }),
       total,
       page,
       limit,
@@ -431,7 +469,7 @@ export class AdminParticipantsService {
    * Retrieves founding members with active subscription or founding status.
    */
   async getFoundingMembers() {
-    return this.prisma.user.findMany({
+    const members = await this.prisma.user.findMany({
       where: {
         OR: [
           { membershipStatus: { in: ["active", "founding"] } },
@@ -441,16 +479,63 @@ export class AdminParticipantsService {
       select: {
         id: true,
         email: true,
+        username: true,
         firstName: true,
         lastName: true,
         avatar: true,
+        userType: true,
         membershipTier: true,
         membershipPlanName: true,
         membershipStatus: true,
         subscription: true,
         createdAt: true,
+        businesses: {
+          select: { name: true, city: true },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const userIds = members.map((m) => m.id);
+    const contributionsAgg = userIds.length > 0
+      ? await this.prisma.contribution.groupBy({
+          by: ["backerId"],
+          where: { backerId: { in: userIds }, status: ContributionStatus.COMPLETED },
+          _sum: { amount: true },
+        })
+      : [];
+    const contribMap = new Map(
+      contributionsAgg.map((c) => [c.backerId!, c._sum.amount ?? 0]),
+    );
+
+    return members.map((u) => {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username || u.email;
+      const biz = u.businesses[0];
+      const isSubActive = u.subscription?.isActive ?? false;
+      const rawStatus = (u.membershipStatus || "").toLowerCase();
+      const status = (rawStatus === "active" || rawStatus === "founding" || isSubActive)
+        ? "ACTIVE"
+        : (rawStatus || "EXPIRED").toUpperCase();
+
+      return {
+        id: u.id,
+        email: u.email,
+        name,
+        userName: u.username,
+        businessName: biz?.name ?? null,
+        locationName: biz?.city ?? "National",
+        audience: u.userType === "business" ? "BUSINESS" : "CONSUMER",
+        status,
+        contributionAmount: contribMap.get(u.id) ?? 0,
+        avatar: u.avatar,
+        membershipTier: u.membershipTier,
+        membershipPlanName: u.membershipPlanName,
+        membershipStatus: u.membershipStatus,
+        subscription: u.subscription,
+        createdAt: u.createdAt,
+      };
     });
   }
 }

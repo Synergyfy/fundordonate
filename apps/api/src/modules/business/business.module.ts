@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "@/prisma/prisma.module";
+import { RewardsModule } from "@/modules/rewards/rewards.module";
 
 // Guards
 import { BusinessOwnerGuard } from "./guards/business-owner.guard";
@@ -23,7 +24,7 @@ import { BusinessRewardController } from "./controllers/business-reward.controll
 import { BusinessSettingsController } from "./controllers/business-settings.controller";
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, RewardsModule],
   controllers: [
     BusinessDashboardController,
     BusinessProfileController,

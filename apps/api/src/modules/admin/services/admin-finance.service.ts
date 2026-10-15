@@ -11,10 +11,16 @@ import {
   RefundDonationDto,
   UpdatePayoutStatusDto,
 } from "../dto/finance-admin.dto";
+import { RewardRevokeQueueService } from "@/modules/rewards/services/reward-revoke-queue.service";
+import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
 
 @Injectable()
 export class AdminFinanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rewardRevokeQueue: RewardRevokeQueueService,
+    private readonly rewardIssueQueue: RewardIssueQueueService,
+  ) {}
 
   /**
    * Retrieves a paginated list of contributions/donations with eager relations.
@@ -86,7 +92,15 @@ export class AdminFinanceService {
     ]);
 
     return {
-      items,
+      items: items.map((c) => ({
+        ...c,
+        uid: c.id,
+        status: String(c.status).toLowerCase(),
+        user: c.backer,
+        donorId: c.backerId,
+        campaignId: c.campaignId,
+        isAnonymous: Boolean((c.metadata as Record<string, unknown>)?.isAnonymous),
+      })),
       total,
       page,
       limit,
@@ -95,8 +109,106 @@ export class AdminFinanceService {
   }
 
   /**
-   * Retrieves single transaction detail.
+   * Admin status transition for a contribution/pledge. Adjusts the campaign
+   * raised total and (de)issues rewards to keep the ledger consistent.
    */
+  async updateContributionStatus(id: string, status: string, adminUserId?: string) {
+    const allowed = ["PENDING", "COMPLETED", "FAILED", "REFUNDED"];
+    const next = (status || "").toUpperCase();
+    if (!allowed.includes(next)) {
+      throw new BadRequestException(
+        `Invalid status '${status}'. Allowed: ${allowed.join(", ")}`,
+      );
+    }
+
+    const contribution = await this.prisma.contribution.findUnique({
+      where: { id },
+      include: { campaign: true },
+    });
+    if (!contribution) {
+      throw new NotFoundException(`Contribution with ID ${id} not found`);
+    }
+
+    const wasCompleted = contribution.status === ContributionStatus.COMPLETED;
+    const willBeCompleted = next === ContributionStatus.COMPLETED;
+
+    if (!wasCompleted && willBeCompleted) {
+      const previousCount = contribution.backerId
+        ? await this.prisma.contribution.count({
+            where: {
+              campaignId: contribution.campaignId,
+              backerId: contribution.backerId,
+              status: ContributionStatus.COMPLETED,
+              id: { not: id },
+            },
+          })
+        : 0;
+      const isNewBacker = previousCount === 0 && contribution.type !== "SELF_FUNDING";
+
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.contribution.update({ where: { id }, data: { status: next as ContributionStatus } }),
+        this.prisma.businessCampaign.update({
+          where: { id: contribution.campaignId },
+          data: {
+            raisedAmount: { increment: contribution.amount },
+            ...(isNewBacker ? { backerCount: { increment: 1 } } : {}),
+          },
+        }),
+        this.prisma.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: "CONTRIBUTION_STATUS_COMPLETED",
+            entityType: "contribution",
+            entityId: id,
+            details: { previousStatus: contribution.status, newStatus: next },
+          },
+        }),
+      ]);
+
+      await this.rewardIssueQueue.enqueueContribution(id);
+      return updated;
+    }
+
+    if (wasCompleted && !willBeCompleted) {
+      const remainingCount = contribution.backerId
+        ? await this.prisma.contribution.count({
+            where: {
+              campaignId: contribution.campaignId,
+              backerId: contribution.backerId,
+              status: ContributionStatus.COMPLETED,
+              id: { not: id },
+            },
+          })
+        : 0;
+      const shouldDecrementBacker =
+        contribution.backerId && remainingCount === 0 && contribution.type !== "SELF_FUNDING";
+
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.contribution.update({ where: { id }, data: { status: next as ContributionStatus } }),
+        this.prisma.businessCampaign.update({
+          where: { id: contribution.campaignId },
+          data: {
+            raisedAmount: { decrement: contribution.amount },
+            ...(shouldDecrementBacker ? { backerCount: { decrement: 1 } } : {}),
+          },
+        }),
+        this.prisma.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: "CONTRIBUTION_STATUS_UPDATED",
+            entityType: "contribution",
+            entityId: id,
+            details: { previousStatus: contribution.status, newStatus: next },
+          },
+        }),
+      ]);
+
+      await this.rewardRevokeQueue.enqueueContribution(id);
+      return updated;
+    }
+
+    return this.prisma.contribution.update({ where: { id }, data: { status: next as ContributionStatus } });
+  }
   async getDonation(id: string) {
     const contribution = await this.prisma.contribution.findUnique({
       where: { id },
@@ -133,6 +245,19 @@ export class AdminFinanceService {
 
     const refundAmount = dto.amount || contribution.amount;
 
+    // Check if backer has any remaining completed contributions to this campaign
+    const remainingCount = contribution.backerId
+      ? await this.prisma.contribution.count({
+          where: {
+            campaignId: contribution.campaignId,
+            backerId: contribution.backerId,
+            status: ContributionStatus.COMPLETED,
+            id: { not: id },
+          },
+        })
+      : 0;
+    const shouldDecrementBacker = contribution.backerId && remainingCount === 0;
+
     const [updatedContribution] = await this.prisma.$transaction([
       this.prisma.contribution.update({
         where: { id },
@@ -152,6 +277,7 @@ export class AdminFinanceService {
           raisedAmount: {
             decrement: refundAmount,
           },
+          ...(shouldDecrementBacker ? { backerCount: { decrement: 1 } } : {}),
         },
       }),
       this.prisma.auditLog.create({
@@ -164,6 +290,9 @@ export class AdminFinanceService {
         },
       }),
     ]);
+
+    // Revoke any reward issued for this contribution (durable, idempotent)
+    await this.rewardRevokeQueue.enqueueContribution(id);
 
     return updatedContribution;
   }

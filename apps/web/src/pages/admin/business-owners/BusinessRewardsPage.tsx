@@ -1,47 +1,33 @@
 // =============================================================================
 // Business Owner Rewards — Admin
-// Rewards issued to business owners for their campaigns (frontend demo data).
+// Rewards issued to business owners and supporters for their campaigns (live data).
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, ChevronRight, X, Gift, CheckCircle2, Package } from "lucide-react";
+import { consumerApi } from "@/services/consumer";
+import type { IssuedReward } from "@/types/rewards";
 
 type RewardStatus = "issued" | "claimed" | "expired";
-type RewardCategory = "Backer" | "Founding Member" | "Donation" | "Custom";
 
-interface BusinessReward {
+interface FormattedReward {
   id: string;
   name: string;
   business: string;
   owner: string;
   campaign: string;
-  category: RewardCategory;
+  category: string;
   status: RewardStatus;
   value: number; // £
   issuedAt: string;
+  code?: string | null;
 }
-
-const DEMO_BUSINESS_REWARDS: BusinessReward[] = [
-  { id: "rw-1", name: "Standard Backer Reward", business: "TechStart Manchester", owner: "James Wilson", campaign: "Manchester Tech Hub Launch", category: "Backer", status: "claimed", value: 10, issuedAt: "2026-09-20" },
-  { id: "rw-3", name: "Founding Member Reward", business: "Community Fund London", owner: "Michael Okafor", campaign: "London Community Garden", category: "Founding Member", status: "claimed", value: 100, issuedAt: "2026-09-16" },
-  { id: "rw-4", name: "E-Card Thank You", business: "Digital Skills Leeds", owner: "Emma Thompson", campaign: "Leeds Digital Skills Programme", category: "Donation", status: "claimed", value: 5, issuedAt: "2026-09-14" },
-  { id: "rw-5", name: "Cashback Reward", business: "Liverpool Green Spaces", owner: "Lisa Patel", campaign: "Liverpool Youth Fund", category: "Custom", status: "issued", value: 50, issuedAt: "2026-09-12" },
-  { id: "rw-6", name: "Loyalty Points Pack", business: "Bristol Tech Hub", owner: "David Brown", campaign: "Bristol Arts Centre", category: "Custom", status: "expired", value: 25, issuedAt: "2026-08-02" },
-  { id: "rw-7", name: "Standard Backer Reward", business: "TechStart Manchester", owner: "James Wilson", campaign: "Oldham Street Shopfront Fix", category: "Backer", status: "expired", value: 10, issuedAt: "2026-07-18" },
-];
 
 const STATUS_META: Record<RewardStatus, { label: string; color: string }> = {
   issued: { label: "Issued", color: "bg-blue-100 text-blue-700" },
   claimed: { label: "Claimed", color: "bg-green-100 text-green-700" },
   expired: { label: "Expired", color: "bg-gray-100 text-gray-500" },
-};
-
-const CATEGORY_COLORS: Record<RewardCategory, string> = {
-  Backer: "bg-purple-100 text-purple-700",
-  "Founding Member": "bg-amber-100 text-amber-700",
-  Donation: "bg-blue-100 text-blue-700",
-  Custom: "bg-pink-100 text-pink-700",
 };
 
 const gbp = (v: number) =>
@@ -59,30 +45,73 @@ const TABS: { value: StatusTab; label: string }[] = [
 ];
 
 export function BusinessRewardsPage() {
+  const [rewards, setRewards] = useState<FormattedReward[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<StatusTab>("all");
-  const [selected, setSelected] = useState<BusinessReward | null>(null);
+  const [selected, setSelected] = useState<FormattedReward | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadRewards() {
+      setLoading(true);
+      try {
+        const res = await consumerApi.getRewards({ limit: 50 });
+        if (!mounted) return;
+        const items = res?.items || [];
+        const mapped: FormattedReward[] = items.map((r: IssuedReward) => {
+          const statusRaw = (r.status || "ISSUED").toLowerCase();
+          const normStatus: RewardStatus =
+            statusRaw === "redeemed" ? "claimed" : statusRaw === "expired" ? "expired" : "issued";
+
+          return {
+            id: r.id,
+            name: r.title,
+            business: r.campaignLocation || "UK Hub Partner",
+            owner: "Participant",
+            campaign: r.campaignTitle || "Campaign Reward",
+            category: r.rewardType || "Campaign Tier",
+            status: normStatus,
+            value: r.value || 10,
+            issuedAt: r.earnedAt || r.updatedAt || new Date().toISOString(),
+            code: r.code,
+          };
+        });
+        setRewards(mapped);
+      } catch (err) {
+        console.error("Failed to load business rewards:", err);
+        if (mounted) setRewards([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadRewards();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filtered = useMemo(
     () =>
-      DEMO_BUSINESS_REWARDS.filter((r) => {
+      rewards.filter((r) => {
         const q = search.toLowerCase();
         if (search && !r.name.toLowerCase().includes(q) && !r.business.toLowerCase().includes(q) && !r.owner.toLowerCase().includes(q)) return false;
         if (activeTab !== "all" && r.status !== activeTab) return false;
         return true;
       }),
-    [search, activeTab]
+    [rewards, search, activeTab]
   );
 
   const stats = useMemo(() => {
-    const claimed = DEMO_BUSINESS_REWARDS.filter((r) => r.status === "claimed");
+    const claimed = rewards.filter((r) => r.status === "claimed");
     return {
-      total: DEMO_BUSINESS_REWARDS.length,
+      total: rewards.length,
       claimed: claimed.length,
-      pending: DEMO_BUSINESS_REWARDS.filter((r) => r.status === "issued").length,
+      pending: rewards.filter((r) => r.status === "issued").length,
       value: claimed.reduce((sum, r) => sum + r.value, 0),
     };
-  }, []);
+  }, [rewards]);
 
   return (
     <div className="space-y-6">
@@ -146,69 +175,101 @@ export function BusinessRewardsPage() {
         </div>
       </div>
 
-      {/* List */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.length === 0 && (
-          <div className="col-span-full rounded-xl border bg-white p-10 text-center text-sm text-gray-400">
-            No rewards match your filters.
-          </div>
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {loading ? (
+          <div className="p-12 text-center text-sm text-gray-400">Loading rewards...</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center text-sm text-gray-500">No rewards found.</div>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-100 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-gray-700">Reward</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Campaign</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Category</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Status</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-right">Value</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Issued Date</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((r) => (
+                <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900">{r.name}</div>
+                    {r.code && <div className="text-[10px] font-mono text-gray-500">{r.code}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{r.campaign}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                      {r.category}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_META[r.status]?.color || "bg-gray-100 text-gray-600"}`}>
+                      {STATUS_META[r.status]?.label || r.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{gbp(r.value)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{dateFmt(r.issuedAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => setSelected(r)}
+                      className="rounded border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                    >
+                      Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
-        {filtered.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => setSelected(r)}
-            className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50">
-                  <Gift className="h-4 w-4 text-primary-600" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{r.name}</p>
-                  <p className="text-xs text-gray-400">{r.business}</p>
-                </div>
-              </div>
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_META[r.status].color}`}>
-                {STATUS_META[r.status].label}
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium ${CATEGORY_COLORS[r.category]}`}>{r.category}</span>
-              <span className="inline-flex rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">{gbp(r.value)}</span>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-              <span className="truncate">{r.owner}</span>
-              <span>{dateFmt(r.issuedAt)}</span>
-            </div>
-          </button>
-        ))}
       </div>
 
-      {/* Details modal */}
+      {/* Drawer */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Reward Details</h2>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
-                <X className="h-5 w-5" />
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white p-6 shadow-xl overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b">
+              <h2 className="text-lg font-bold text-gray-900">Reward Details</h2>
+              <button onClick={() => setSelected(null)} className="rounded p-1 hover:bg-gray-100">
+                <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Reward</span><span className="text-right font-medium text-gray-800">{selected.name}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Business</span><span className="text-right text-gray-800">{selected.business}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Owner</span><span className="text-gray-800">{selected.owner}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Campaign</span><span className="text-right text-gray-800">{selected.campaign}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Category</span><span className="text-gray-800">{selected.category}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Value</span><span className="font-semibold text-gray-900">{gbp(selected.value)}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Status</span><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_META[selected.status].color}`}>{STATUS_META[selected.status].label}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Issued</span><span className="text-gray-800">{dateFmt(selected.issuedAt)}</span></div>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button onClick={() => setSelected(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                Close
-              </button>
+            <div className="mt-4 space-y-4 text-sm">
+              <div>
+                <span className="text-xs text-gray-400">Reward Name</span>
+                <p className="font-semibold text-gray-900">{selected.name}</p>
+              </div>
+              {selected.code && (
+                <div>
+                  <span className="text-xs text-gray-400">Redemption Code</span>
+                  <p className="font-mono font-bold text-gray-900">{selected.code}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-xs text-gray-400">Campaign</span>
+                <p className="text-gray-800">{selected.campaign}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Value</span>
+                <p className="font-bold text-gray-900">{gbp(selected.value)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Status</span>
+                <p>
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_META[selected.status]?.color || "bg-gray-100"}`}>
+                    {STATUS_META[selected.status]?.label || selected.status}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Issued Date</span>
+                <p className="text-gray-700">{dateFmt(selected.issuedAt)}</p>
+              </div>
             </div>
           </div>
         </div>

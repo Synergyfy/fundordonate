@@ -1,7 +1,8 @@
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "@/prisma/prisma.module";
 import { BullModule } from "@nestjs/bullmq";
-import { ADMIN_TASKS_QUEUE, AdminTasksProcessor } from "./processors/admin-tasks.processor";
+import { AdminTasksProcessor } from "./processors/admin-tasks.processor";
+import { ADMIN_TASKS_QUEUE } from "./processors/admin-tasks.constants";
 
 // Guards
 import { AdminGuard } from "./guards/admin.guard";
@@ -11,10 +12,11 @@ import { AdminDashboardService } from "./services/admin-dashboard.service";
 import { AdminSeasonsService } from "./services/admin-seasons.service";
 import { AdminLocationsService } from "./services/admin-locations.service";
 import { AdminCampaignsService } from "./services/admin-campaigns.service";
+import { CampaignSchedulerService } from "./services/campaign-scheduler.service";
 import { AdminParticipantsService } from "./services/admin-participants.service";
 import { AdminFinanceService } from "./services/admin-finance.service";
-import { AdminRewardsService } from "./services/admin-rewards.service";
 import { AdminSystemService } from "./services/admin-system.service";
+import { AdminRewardsService } from "./services/admin-rewards.service";
 
 // Controllers
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
@@ -23,12 +25,15 @@ import { AdminLocationsController } from "./controllers/admin-locations.controll
 import { AdminCampaignsController } from "./controllers/admin-campaigns.controller";
 import { AdminParticipantsController } from "./controllers/admin-participants.controller";
 import { AdminFinanceController } from "./controllers/admin-finance.controller";
-import { AdminRewardsController } from "./controllers/admin-rewards.controller";
 import { AdminSystemController } from "./controllers/admin-system.controller";
+import { AdminRewardsController } from "./controllers/admin-rewards.controller";
+
+import { RewardsModule } from "../rewards/rewards.module";
 
 @Module({
   imports: [
     PrismaModule,
+    RewardsModule,
     BullModule.registerQueue({
       name: ADMIN_TASKS_QUEUE,
     }),
@@ -40,8 +45,8 @@ import { AdminSystemController } from "./controllers/admin-system.controller";
     AdminCampaignsController,
     AdminParticipantsController,
     AdminFinanceController,
-    AdminRewardsController,
     AdminSystemController,
+    AdminRewardsController,
   ],
   providers: [
     AdminGuard,
@@ -50,10 +55,11 @@ import { AdminSystemController } from "./controllers/admin-system.controller";
     AdminSeasonsService,
     AdminLocationsService,
     AdminCampaignsService,
+    CampaignSchedulerService,
     AdminParticipantsService,
     AdminFinanceService,
-    AdminRewardsService,
     AdminSystemService,
+    AdminRewardsService,
   ],
   exports: [
     AdminGuard,
@@ -63,8 +69,8 @@ import { AdminSystemController } from "./controllers/admin-system.controller";
     AdminCampaignsService,
     AdminParticipantsService,
     AdminFinanceService,
-    AdminRewardsService,
     AdminSystemService,
+    AdminRewardsService,
   ],
 })
 export class AdminModule {}

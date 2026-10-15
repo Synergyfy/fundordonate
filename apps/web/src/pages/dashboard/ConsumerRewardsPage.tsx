@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -7,37 +7,15 @@ import {
   Gift,
   MapPin,
 } from "lucide-react";
-import { userDashboardApi } from "@/services/user-dashboard";
+import { consumerService } from "@/services/consumer";
+import { REWARD_CATEGORY_META, type IssuedReward } from "@/types/rewards";
 
-export type RewardStatus = "available" | "claimed" | "redeemed";
-
-export interface ConsumerRewardEntitlement {
-  id: string;
-  rewardId: string;
-  title: string;
-  description: string;
-  condition: string;
-  campaignSlug: string;
-  campaignTitle: string;
-  campaignImage?: string;
-  campaignLocation: string;
-  contributionAmount: number;
-  reference: string;
-  status: RewardStatus;
-  earnedAt: string;
-  expiryDate: string;
-  fulfilmentType: string;
-  rewardType: string;
-  items: string[];
-  code: string;
-}
-
-type TabId = "available" | "earned" | "redeemed";
+type TabId = "available" | "redeemed" | "expired";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "available", label: "Available" },
-  { id: "earned", label: "Earned" },
   { id: "redeemed", label: "Redeemed" },
+  { id: "expired", label: "Expired" },
 ];
 
 const formatDate = (iso: string) =>
@@ -47,14 +25,45 @@ const formatDate = (iso: string) =>
     year: "numeric",
   });
 
-const STATUS_META: Record<RewardStatus, { label: string; className: string }> = {
-  available: { label: "Available", className: "bg-amber-50 text-amber-700" },
-  claimed: { label: "Earned", className: "bg-blue-50 text-blue-700" },
-  redeemed: { label: "Redeemed", className: "bg-green-50 text-green-700" },
+const CATEGORY_META: Record<string, { label: string; color: string }> = {
+  ...REWARD_CATEGORY_META,
 };
 
-function RewardCard({ reward }: { reward: ConsumerRewardEntitlement }) {
-  const status = STATUS_META[reward.status];
+/** Which list tab an issuance belongs to. */
+function tabFor(status: string): TabId {
+  switch (status?.toUpperCase()) {
+    case "REDEEMED":
+      return "redeemed";
+    case "EXPIRED":
+    case "REVOKED":
+      return "expired";
+    case "ISSUED":
+    case "FAILED": // needs activation — surface it as actionable, not expired
+    default:
+      return "available";
+  }
+}
+
+function statusLabel(status: string): { label: string; className: string } {
+  switch (status?.toUpperCase()) {
+    case "REDEEMED":
+      return { label: "Redeemed", className: "bg-green-50 text-green-700" };
+    case "EXPIRED":
+      return { label: "Expired", className: "bg-gray-100 text-gray-600" };
+    case "REVOKED":
+      return { label: "Revoked", className: "bg-red-50 text-red-700" };
+    case "FAILED":
+      return { label: "Action required", className: "bg-amber-50 text-amber-700" };
+    case "ISSUED":
+    default:
+      return { label: "Available", className: "bg-amber-50 text-amber-700" };
+  }
+}
+
+function RewardCard({ reward }: { reward: IssuedReward }) {
+  const status = statusLabel(reward.status);
+  const category = reward.rewardType ? CATEGORY_META[reward.rewardType] : undefined;
+
   return (
     <article className="group rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex gap-3">
@@ -81,19 +90,27 @@ function RewardCard({ reward }: { reward: ConsumerRewardEntitlement }) {
               {status.label}
             </span>
           </div>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-            <span className="truncate">{reward.campaignTitle}</span>
-          </p>
-          <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-600">
-            <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-500" />
-            <span>{reward.condition}</span>
-          </p>
+          {reward.campaignTitle && (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+              <span className="truncate">{reward.campaignTitle}</span>
+            </p>
+          )}
+          {category && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-600">
+              <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-500" />
+              <span>{category.label}</span>
+            </p>
+          )}
           <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <CalendarClock className="h-3.5 w-3.5" />
-              {formatDate(reward.expiryDate)}
-            </span>
+            {reward.expiresAt ? (
+              <span className="flex items-center gap-1 text-xs text-gray-400">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {formatDate(reward.expiresAt)}
+              </span>
+            ) : (
+              <span />
+            )}
             <Link
               to={`/consumer/rewards/${reward.id}`}
               className="inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700"
@@ -111,17 +128,17 @@ function RewardCard({ reward }: { reward: ConsumerRewardEntitlement }) {
 const EMPTY_COPY: Record<TabId, { title: string; body: string; cta: string }> = {
   available: {
     title: "No rewards available yet",
-    body: "Rewards you qualify for will show up here.",
+    body: "Rewards you qualify for will show up here once they are issued.",
     cta: "Explore Campaigns",
-  },
-  earned: {
-    title: "No earned rewards yet",
-    body: "Claim an available reward and it will move here.",
-    cta: "View Available Rewards",
   },
   redeemed: {
     title: "No redeemed rewards yet",
-    body: "Rewards you open will appear here.",
+    body: "Rewards you redeem will appear here.",
+    cta: "View Available Rewards",
+  },
+  expired: {
+    title: "No expired rewards",
+    body: "Expired or revoked rewards will appear here.",
     cta: "View Available Rewards",
   },
 };
@@ -130,37 +147,17 @@ export function ConsumerRewardsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: TabId =
-    tabParam === "earned" || tabParam === "redeemed" ? tabParam : "available";
-  const [rewards, setRewards] = useState<ConsumerRewardEntitlement[]>([]);
+    tabParam === "redeemed" || tabParam === "expired" ? tabParam : "available";
+  const [rewards, setRewards] = useState<IssuedReward[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    userDashboardApi.getDonations()
-      .then((res: any) => {
+    consumerService
+      .getRewards({ limit: 100 })
+      .then((res) => {
         if (cancelled) return;
-        const raw = res?.items || (Array.isArray(res) ? res : []);
-        const list: ConsumerRewardEntitlement[] = raw.map((d: any, idx: number) => ({
-          id: d.id,
-          rewardId: `rwd-${d.id}`,
-          title: d.campaign?.title ? `${d.campaign.title} Supporter Reward` : "Community Supporter Reward",
-          description: "Exclusive reward unlocked from your campaign contribution.",
-          condition: "Completed qualifying contribution",
-          campaignSlug: d.campaign?.id || "",
-          campaignTitle: d.campaign?.title || "Community Campaign",
-          campaignImage: d.campaign?.imageUrl,
-          campaignLocation: d.business?.city || "Local High Street",
-          contributionAmount: d.amount || 0,
-          reference: d.id?.slice(0, 8)?.toUpperCase(),
-          status: idx === 0 ? "available" : "claimed",
-          earnedAt: d.createdAt || new Date().toISOString(),
-          expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-          fulfilmentType: "internal",
-          rewardType: "digital",
-          items: ["Digital Voucher", "Community Badge"],
-          code: `FOD-${d.id?.slice(0, 8)?.toUpperCase()}`,
-        }));
-        setRewards(list);
+        setRewards(res?.items ?? []);
         setLoading(false);
       })
       .catch(() => {
@@ -181,7 +178,10 @@ export function ConsumerRewardsPage() {
     setSearchParams(next, { replace: true });
   };
 
-  const visible = rewards.filter((r) => r.status === tab);
+  const visible = useMemo(
+    () => rewards.filter((r) => tabFor(r.status) === tab),
+    [rewards, tab],
+  );
   const empty = EMPTY_COPY[tab];
 
   return (

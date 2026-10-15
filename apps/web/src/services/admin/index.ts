@@ -23,8 +23,12 @@ import type {
   CreateLocationPayload,
   CreateRewardPayload,
   CreateSeasonPayload,
+  DuplicateCampaignTemplatePayload,
   FinanceOverview,
+  InstantiateCampaignTemplatePayload,
+  InstantiateCampaignTemplateResult,
   LocationTreeResponse,
+  McomRewardCataloguePage,
   PaginatedResponse,
   RecentContribution,
   RequestCampaignChangesPayload,
@@ -32,6 +36,7 @@ import type {
   SeasonActionPayload,
   SeasonReviewData,
   TargetCalculationResult,
+  TemplateInstance,
   UpdateCampaignStatusPayload,
   UpdateCampaignTemplatePayload,
   UpdateEventPayload,
@@ -214,6 +219,52 @@ export const adminService = {
 
   async updateTemplate(id: string, payload: UpdateCampaignTemplatePayload): Promise<AdminCampaignTemplate> {
     return api.put(`/admin/campaigns/templates/${id}`, payload);
+  },
+
+  async updateTemplateStatus(
+    id: string,
+    status: AdminCampaignTemplate["status"],
+  ): Promise<AdminCampaignTemplate> {
+    return api.put(`/admin/campaigns/templates/${id}/status`, { status });
+  },
+
+  async duplicateTemplate(
+    id: string,
+    payload: DuplicateCampaignTemplatePayload = {},
+  ): Promise<AdminCampaignTemplate> {
+    return api.post(`/admin/campaigns/templates/${id}/duplicate`, payload);
+  },
+
+  async instantiateTemplate(
+    id: string,
+    payload: InstantiateCampaignTemplatePayload,
+  ): Promise<InstantiateCampaignTemplateResult> {
+    return api.post(`/admin/campaigns/templates/${id}/instantiate`, payload);
+  },
+
+  async getTemplateInstances(id: string): Promise<TemplateInstance[]> {
+    return api.get(`/admin/campaigns/templates/${id}/instances`);
+  },
+
+  /** Browse the MCOM Rewards catalogue (proxied through the service mesh). */
+  async getMcomRewards(
+    params: { page?: number; limit?: number; search?: string; rewardType?: string; audience?: string } = {},
+  ): Promise<McomRewardCataloguePage> {
+    return api.get("/admin/mcom-rewards", { params });
+  },
+
+  /** Issue a catalogued MCOM reward to a recipient. */
+  async issueMcomReward(payload: {
+    mcomRewardId: string;
+    email?: string;
+    mcomUserId?: string;
+    name?: string;
+    campaignId?: string;
+    userId?: string;
+    rewardConfigId?: string;
+    quantity?: number;
+  }): Promise<unknown> {
+    return api.post("/admin/mcom-rewards/issue", payload);
   },
 
   async calculateTargets(params: {

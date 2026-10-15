@@ -3,8 +3,8 @@
 // Manage preconfigured reward structures for quick campaign setup.
 // =============================================================================
 
-import { useState } from "react";
-import { ArrowLeft, Plus, Pencil, Copy, Trash2, Award, Star, Gift, Tag, BarChart3, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Plus, Pencil, Copy, Trash2, Award, Star, Gift, Tag, BarChart3, Search, Loader2 } from "lucide-react";
 
 interface TemplateItem {
   title: string;
@@ -27,75 +27,7 @@ interface RewardTemplate {
   itemsCount: number;
   usageCount: number;
 }
-
-const DEMO_TEMPLATES: RewardTemplate[] = [
-  {
-    id: "tpl-1",
-    name: "Standard Backer Reward",
-    description: "A standard reward for campaign backers with minimum contribution trigger",
-    category: "backer",
-    audience: "both",
-    rewardType: "standard",
-    triggerMode: "min",
-    triggerMin: 10,
-    fulfilmentType: "manual",
-    itemsCount: 1,
-    usageCount: 24,
-  },
-  {
-    id: "tpl-2",
-    name: "Founding Member Reward",
-    description: "Exclusive reward for founding members with special recognition",
-    category: "founding_member",
-    audience: "both",
-    rewardType: "standard",
-    triggerMode: "min",
-    triggerMin: 100,
-    fulfilmentType: "internal",
-    itemsCount: 3,
-    usageCount: 12,
-  },
-  {
-    id: "tpl-3",
-    name: "E-Card Thank You",
-    description: "Digital e-card sent as a thank you for contributions",
-    category: "donation",
-    audience: "consumer",
-    rewardType: "ecard",
-    triggerMode: "min",
-    triggerMin: 5,
-    fulfilmentType: "external_link",
-    itemsCount: 1,
-    usageCount: 45,
-  },
-  {
-    id: "tpl-4",
-    name: "Cashback Reward",
-    description: "Percentage cashback on contribution amount",
-    category: "custom",
-    audience: "business",
-    rewardType: "cashback",
-    triggerMode: "range",
-    triggerMin: 50,
-    triggerMax: 500,
-    fulfilmentType: "internal",
-    itemsCount: 1,
-    usageCount: 8,
-  },
-  {
-    id: "tpl-5",
-    name: "Loyalty Points Pack",
-    description: "Award loyalty points based on contribution level",
-    category: "custom",
-    audience: "both",
-    rewardType: "points",
-    triggerMode: "min",
-    triggerMin: 25,
-    fulfilmentType: "webhook",
-    itemsCount: 2,
-    usageCount: 18,
-  },
-];
+import { adminApi } from "@/services/admin";
 
 const CATEGORY_OPTIONS = [
   { value: "backer", label: "Backer" },
@@ -162,12 +94,50 @@ function getDefaultForm() {
 }
 
 export function RewardTemplatesPage() {
-  const [templates, setTemplates] = useState<RewardTemplate[]>(DEMO_TEMPLATES);
+  const [templates, setTemplates] = useState<RewardTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(getDefaultForm());
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadTemplates() {
+      setLoading(true);
+      try {
+        const res = await adminApi.getRewards();
+        if (!mounted) return;
+        const mapped: RewardTemplate[] = (res || []).map((r: any, idx: number) => {
+          const criteria = r.criteria || {};
+          return {
+            id: r.id || `tpl-${idx}`,
+            name: r.name || "Reward Template",
+            description: r.description || "",
+            category: criteria.category || "backer",
+            audience: criteria.audience || "both",
+            rewardType: r.code?.toLowerCase().includes("card") ? "ecard" : r.code?.toLowerCase().includes("cash") ? "cashback" : "standard",
+            triggerMode: criteria.triggerMode || "min",
+            triggerMin: Number(criteria.minAmount || criteria.triggerMin) || 10,
+            triggerMax: criteria.maxAmount ? Number(criteria.maxAmount) : undefined,
+            fulfilmentType: criteria.fulfilmentType || "manual",
+            itemsCount: criteria.items?.length || 1,
+            usageCount: r.grantedCount || 0,
+          };
+        });
+        setTemplates(mapped);
+      } catch (err) {
+        console.error("Failed to load reward templates", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    loadTemplates();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filtered = templates.filter((t) => {
     const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
@@ -350,7 +320,13 @@ export function RewardTemplatesPage() {
         </div>
 
         {/* Templates Grid */}
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-gray-500 gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
+            <span>Loading reward templates...</span>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((template) => {
             const Icon = REWARD_TYPE_ICONS[template.rewardType] || Award;
             const categoryColor = CATEGORY_COLORS[template.category] || "bg-gray-100 text-gray-700";
@@ -441,8 +417,9 @@ export function RewardTemplatesPage() {
             );
           })}
         </div>
+        )}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-12">
             <Award className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">No templates found.</p>

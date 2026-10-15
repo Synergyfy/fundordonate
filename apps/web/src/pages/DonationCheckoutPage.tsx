@@ -75,7 +75,8 @@ export function DonationCheckoutPage() {
     }
   };
 
-  const amountInPence = amount >= 100 ? amount : amount * 100;
+  // `amount` is already held in pence (see DonationAmountStep).
+  const amountInPence = amount;
 
   const handleSubmit = async () => {
     if (!campaign) return;

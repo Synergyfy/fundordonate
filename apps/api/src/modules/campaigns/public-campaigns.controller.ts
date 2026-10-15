@@ -28,6 +28,17 @@ export class PublicCampaignsController {
     return this.campaignsService.getBySlug(slug);
   }
 
+  @Get(":id/rewards")
+  @ApiOperation({
+    summary: "Get public reward rules for a campaign",
+    description:
+      "Returns the campaign's reward rules (no codes/recipient data) for the campaign page and pledge checkout reward selection.",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved campaign rewards" })
+  async getRewards(@Param("id") id: string) {
+    return this.campaignsService.getRewards(id);
+  }
+
   @Get(":id")
   @ApiOperation({
     summary: "Get public campaign by ID",

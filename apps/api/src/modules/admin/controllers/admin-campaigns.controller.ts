@@ -6,7 +6,6 @@ import {
   Post,
   Put,
   Query,
-  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -16,17 +15,20 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
+import { CurrentUser } from "@/auth/decorators/current-user.decorator";
 import { AdminGuard } from "../guards/admin.guard";
 import { AdminCampaignsService } from "../services/admin-campaigns.service";
 import {
   AdminCampaignQueryDto,
   BulkCampaignActionDto,
   CreateCampaignTemplateDto,
+  DuplicateCampaignTemplateDto,
+  InstantiateCampaignTemplateDto,
   RequestCampaignChangesDto,
   UpdateCampaignStatusDto,
   UpdateCampaignTemplateDto,
+  UpdateCampaignTemplateStatusDto,
 } from "../dto/campaign-admin.dto";
-import { Request } from "express";
 
 @ApiTags("Admin Campaigns")
 @ApiBearerAuth()
@@ -67,8 +69,11 @@ export class AdminCampaignsController {
     summary: "Create a new campaign template blueprint",
   })
   @ApiResponse({ status: 201, description: "Template created successfully" })
-  async createTemplate(@Body() dto: CreateCampaignTemplateDto) {
-    return this.campaignsService.createTemplate(dto);
+  async createTemplate(
+    @Body() dto: CreateCampaignTemplateDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.createTemplate(dto, adminUserId);
   }
 
   @Put("templates/:id")
@@ -76,8 +81,60 @@ export class AdminCampaignsController {
     summary: "Update an existing campaign template blueprint",
   })
   @ApiResponse({ status: 200, description: "Template updated successfully" })
-  async updateTemplate(@Param("id") id: string, @Body() dto: UpdateCampaignTemplateDto) {
-    return this.campaignsService.updateTemplate(id, dto);
+  async updateTemplate(
+    @Param("id") id: string,
+    @Body() dto: UpdateCampaignTemplateDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.updateTemplate(id, dto, adminUserId);
+  }
+
+  @Put("templates/:id/status")
+  @ApiOperation({
+    summary: "Update a template's lifecycle status (draft/active/inactive/archived)",
+  })
+  @ApiResponse({ status: 200, description: "Template status updated successfully" })
+  async updateTemplateStatus(
+    @Param("id") id: string,
+    @Body() dto: UpdateCampaignTemplateStatusDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.updateTemplateStatus(id, dto, adminUserId);
+  }
+
+  @Post("templates/:id/duplicate")
+  @ApiOperation({
+    summary: "Clone an existing campaign template into a new draft",
+  })
+  @ApiResponse({ status: 201, description: "Template duplicated successfully" })
+  async duplicateTemplate(
+    @Param("id") id: string,
+    @Body() dto: DuplicateCampaignTemplateDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.duplicateTemplate(id, dto, adminUserId);
+  }
+
+  @Post("templates/:id/instantiate")
+  @ApiOperation({
+    summary: "Instantiate a template for one or more businesses (background for large batches)",
+  })
+  @ApiResponse({ status: 201, description: "Template instantiation initiated" })
+  async instantiateTemplate(
+    @Param("id") id: string,
+    @Body() dto: InstantiateCampaignTemplateDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.instantiateTemplate(id, dto, adminUserId);
+  }
+
+  @Get("templates/:id/instances")
+  @ApiOperation({
+    summary: "List campaign instances spawned from a template",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved template instances" })
+  async getTemplateInstances(@Param("id") id: string) {
+    return this.campaignsService.getTemplateInstances(id);
   }
 
   @Get("targets/calculation")
@@ -114,9 +171,8 @@ export class AdminCampaignsController {
   async updateCampaignStatus(
     @Param("id") id: string,
     @Body() dto: UpdateCampaignStatusDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.campaignsService.updateCampaignStatus(id, dto, adminUserId);
   }
 
@@ -128,9 +184,8 @@ export class AdminCampaignsController {
   async requestChanges(
     @Param("id") id: string,
     @Body() dto: RequestCampaignChangesDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.campaignsService.requestChanges(id, dto, adminUserId);
   }
 
@@ -139,8 +194,10 @@ export class AdminCampaignsController {
     summary: "Bulk update status of multiple campaigns",
   })
   @ApiResponse({ status: 200, description: "Bulk action initiated or queued" })
-  async bulkAction(@Body() dto: BulkCampaignActionDto, @Req() req: Request) {
-    const adminUserId = (req.user as any)?.id;
+  async bulkAction(
+    @Body() dto: BulkCampaignActionDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
     return this.campaignsService.bulkAction(dto, adminUserId);
   }
 }

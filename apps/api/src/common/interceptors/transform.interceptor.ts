@@ -13,9 +13,32 @@ export interface ApiResponse<T> {
   timestamp: string;
 }
 
+function serializeData(val: unknown): unknown {
+  if (val === null || val === undefined) {
+    return val;
+  }
+  if (typeof val === "bigint") {
+    return Number(val);
+  }
+  if (val instanceof Date) {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map(serializeData);
+  }
+  if (typeof val === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries(val)) {
+      out[key] = serializeData(prop);
+    }
+    return out;
+  }
+  return val;
+}
+
 /**
  * Wraps every successful controller response in a consistent envelope:
- * `{ success: true, data, timestamp }`.
+ * `{ success: true, data, timestamp }`. Safely converts BigInt values to Numbers.
  */
 @Injectable()
 export class TransformInterceptor implements NestInterceptor {
@@ -23,7 +46,7 @@ export class TransformInterceptor implements NestInterceptor {
     return next.handle().pipe(
       map((data: unknown): ApiResponse<unknown> => ({
         success: true,
-        data,
+        data: serializeData(data),
         timestamp: new Date().toISOString(),
       })),
     );

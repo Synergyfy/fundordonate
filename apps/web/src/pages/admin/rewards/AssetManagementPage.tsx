@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Plus, Search, Download, Copy, Edit, Trash2, Archive,
   Package, Globe, Database, CheckCircle,
@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { FileUpload } from "../../../components/ui/FileUpload";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { adminApi } from "@/services/admin";
 import {
   getMcomPlatforms, setMcomPlatformConnected, getMcomPlatformAssets, updateMcomPlatform,
   MCOM_GROUP_META, type McomPlatform, type McomPlatformGroup,
@@ -42,12 +43,20 @@ const STATUS_CONFIG: Record<AssetStatus, { label: string; color: string; bg: str
 
 const EXTERNAL_TYPES = ["API", "Webhook", "RSS", "Feed"];
 
-const DEMO_EXTERNAL_ASSETS: ExternalAsset[] = [
-  { id: "e1", name: "Flight Booking API", apiEndpoint: "https://api.flights.com/v2", apiKey: "sk_live_xxx", type: "API", syncFrequency: "Real-time", status: "active", lastSynced: "2026-09-24T10:30:00Z", description: "Flight search and booking integration" },
-  { id: "e2", name: "Hotel Inventory Feed", apiEndpoint: "https://feeds.hotels.com/xml", apiKey: "feed_key_xxx", type: "Feed", syncFrequency: "Hourly", status: "active", lastSynced: "2026-09-24T09:00:00Z", description: "Hotel availability and pricing data" },
-  { id: "e3", name: "Payment Gateway Webhook", apiEndpoint: "https://webhooks.payments.com/events", apiKey: "whsec_xxx", type: "Webhook", syncFrequency: "On-demand", status: "draft", lastSynced: "Never", description: "Payment status notifications" },
-  { id: "e4", name: "News RSS Aggregator", apiEndpoint: "https://rss.newsreader.com/feed", apiKey: "public", type: "RSS", syncFrequency: "Daily", status: "archived", lastSynced: "2026-09-23T08:00:00Z", description: "Latest news articles feed" },
-];
+const EXTERNAL_KEY = "synergify:assets:external";
+const loadExternalAssets = (): ExternalAsset[] => {
+  try {
+    const raw = localStorage.getItem(EXTERNAL_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+const saveExternalAssets = (assets: ExternalAsset[]) => {
+  try {
+    localStorage.setItem(EXTERNAL_KEY, JSON.stringify(assets));
+  } catch {}
+};
 
 const StatusBadge = ({ status }: { status: AssetStatus }) => (
   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CONFIG[status].bg} ${STATUS_CONFIG[status].color}`}>
@@ -63,7 +72,41 @@ export function AssetManagementPage() {
   const [physicalAssets, setPhysicalAssets] = useState<PhysicalAsset[]>(() => getPhysicalAssets());
   const [mcomPlatforms, setMcomPlatforms] = useState<McomPlatform[]>(() => getMcomPlatforms());
   const [mcomGroup, setMcomGroup] = useState<McomPlatformGroup>("mcom");
-  const [externalAssets, setExternalAssets] = useState<ExternalAsset[]>(DEMO_EXTERNAL_ASSETS);
+  const [externalAssets, setExternalAssets] = useState<ExternalAsset[]>(() => loadExternalAssets());
+  const isInitialLoad = useRef(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function initExternalAssets() {
+      try {
+        const settings = await adminApi.getSettings().catch(() => null);
+        if (mounted && settings?.external_assets && Array.isArray(settings.external_assets) && settings.external_assets.length > 0) {
+          setExternalAssets(settings.external_assets);
+          saveExternalAssets(settings.external_assets);
+        }
+      } catch (err) {
+        console.warn("Failed to load external assets from server:", err);
+      }
+    }
+    initExternalAssets();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    saveExternalAssets(externalAssets);
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      adminApi.updateSettings({ external_assets: externalAssets }).catch((err) => {
+        console.warn("Failed to sync external assets to server settings:", err);
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [externalAssets]);
 
   const refreshDigital = () => setDigitalAssets(getDigitalAssets());
   const refreshPhysical = () => setPhysicalAssets(getPhysicalAssets());

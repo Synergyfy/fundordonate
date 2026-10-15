@@ -7,34 +7,7 @@ import type {
   VCardRecognition,
 } from "./type";
 
-function getDemoLifetimeStats(): LifetimeStats {
-  return {
-    userId: "demo-user",
-    totalContributed: 125000,
-    totalCampaignsBacked: 8,
-    totalPledges: 3,
-    channelBreakdown: {
-      web: 75000,
-      terminal: 25000,
-      qr: 10000,
-      in_store: 15000,
-      vcard: 0,
-      mobile_app: 0,
-    },
-    hierarchyBreakdown: {
-      national: 30000,
-      city: 50000,
-      borough: 25000,
-      high_street: 15000,
-      business: 5000,
-    },
-    firstContributionAt: "2025-01-15T00:00:00Z",
-    lastContributionAt: new Date().toISOString(),
-    uniqueLocationsBacked: 5,
-    isCommunityBacker: true,
-    communityBackerAwardedAt: "2025-03-01T00:00:00Z",
-  };
-}
+
 
 export const physicalService = {
   // ── Terminal ──
@@ -107,7 +80,7 @@ export const physicalService = {
       const res = await api.get(`/cross-channel/lifetime-stats/${userId}`);
       return res || null;
     } catch {
-      return getDemoLifetimeStats();
+      return null;
     }
   },
 

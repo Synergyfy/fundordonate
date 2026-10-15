@@ -6,41 +6,22 @@ import {
   BadgeCheck,
   CalendarClock,
   Check,
-  CheckCircle2,
   Copy,
   Gift,
   MapPin,
   Package,
 } from "lucide-react";
-import { userDashboardApi } from "@/services/user-dashboard";
-
-export type RewardStatus = "available" | "claimed" | "redeemed";
-
-export interface ConsumerRewardEntitlement {
-  id: string;
-  rewardId: string;
-  title: string;
-  description: string;
-  condition: string;
-  campaignSlug: string;
-  campaignTitle: string;
-  campaignImage?: string;
-  campaignLocation: string;
-  contributionAmount: number;
-  reference: string;
-  status: RewardStatus;
-  earnedAt: string;
-  expiryDate: string;
-  fulfilmentType: string;
-  rewardType: string;
-  items: string[];
-  code: string;
-}
+import { consumerService } from "@/services/consumer";
+import {
+  REWARD_CATEGORY_META,
+  issuedRewardGuidance,
+  type IssuedReward,
+} from "@/types/rewards";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
-    month: "short",
+    month: "long",
     year: "numeric",
   });
 
@@ -49,24 +30,37 @@ const formatCurrency = (pence: number) =>
     pence / 100,
   );
 
-const STATUS_META: Record<RewardStatus, { label: string; className: string }> = {
-  available: { label: "Available", className: "bg-amber-50 text-amber-700" },
-  claimed: { label: "Earned", className: "bg-blue-50 text-blue-700" },
-  redeemed: { label: "Redeemed", className: "bg-green-50 text-green-700" },
+const STATUS_META: Record<string, { label: string; className: string; hint: string }> = {
+  ISSUED: {
+    label: "Available",
+    className: "bg-amber-50 text-amber-700",
+    hint: "Show or quote the code below to redeem this reward.",
+  },
+  REDEEMED: {
+    label: "Redeemed",
+    className: "bg-green-50 text-green-700",
+    hint: "This reward has already been redeemed.",
+  },
+  EXPIRED: {
+    label: "Expired",
+    className: "bg-gray-100 text-gray-600",
+    hint: "This reward has passed its expiry date.",
+  },
+  REVOKED: {
+    label: "Revoked",
+    className: "bg-red-50 text-red-700",
+    hint: "This reward was revoked and can no longer be used.",
+  },
+  FAILED: {
+    label: "Action required",
+    className: "bg-amber-50 text-amber-700",
+    hint: "We could not issue this reward automatically. Activate your MCOM Rewards account and it will be delivered.",
+  },
 };
 
-const FULFILMENT_META: Record<string, { label: string; instructions: string }> = {
-  manual: {
-    label: "Sent by email",
-    instructions:
-      "Your reward is sent to your registered email address. Quote the code below when prompted.",
-  },
-  internal: {
-    label: "Issued in FundOrDonate",
-    instructions:
-      "This reward lives in your account — show the code below to use it.",
-  },
-};
+function statusMeta(status: string) {
+  return STATUS_META[status?.toUpperCase()] ?? STATUS_META.ISSUED;
+}
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -82,47 +76,27 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 export function ConsumerRewardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [item, setItem] = useState<ConsumerRewardEntitlement | null>(null);
+  const [item, setItem] = useState<IssuedReward | null>(null);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<"claim" | "open" | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    userDashboardApi.getDonations()
-      .then((res: any) => {
-        if (cancelled) return;
-        const raw = res?.items || (Array.isArray(res) ? res : []);
-        const match = raw.find((d: any) => d.id === id) || raw[0];
-        if (match) {
-          setItem({
-            id: match.id,
-            rewardId: `rwd-${match.id}`,
-            title: match.campaign?.title ? `${match.campaign.title} Supporter Reward` : "Community Supporter Reward",
-            description: "Exclusive reward unlocked from your campaign contribution.",
-            condition: "Completed qualifying contribution",
-            campaignSlug: match.campaign?.id || "",
-            campaignTitle: match.campaign?.title || "Community Campaign",
-            campaignImage: match.campaign?.imageUrl,
-            campaignLocation: match.business?.city || "Local High Street",
-            contributionAmount: match.amount || 0,
-            reference: match.id?.slice(0, 8)?.toUpperCase(),
-            status: "claimed",
-            earnedAt: match.createdAt || new Date().toISOString(),
-            expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-            fulfilmentType: "internal",
-            rewardType: "digital",
-            items: ["Digital Voucher", "Community Badge"],
-            code: `FOD-${match.id?.slice(0, 8)?.toUpperCase()}`,
-          });
-        } else {
-          setItem(null);
+    if (!id) {
+      setLoading(false);
+      setItem(null);
+      return;
+    }
+
+    consumerService
+      .getReward(id)
+      .then((reward) => {
+        if (!cancelled) {
+          setItem(reward);
+          setLoading(false);
         }
-        setLoading(false);
       })
       .catch(() => {
         if (!cancelled) {
@@ -141,38 +115,8 @@ export function ConsumerRewardDetailPage() {
     else navigate("/consumer/rewards");
   };
 
-  const handleClaim = async () => {
-    if (!item || acting) return;
-    setActing("claim");
-    setError(null);
-    setSuccess(null);
-    try {
-      setItem((prev) => (prev ? { ...prev, status: "claimed" } : null));
-      setSuccess("Reward claimed — open it to view your delivery details.");
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setActing(null);
-    }
-  };
-
-  const handleOpen = async () => {
-    if (!item || acting) return;
-    setActing("open");
-    setError(null);
-    setSuccess(null);
-    try {
-      setItem((prev) => (prev ? { ...prev, status: "redeemed" } : null));
-      setSuccess("Reward opened and marked as redeemed.");
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setActing(null);
-    }
-  };
-
   const handleCopyCode = async () => {
-    if (!item) return;
+    if (!item?.code) return;
     try {
       await navigator.clipboard.writeText(item.code);
       setCopied(true);
@@ -212,13 +156,9 @@ export function ConsumerRewardDetailPage() {
     );
   }
 
-  const status = STATUS_META[item.status];
-  const fulfilment =
-    FULFILMENT_META[item.fulfilmentType] ?? {
-      label: "Standard delivery",
-      instructions: "Quote the code below to redeem this reward.",
-    };
-  const hasFulfilment = item.status === "claimed" || item.status === "redeemed";
+  const status = statusMeta(item.status);
+  const category = item.rewardType ? REWARD_CATEGORY_META[item.rewardType as keyof typeof REWARD_CATEGORY_META] : undefined;
+  const hasCode = !!item.code;
 
   return (
     <div className="space-y-5">
@@ -240,65 +180,70 @@ export function ConsumerRewardDetailPage() {
 
       <div>
         <h1 className="text-xl font-bold text-gray-900">{item.title}</h1>
-        {item.description && (
-          <p className="mt-1 text-sm text-gray-600">{item.description}</p>
-        )}
+        <p className="mt-1 text-sm text-gray-600">
+          {issuedRewardGuidance(item) ?? status.hint}
+        </p>
       </div>
 
       {/* Campaign card */}
-      <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="flex gap-3">
-          {item.campaignImage ? (
-            <img
-              src={item.campaignImage}
-              alt=""
-              className="h-14 w-14 shrink-0 rounded-lg object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary-50">
-              <Gift className="h-6 w-6 text-primary-500" />
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-gray-900">
-              {item.campaignTitle}
-            </p>
-            {item.campaignLocation ? (
-              <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                <span className="truncate">{item.campaignLocation}</span>
+      {(item.campaignTitle || item.campaignImage) && (
+        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="flex gap-3">
+            {item.campaignImage ? (
+              <img
+                src={item.campaignImage}
+                alt=""
+                className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary-50">
+                <Gift className="h-6 w-6 text-primary-500" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-gray-900">
+                {item.campaignTitle}
               </p>
-            ) : null}
-            <Link
-              to={`/consumer/explore/campaign/${item.campaignSlug}`}
-              className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700"
-            >
-              View Campaign
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+              {item.campaignLocation && (
+                <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="truncate">{item.campaignLocation}</span>
+                </p>
+              )}
+              {item.campaignId && (
+                <Link
+                  to={`/consumer/explore/campaign/${item.campaignId}`}
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700"
+                >
+                  View Campaign
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Detail card */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <DetailRow label="Qualification">
+        <DetailRow label="Reward type">
           <p className="flex items-start gap-1.5 font-medium text-gray-900">
             <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" />
-            <span>{item.condition}</span>
+            <span>
+              {category?.label ??
+                (item.source === "mcom" ? "MCOM Rewards" : "FundOrDonate reward")}
+            </span>
           </p>
         </DetailRow>
 
-        <DetailRow label="How Earned">
-          <p className="font-medium text-gray-900">
-            Contributed {formatCurrency(item.contributionAmount)} to{" "}
-            {item.campaignTitle}
-          </p>
-          <p className="font-mono text-xs text-gray-400">{item.reference}</p>
-        </DetailRow>
+        {item.value != null && (
+          <DetailRow label="Value">
+            <p className="font-medium text-gray-900">{formatCurrency(item.value)}</p>
+          </DetailRow>
+        )}
 
-        <DetailRow label="Date Earned">
+        <DetailRow label="Date earned">
           <p className="font-medium text-gray-900">{formatDate(item.earnedAt)}</p>
         </DetailRow>
 
@@ -310,42 +255,29 @@ export function ConsumerRewardDetailPage() {
           </span>
         </DetailRow>
 
-        <DetailRow label="Expiry Date">
-          <p className="flex items-center gap-1.5 font-medium text-gray-900">
-            <CalendarClock className="h-4 w-4 text-gray-400" />
-            {formatDate(item.expiryDate)}
-          </p>
-        </DetailRow>
+        {item.expiresAt && (
+          <DetailRow label="Expiry date">
+            <p className="flex items-center gap-1.5 font-medium text-gray-900">
+              <CalendarClock className="h-4 w-4 text-gray-400" />
+              {formatDate(item.expiresAt)}
+            </p>
+          </DetailRow>
+        )}
+
+        {item.redeemedAt && (
+          <DetailRow label="Redeemed on">
+            <p className="font-medium text-gray-900">{formatDate(item.redeemedAt)}</p>
+          </DetailRow>
+        )}
       </div>
 
-      {/* Feedback banners */}
-      {success && (
-        <div className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{success}</span>
-        </div>
-      )}
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Fulfilment panel */}
-      {hasFulfilment && (
+      {/* Redemption code panel */}
+      {hasCode && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700">
             <Package className="h-4 w-4" />
-            Delivery — {fulfilment.label}
+            Redemption code
           </p>
-          <p className="mt-2 text-sm text-amber-900">{fulfilment.instructions}</p>
-          {item.items.length > 0 && (
-            <ul className="mt-2 list-inside list-disc text-sm text-amber-900">
-              {item.items.map((entry) => (
-                <li key={entry}>{entry}</li>
-              ))}
-            </ul>
-          )}
           <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2">
             <span className="flex-1 font-mono text-sm font-bold tracking-wide text-gray-900">
               {item.code}
@@ -364,48 +296,6 @@ export function ConsumerRewardDetailPage() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* Actions */}
-      {item.status === "available" && (
-        <button
-          type="button"
-          onClick={handleClaim}
-          disabled={acting !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {acting === "claim" ? (
-            <>
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Claiming…
-            </>
-          ) : (
-            <>
-              <Gift className="h-4 w-4" />
-              Claim Reward
-            </>
-          )}
-        </button>
-      )}
-      {item.status === "claimed" && (
-        <button
-          type="button"
-          onClick={handleOpen}
-          disabled={acting !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {acting === "open" ? (
-            <>
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Opening…
-            </>
-          ) : (
-            <>
-              <Package className="h-4 w-4" />
-              Open Reward
-            </>
-          )}
-        </button>
       )}
     </div>
   );

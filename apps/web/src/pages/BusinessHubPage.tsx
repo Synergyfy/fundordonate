@@ -127,57 +127,7 @@ const STATUS_TABS: { value: HubStatus | "all"; label: string; tooltip: string; c
    { value: "needs_activation", label: "Inactive", tooltip: "Cities where business founding will open soon.", color: "#eab308" },
 ];
 
-// Demo hierarchy data: City > Borough > High Street
-const LOCATION_HIERARCHY: Record<string, { name: string; boroughs: Record<string, { name: string; highStreets: string[] }> }> = {
-  london: {
-    name: "London",
-    boroughs: {
-      camden: { name: "Camden", highStreets: ["Camden High Street", "Chalk Farm Road", "Judd Street"] },
-      westminster: { name: "Westminster", highStreets: ["Oxford Street", "Regent Street", "Victoria Street"] },
-      islington: { name: "Islington", highStreets: ["Upper Street", "Angel Central", "Canonbury Road"] },
-    },
-  },
-  manchester: {
-    name: "Manchester",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Market Street", "Deansgate", "Oldham Street"] },
-      salem: { name: "Salford", highStreets: ["Chapel Street", "Broad Street", "Ordsall Lane"] },
-      stockport: { name: "Stockport", highStreets: ["Merseyway", "Edgeley Road", "Great Portwood Street"] },
-    },
-  },
-  birmingham: {
-    name: "Birmingham",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["New Street", "High Street", "Corporation Street"] },
-      edgbaston: { name: "Edgbaston", highStreets: ["Harborne High Street", "Bristol Road"] },
-      solihull: { name: "Solihull", highStreets: ["High Street", "Stratford Road"] },
-    },
-  },
-  leeds: {
-    name: "Leeds",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Briggate", "Commercial Street", "Headrow"] },
-      headingley: { name: "Headingley", highStreets: ["Otley Road", "North Lane"] },
-      horsforth: { name: "Horsforth", highStreets: ["Town Street", "New Road Side"] },
-    },
-  },
-  liverpool: {
-    name: "Liverpool",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Church Street", "Lord Street", "Strand"] },
-      allerton: { name: "Allerton", highStreets: ["Allerton Road", "Hunters Cross"] },
-      woolton: { name: "Woolton", highStreets: ["Woolton Street", "Allerton Road"] },
-    },
-  },
-  bristol: {
-    name: "Bristol",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Park Street", "Corn Street", "Broadmead"] },
-      clifton: { name: "Clifton", highStreets: ["Queens Road", "Gloucester Road"] },
-      bedminster: { name: "Bedminster", highStreets: ["East Street", "North Street"] },
-    },
-  },
-};
+
 
 const BUSINESS_BENEFITS = [
   { icon: "🚀", title: "Early Access", desc: "Be first to access new city hub features, campaigns and opportunities before public launch." },

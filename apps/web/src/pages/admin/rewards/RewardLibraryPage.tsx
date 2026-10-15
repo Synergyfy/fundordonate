@@ -3,7 +3,7 @@
 // Create and manage reusable rewards that can be attached to campaigns.
 // =============================================================================
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   ChevronRight,
@@ -23,7 +23,9 @@ import {
   AlertCircle,
   Upload,
   LinkIcon,
+  Loader2,
 } from "lucide-react";
+import { adminApi, type AdminReward } from "@/services/admin";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DatePicker } from "@/components/ui/DatePicker";
 import {
@@ -155,197 +157,41 @@ const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
 // ---------------------------------------------------------------------------
-// Demo Data
+// Reward Mapper
 // ---------------------------------------------------------------------------
 
-const DEMO_REWARDS: Reward[] = [
-  {
-    id: "r1",
-    name: "£10 E-Card",
-    description: "A £10 digital gift card redeemable at participating retailers.",
-    type: "ecard",
-    audience: "consumer",
-    status: "active",
-    items: [
-      { id: "ri1", title: "Digital Gift Card", description: "£10 e-card code", physicalType: "digital", assetType: "url", assetUrl: "https://example.com/ecard", quantity: 500 },
-    ],
-    assets: [
-      { key: "digital:dig-1", assetId: "dig-1", name: "£10 Festive E-Gift Card", source: "digital", sourceLabel: "FundOrDonate Digital Assets", statusLabel: "Available" },
-      { key: "internal:svc-mcomvcard", assetId: "svc-mcomvcard", name: "MCOM VCard Access", source: "internal", sourceLabel: "MCOM VCard", statusLabel: "Connected" },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 1000,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "limited",
-    maxQuantity: 500,
-    availableFrom: "2026-10-01",
-    availableUntil: "2026-12-31",
-    claimDeadlineDays: 30,
-    fulfilmentType: "external_link",
-    createdAt: "2026-09-01",
-  },
-  {
-    id: "r2",
-    name: "Cashback 10%",
-    description: "Receive 10% cashback on your contribution amount.",
-    type: "cashback",
-    audience: "both",
-    status: "active",
-    items: [
-      { id: "ri2", title: "Cashback Reward", description: "10% cashback", physicalType: "digital", assetType: "url", assetUrl: "", quantity: 1000 },
-    ],
-    assets: [
-      { key: "physical:phy-1", assetId: "phy-1", name: "FundOrDonate Branded Gift Box", source: "physical", sourceLabel: "Physical Assets", statusLabel: "Available" },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 2500,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "unlimited",
-    maxQuantity: 0,
-    availableFrom: "2026-10-01",
-    availableUntil: "",
-    claimDeadlineDays: 60,
-    fulfilmentType: "manual",
-    createdAt: "2026-09-05",
-  },
-  {
-    id: "r3",
-    name: "500 Points Bonus",
-    description: "Earn 500 loyalty points added to your account balance.",
-    type: "points",
-    audience: "consumer",
-    status: "active",
-    items: [
-      { id: "ri3", title: "Points Credit", description: "500 points", physicalType: "digital", assetType: "url", assetUrl: "", quantity: 9999 },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 5000,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "unlimited",
-    maxQuantity: 0,
-    availableFrom: "2026-10-01",
-    availableUntil: "",
-    claimDeadlineDays: 90,
-    fulfilmentType: "internal",
-    createdAt: "2026-09-08",
-  },
-  {
-    id: "r4",
-    name: "20% Discount Code",
-    description: "A one-time 20% discount code for the rewards marketplace.",
-    type: "discount",
-    audience: "business",
-    status: "active",
-    items: [
-      { id: "ri4", title: "Discount Voucher", description: "20% off", physicalType: "digital", assetType: "url", assetUrl: "https://example.com/redeem", quantity: 200 },
-    ],
-    triggerMode: "range",
-    triggerMin: 10000,
-    triggerMax: 50000,
-    triggerExact: 0,
-    quantityMode: "limited",
-    maxQuantity: 200,
-    availableFrom: "2026-10-15",
-    availableUntil: "2026-11-30",
-    claimDeadlineDays: 14,
-    fulfilmentType: "external_link",
-    createdAt: "2026-09-10",
-  },
-  {
-    id: "r5",
-    name: "Founder Certificate",
-    description: "Personalised digital certificate of founding membership.",
-    type: "standard",
-    audience: "both",
-    status: "draft",
-    items: [
-      { id: "ri5", title: "Digital Certificate", description: "PDF certificate", physicalType: "digital", assetType: "file", assetUrl: "", quantity: 0 },
-      { id: "ri6", title: "Physical Framed Print", description: "Framed A4 certificate", physicalType: "physical", assetType: "file", assetUrl: "", quantity: 50 },
-    ],
-    triggerMode: "exact",
-    triggerMin: 0,
-    triggerMax: 0,
-    triggerExact: 100000,
-    quantityMode: "limited",
-    maxQuantity: 100,
-    availableFrom: "2026-10-01",
-    availableUntil: "2026-12-31",
-    claimDeadlineDays: 60,
-    fulfilmentType: "instruction",
-    createdAt: "2026-09-12",
-  },
-  {
-    id: "r6",
-    name: "Free Course Access",
-    description: "3-month access to our online learning platform.",
-    type: "course_access",
-    audience: "consumer",
-    status: "active",
-    items: [
-      { id: "ri7", title: "Course Subscription", description: "3-month full access", physicalType: "digital", assetType: "url", assetUrl: "https://learn.example.com", quantity: 300 },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 2000,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "limited",
-    maxQuantity: 300,
-    availableFrom: "2026-10-01",
-    availableUntil: "2026-12-31",
-    claimDeadlineDays: 30,
-    fulfilmentType: "external_link",
-    createdAt: "2026-09-15",
-  },
-  {
-    id: "r7",
-    name: "Exclusive Merch Pack",
-    description: "Branded t-shirt, mug, and sticker pack shipped to your door.",
-    type: "loyalty",
-    audience: "both",
-    status: "draft",
-    items: [
-      { id: "ri8", title: "T-Shirt", description: "Branded cotton tee", physicalType: "physical", assetType: "file", assetUrl: "", quantity: 100 },
-      { id: "ri9", title: "Mug", description: "Ceramic mug", physicalType: "physical", assetType: "file", assetUrl: "", quantity: 100 },
-      { id: "ri10", title: "Sticker Set", description: "Pack of 5 stickers", physicalType: "physical", assetType: "file", assetUrl: "", quantity: 200 },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 25000,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "limited",
-    maxQuantity: 100,
-    availableFrom: "",
-    availableUntil: "",
-    claimDeadlineDays: 14,
-    fulfilmentType: "manual",
-    createdAt: "2026-09-18",
-  },
-  {
-    id: "r8",
-    name: "Holiday Voucher Bundle",
-    description: "£50 voucher bundle for holiday booking partners.",
-    type: "coupon",
-    audience: "business",
-    status: "archived",
-    items: [
-      { id: "ri11", title: "Holiday Voucher", description: "£50 off holiday bookings", physicalType: "digital", assetType: "url", assetUrl: "https://travel.example.com", quantity: 50 },
-    ],
-    triggerMode: "minimum",
-    triggerMin: 50000,
-    triggerMax: 0,
-    triggerExact: 0,
-    quantityMode: "limited",
-    maxQuantity: 50,
-    availableFrom: "2026-06-01",
-    availableUntil: "2026-08-31",
-    claimDeadlineDays: 7,
-    fulfilmentType: "external_link",
-    createdAt: "2026-05-01",
-  },
-];
+const mapAdminRewardToReward = (r: AdminReward, idx: number): Reward => {
+  const criteria = r.criteria || {};
+  return {
+    id: r.id || `r-${idx}`,
+    name: r.name || "Reward",
+    description: r.description || "",
+    type: (r.code?.toLowerCase().includes("cash") ? "cashback" : r.code?.toLowerCase().includes("card") ? "ecard" : "standard") as RewardType,
+    audience: (criteria.audience === "business" || criteria.audience === "consumer") ? criteria.audience : "both",
+    status: r.isActive ? "active" : "archived",
+    items: (criteria.items || []).map((it: any, iIdx: number) => ({
+      id: it.id || `ri-${iIdx}`,
+      title: it.title || "Reward Item",
+      description: it.description || "",
+      physicalType: it.physicalType || "digital",
+      assetType: it.assetType || "url",
+      assetUrl: it.assetUrl || "",
+      quantity: Number(it.quantity) || 100,
+    })),
+    assets: criteria.assets || [],
+    triggerMode: criteria.triggerMode || "minimum",
+    triggerMin: Number(criteria.minAmount || criteria.triggerMin) || 1000,
+    triggerMax: Number(criteria.maxAmount || criteria.triggerMax) || 0,
+    triggerExact: Number(criteria.exactAmount || criteria.triggerExact) || 0,
+    quantityMode: criteria.maxQuantity ? "limited" : "unlimited",
+    maxQuantity: Number(criteria.maxQuantity) || 0,
+    availableFrom: criteria.availableFrom || r.createdAt?.slice(0, 10) || "2026-01-01",
+    availableUntil: criteria.availableUntil || "",
+    claimDeadlineDays: Number(criteria.claimDeadlineDays) || 30,
+    fulfilmentType: (criteria.fulfilmentType as FulfilmentType) || "external_link",
+    createdAt: r.createdAt ? r.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Empty Form State
@@ -395,7 +241,28 @@ function getTriggerPreview(mode: TriggerMode, min: string, max: string, exact: s
 // ---------------------------------------------------------------------------
 
 export function RewardLibraryPage() {
-  const [rewards, setRewards] = useState<Reward[]>(DEMO_REWARDS);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadRewards() {
+      setLoading(true);
+      try {
+        const res = await adminApi.getRewards();
+        if (!mounted) return;
+        setRewards((res || []).map(mapAdminRewardToReward));
+      } catch (err) {
+        console.error("Failed to load rewards", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    loadRewards();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterAudience, setFilterAudience] = useState<string>("all");
@@ -663,7 +530,12 @@ export function RewardLibraryPage() {
 
         {/* Rewards Table */}
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="py-16 text-center text-gray-500 flex items-center justify-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
+              <span>Loading rewards...</span>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
               <Gift className="h-10 w-10 text-gray-300 mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-500">No rewards found</p>

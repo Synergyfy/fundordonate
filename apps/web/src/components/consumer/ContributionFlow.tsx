@@ -8,6 +8,9 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { campaignApi } from "@/services/campaign";
 import { getConsumerCommunity } from "@/services/community";
+import { consumerService } from "@/services/consumer";
+import type { ChargePurpose } from "@/services/payment";
+import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
 import {
   X,
   ArrowLeft,
@@ -599,125 +602,87 @@ function TermsStep({
 
 function PaymentStep({
   amount,
-  paymentMethod,
-  onPaymentMethodChange,
+  purpose,
+  campaignId,
+  rewardId,
+  metadata,
+  amountPence,
+  onPaid,
 }: {
   amount: number;
-  paymentMethod: string;
-  onPaymentMethodChange: (method: string) => void;
+  purpose: ChargePurpose;
+  campaignId: string;
+  rewardId?: string;
+  metadata?: Record<string, unknown>;
+  amountPence: number;
+  onPaid: (reference: string, offline?: boolean) => void;
 }) {
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
+  const [offline, setOffline] = useState(false);
 
-  const formatCardNumber = (v: string) => {
-    const digits = v.replace(/\D/g, "").slice(0, 16);
-    return digits.replace(/(.{4})/g, "$1 ").trim();
-  };
+  const formatGbp = (pence: number) =>
+    new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 2 }).format(pence / 100);
 
-  const formatExpiry = (v: string) => {
-    const digits = v.replace(/\D/g, "").slice(0, 4);
-    if (digits.length > 2) return digits.slice(0, 2) + "/" + digits.slice(2);
-    return digits;
-  };
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold text-gray-900 mb-1">Payment Method</h2>
-      <p className="text-sm text-gray-500 mb-4">Choose how you'd like to pay £{amount}.</p>
-
-      <div className="space-y-2">
-        {[
-          { id: "stripe", label: "Credit / Debit Card", icon: CreditCard, sub: "Powered by Stripe" },
-          { id: "paypal", label: "PayPal", icon: Globe, sub: "Redirect to PayPal" },
-          { id: "offline", label: "Bank Transfer", icon: Building2, sub: "Offline payment" },
-        ].map((method) => {
-          const Icon = method.icon;
-          const isSelected = paymentMethod === method.id;
-          return (
-            <button
-              key={method.id}
-              onClick={() => onPaymentMethodChange(method.id)}
-              className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                isSelected
-                  ? "border-primary-600 bg-primary-50 shadow-sm"
-                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSelected ? "bg-primary-100" : "bg-gray-100"}`}>
-                  <Icon className={`h-5 w-5 ${isSelected ? "text-primary-600" : "text-gray-500"}`} />
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{method.label}</p>
-                  <p className="text-xs text-gray-500">{method.sub}</p>
-                </div>
-                {isSelected && <Check className="h-5 w-5 text-primary-600" />}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {paymentMethod === "stripe" && (
-        <div className="space-y-3 p-4 bg-white border border-gray-200 rounded-xl">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Card Number</label>
-            <div className="relative">
-              <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                placeholder="1234 5678 9012 3456"
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Expiry</label>
-              <input
-                type="text"
-                value={cardExpiry}
-                onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                placeholder="MM/YY"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">CVC</label>
-              <input
-                type="text"
-                value={cardCvc}
-                onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="123"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {paymentMethod === "paypal" && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
-          <Globe className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-          <p className="text-sm text-blue-700 font-medium">You will be redirected to PayPal to complete payment.</p>
-        </div>
-      )}
-
-      {paymentMethod === "offline" && (
+  if (offline) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Bank Transfer</h2>
+        <p className="text-sm text-gray-500 mb-2">
+          Transfer {formatGbp(amountPence)} and use your reference to confirm the pledge.
+        </p>
         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-          <p className="text-sm font-medium text-gray-700">Bank Transfer Details</p>
           <div className="text-sm text-gray-600 space-y-1">
-            <p>Account Name: GrowFund Ltd</p>
+            <p>Account Name: FundOrDonate Ltd</p>
             <p>Sort Code: 12-34-56</p>
             <p>Account Number: 12345678</p>
             <p>Reference: <span className="font-mono text-primary-600">AUTO-GENERATED</span></p>
           </div>
-          <p className="text-xs text-amber-600">Please use your unique reference when transferring. Your contribution will be confirmed once payment is received.</p>
+          <p className="text-xs text-amber-600">
+            Please use your unique reference when transferring. Your contribution is confirmed once payment is received.
+          </p>
         </div>
-      )}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setOffline(false)}
+            className="flex-1 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Back to online payment
+          </button>
+          <button
+            type="button"
+            onClick={() => onPaid(`OFFLINE-${Date.now().toString(36).toUpperCase()}`, true)}
+            className="flex-1 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            I've made the transfer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-gray-900 mb-1">Payment</h2>
+      <p className="text-sm text-gray-500 mb-2">Choose how you'd like to pay £{amount}.</p>
+
+      <McomCheckoutPanel
+        amountPence={amountPence}
+        purpose={purpose}
+        campaignId={campaignId}
+        rewardId={rewardId}
+        metadata={metadata}
+        formatGbp={formatGbp}
+        onSuccess={(result) => onPaid(result.reference)}
+      />
+
+      <button
+        type="button"
+        onClick={() => setOffline(true)}
+        className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
+      >
+        <Building2 className="h-4 w-4" />
+        Pay by bank transfer instead
+      </button>
     </div>
   );
 }
@@ -730,6 +695,8 @@ function ConfirmationStep({
   amount,
   transactionRef,
   completedAt,
+  issuedRewards,
+  pending,
   onGoToDashboard,
   onShare,
   onViewCampaign,
@@ -739,15 +706,19 @@ function ConfirmationStep({
   amount: number;
   transactionRef: string;
   completedAt: string;
+  issuedRewards?: { id: string; title: string }[];
+  pending?: boolean;
   onGoToDashboard: () => void;
   onShare: () => void;
   onViewCampaign: () => void;
 }) {
   const participationLabel = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.label || participationType;
   const participationEmoji = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.emoji || "";
+  // Reward thresholds are in pence; the contribution amount is in pounds.
   const earned = campaign.rewards?.find(
-    (r) => Math.round(amount * 100) >= (r.amount ?? 0) * 100
+    (r) => Math.round(amount * 100) >= (r.amount ?? 0)
   );
+  const hasIssuedRewards = (issuedRewards?.length ?? 0) > 0;
   const completedDate = completedAt
     ? new Date(completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -761,8 +732,12 @@ function ConfirmationStep({
       </div>
 
       <div>
-        <h2 className="text-xl font-bold text-gray-900">Contribution Successful</h2>
-        <p className="text-sm text-gray-500 mt-1">Your contribution has been successfully processed.</p>
+        <h2 className="text-xl font-bold text-gray-900">{pending ? "Pledge Recorded" : "Contribution Successful"}</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          {pending
+            ? "Complete your bank transfer and your contribution will be confirmed."
+            : "Your contribution has been successfully processed."}
+        </p>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 text-left space-y-3 shadow-sm">
@@ -790,13 +765,31 @@ function ConfirmationStep({
         </div>
         <div className="border-t border-gray-100 pt-3">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Contribution Status</p>
-          <span className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 bg-green-50 text-green-700 text-sm font-medium rounded-full">
-            <Check className="h-3.5 w-3.5" /> Completed
+          <span className={`inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 text-sm font-medium rounded-full ${
+            pending ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
+          }`}>
+            <Check className="h-3.5 w-3.5" /> {pending ? "Pending (awaiting transfer)" : "Completed"}
           </span>
         </div>
         <div className="border-t border-gray-100 pt-3">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Reward Eligibility</p>
-          {earned ? (
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Reward</p>
+          {hasIssuedRewards ? (
+            <div className="mt-1 space-y-1">
+              {issuedRewards!.map((r) => (
+                <div key={r.id} className="flex items-center gap-2">
+                  <Gift className="h-4 w-4 text-amber-500" />
+                  <span className="font-medium text-gray-900">{r.title}</span>
+                </div>
+              ))}
+              <p className="text-xs text-gray-500">
+                Saved to your rewards — redeem it from{" "}
+                <a href="/consumer/rewards" className="font-medium text-primary-600 hover:underline">
+                  My Rewards
+                </a>
+                .
+              </p>
+            </div>
+          ) : earned ? (
             <div className="flex items-center gap-2 mt-1">
               <Gift className="h-4 w-4 text-amber-500" />
               <div>
@@ -804,6 +797,7 @@ function ConfirmationStep({
                 {earned.description && (
                   <p className="text-xs text-gray-500 mt-0.5">{earned.description}</p>
                 )}
+                <p className="text-xs text-gray-400 mt-0.5">Issuing your reward…</p>
               </div>
             </div>
           ) : (
@@ -925,10 +919,11 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   const [allocationEnabled, setAllocationEnabled] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedContributionTerms, setAcceptedContributionTerms] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("stripe");
   const [processing, setProcessing] = useState(false);
   const [transactionRef, setTransactionRef] = useState("");
   const [completedAt, setCompletedAt] = useState("");
+  const [paidOffline, setPaidOffline] = useState(false);
+  const [issuedRewards, setIssuedRewards] = useState<{ id: string; title: string }[]>([]);
 
   const steps = useMemo(() => {
     let list = STEPS;
@@ -940,6 +935,39 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
     }
     return list;
   }, [campaign.allocationEnabled, campaign.terms]);
+
+  // Once we reach the confirmation step, poll for the reward issuance(s) the
+  // backend creates asynchronously (queue + idempotent), so the participant
+  // sees the actual reward they earned rather than a local guess.
+  useEffect(() => {
+    const onConfirmation = steps[currentStep]?.id === "confirmation";
+    if (!onConfirmation || !campaign.id) return;
+    let cancelled = false;
+    let attempt = 0;
+
+    const poll = async () => {
+      try {
+        const res = await consumerService.getRewards({ limit: 100 });
+        const mine = (res?.items ?? []).filter((r) => r.campaignId === campaign.id);
+        if (cancelled) return;
+        if (mine.length > 0) {
+          setIssuedRewards(mine.map((r) => ({ id: r.id, title: r.title })));
+          return;
+        }
+      } catch {
+        /* transient — retry below */
+      }
+      attempt += 1;
+      if (!cancelled && attempt < 6) {
+        window.setTimeout(poll, 1500);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStep, steps, campaign.id]);
 
   const canProceed = useCallback(() => {
     const step = steps[currentStep];
@@ -965,48 +993,26 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
         return true;
       }
       case "payment":
-        return !!paymentMethod;
+        return true;
       default:
         return true;
     }
-  }, [currentStep, steps, participationType, amount, allocations, allocationEnabled, acceptedTerms, acceptedContributionTerms, paymentMethod, campaign.terms]);
+  }, [currentStep, steps, participationType, amount, allocations, allocationEnabled, acceptedTerms, acceptedContributionTerms, campaign.terms]);
+
+  /**
+   * Called by the payment step once MCOM Pay settles (or a bank transfer is
+   * acknowledged). The Contribution + reward issuance are created server-side
+   * by the payment API, so we just record the reference and advance.
+   */
+  const handlePaid = (reference: string, offline = false) => {
+    setTransactionRef(reference);
+    setCompletedAt(new Date().toISOString());
+    setPaidOffline(offline);
+    setCurrentStep((prev) => prev + 1);
+  };
 
   const handleNext = async () => {
     if (!canProceed()) return;
-
-    const step = steps[currentStep];
-    if (step?.id === "payment") {
-      setProcessing(true);
-      const ref = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      const amountPence = Math.round(amount * 100);
-      const earned = campaign.rewards?.find((r) => amountPence >= (r.amount ?? 0) * 100);
-      setTransactionRef(ref);
-      setCompletedAt(new Date().toISOString());
-
-      try {
-        if (campaign.id) {
-          if (campaign.mode === "fund") {
-            await campaignApi.createPledge(campaign.id, {
-              amount: amountPence,
-              paymentMethod,
-              rewardId: earned?.id,
-            });
-          } else {
-            await campaignApi.createDonation(campaign.id, {
-              amount: amountPence,
-              paymentMethod,
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Contribution API call error:", err);
-      } finally {
-        setProcessing(false);
-        setCurrentStep((prev) => prev + 1);
-      }
-      return;
-    }
-
     setCurrentStep((prev) => prev + 1);
   };
 
@@ -1088,8 +1094,20 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
         return (
           <PaymentStep
             amount={amount}
-            paymentMethod={paymentMethod}
-            onPaymentMethodChange={setPaymentMethod}
+            amountPence={Math.round(amount * 100)}
+            purpose={(campaign.mode === "fund" ? "PLEDGE" : "DONATION") as ChargePurpose}
+            campaignId={campaign.id}
+            rewardId={
+              campaign.rewards
+                ?.filter((r) => Math.round(amount * 100) >= (r.amount ?? 0))
+                .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0]?.id
+            }
+            metadata={{
+              participationType,
+              campaignTitle: campaign.title,
+              allocations: allocationEnabled ? allocations : undefined,
+            }}
+            onPaid={handlePaid}
           />
         );
       case "confirmation":
@@ -1100,6 +1118,8 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
             amount={amount}
             transactionRef={transactionRef}
             completedAt={completedAt}
+            issuedRewards={issuedRewards}
+            pending={paidOffline}
             onGoToDashboard={handleGoToDashboard}
             onShare={handleShare}
             onViewCampaign={handleViewCampaign}
@@ -1145,32 +1165,29 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
                 Back
               </button>
             )}
-            <button
-              onClick={handleNext}
-              disabled={!canProceed() || processing}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
-                canProceed() && !processing
-                  ? "bg-primary-600 text-white hover:bg-primary-700"
-                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-              }`}
-            >
-              {processing ? (
-                <>
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Processing...
-                </>
-              ) : steps[currentStep]?.id === "payment" ? (
-                <>
-                  Pay £{amount}
-                  <Shield className="h-4 w-4" />
-                </>
-              ) : (
-                <>
-                  Continue
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
+            {steps[currentStep]?.id !== "payment" && (
+              <button
+                onClick={handleNext}
+                disabled={!canProceed() || processing}
+                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
+                  canProceed() && !processing
+                    ? "bg-primary-600 text-white hover:bg-primary-700"
+                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                {processing ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>

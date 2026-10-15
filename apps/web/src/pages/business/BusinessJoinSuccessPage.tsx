@@ -5,6 +5,8 @@
 
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuthStore } from "@/stores/auth.store";
+import { useBusinessProfile } from "@/services/business/hook";
 import {
   CheckCircle, Store, ArrowRight, ArrowDown, Building, MapPin,
   Flag, Globe, User, Trophy, Gift, Sparkles,
@@ -19,7 +21,13 @@ export default function BusinessJoinSuccessPage() {
   const navigate = useNavigate();
   const [isProceeding, setIsProceeding] = useState(false);
 
-  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Manchester";
+  const user = useAuthStore((s) => s.user);
+  const { data: businessProfile } = useBusinessProfile();
+
+  const ownerName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email?.split("@")[0] || "Business Owner";
+  const businessName = (businessProfile as any)?.name || (businessProfile as any)?.tradingName || "Your Registered Business";
+
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local City";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
   const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
 
@@ -52,8 +60,8 @@ export default function BusinessJoinSuccessPage() {
             <h4 className="text-xs font-bold text-blue-900 uppercase mb-3">Your connection hierarchy</h4>
             <div className="flex flex-col items-center gap-0">
               {[
-                { label: "Business Owner", sub: "John Smith", icon: User, color: "bg-indigo-100 text-indigo-600" },
-                { label: "Business", sub: "ABC Foods Ltd", icon: Store, color: "bg-blue-100 text-blue-600" },
+                { label: "Business Owner", sub: ownerName, icon: User, color: "bg-indigo-100 text-indigo-600" },
+                { label: "Business", sub: businessName, icon: Store, color: "bg-blue-100 text-blue-600" },
                 { label: "High Street", sub: streetName, icon: Building, color: "bg-purple-100 text-purple-600" },
                 { label: "Local Area", sub: localAreaName, icon: MapPin, color: "bg-green-100 text-green-600" },
                 { label: "City Hub", sub: cityName, icon: Flag, color: "bg-orange-100 text-orange-600" },

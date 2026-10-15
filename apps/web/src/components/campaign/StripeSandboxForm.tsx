@@ -2,14 +2,18 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { StripeElementsCheckout } from "@/components/payment/StripeElementsCheckout";
 import { paymentService } from "@/services/payment";
+import type { ChargePurpose } from "@/services/payment";
 
 interface StripeSandboxFormProps {
   amount: number;
   campaignId?: string;
+  /** Payment purpose — backers/donors use DONATION/PLEDGE, owners use SELF_FUNDING. */
+  type?: ChargePurpose;
+  rewardId?: string;
   onSubmit: () => void;
 }
 
-export function StripeSandboxForm({ amount, campaignId, onSubmit }: StripeSandboxFormProps) {
+export function StripeSandboxForm({ amount, campaignId, type = "DONATION", rewardId, onSubmit }: StripeSandboxFormProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stripeData, setStripeData] = useState<{
@@ -25,8 +29,9 @@ export function StripeSandboxForm({ amount, campaignId, onSubmit }: StripeSandbo
       const res = await paymentService.createCharge({
         amountMinor: Math.round(amount * 100),
         method: "stripe",
-        type: campaignId ? "SELF_FUNDING" : "DONATION",
+        type,
         campaignId,
+        rewardId,
       });
 
       if (res.clientSecret) {
@@ -51,7 +56,7 @@ export function StripeSandboxForm({ amount, campaignId, onSubmit }: StripeSandbo
 
   useEffect(() => {
     initSession();
-  }, [amount, campaignId]);
+  }, [amount, campaignId, type, rewardId]);
 
   if (loading) {
     return (

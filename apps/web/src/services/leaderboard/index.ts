@@ -6,39 +6,17 @@ import type {
   LeaderboardResponse,
 } from "./type";
 
-function getDemoLeaderboard(
+function getEmptyLeaderboard(
   level: string,
   scopeId?: string,
-  top: number = 10,
 ): Leaderboard {
-  const demoEntries: LeaderboardEntry[] = Array.from({ length: Math.min(top, 20) }, (_, i) => ({
-    id: `demo-${level}-${scopeId || "all"}-${i}`,
-    userId: `user-${i}`,
-    rank: i + 1,
-    totalContributed: Math.floor(Math.random() * 500000) + 10000,
-    campaignCount: Math.floor(Math.random() * 15) + 1,
-    scopeId,
-    user: {
-      id: `user-${i}`,
-      firstName: ["Emma", "Liam", "Olivia", "Noah", "Oliver", "Alice", "Bob", "Charlie", "Diana", "Edward"][i % 10],
-      lastName: ["Wilson", "Smith", "Brown", "Taylor", "Davies", "Clark", "Hall", "Green", "Baker", "Young"][i % 10],
-      avatar: undefined,
-      username: `user${i}`,
-    },
-    backerTier: ["NATIONAL", "CITY", "BACKER", "CITY", "NATIONAL", "BACKER", "CITY", "BACKER", "CITY", "NATIONAL"][i % 10],
-    isOriginalFoundingMember: i < 3,
-  }));
-
-  demoEntries.sort((a, b) => b.totalContributed - a.totalContributed);
-  demoEntries.forEach((e, i) => (e.rank = i + 1));
-
   return {
     id: `leaderboard-${level}-${scopeId || "all"}`,
     scope: level,
     scopeId,
-    totalEntries: demoEntries.length,
+    totalEntries: 0,
     lastUpdated: new Date().toISOString(),
-    entries: demoEntries,
+    entries: [],
   };
 }
 
@@ -72,7 +50,7 @@ export const leaderboardService = {
       const res = await api.get(url);
       return res || null;
     } catch {
-      return getDemoLeaderboard(level, scopeId, top);
+      return getEmptyLeaderboard(level, scopeId);
     }
   },
 
@@ -91,7 +69,7 @@ export const leaderboardService = {
       );
       return res || null;
     } catch {
-      return getDemoLeaderboard(level, scopeId, qualificationLimit);
+      return getEmptyLeaderboard(level, scopeId);
     }
   },
 

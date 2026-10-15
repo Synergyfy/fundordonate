@@ -15,6 +15,24 @@ export class AdminDashboardService {
   ) {}
 
   /**
+   * Invalidates cached admin dashboard summary and revenue chart data.
+   */
+  async invalidateDashboardCache(): Promise<void> {
+    try {
+      const keys = [
+        "admin:stats:summary",
+        "admin:stats:revenue:daily",
+        "admin:stats:revenue:weekly",
+        "admin:stats:revenue:monthly",
+        "admin:stats:revenue:yearly",
+      ];
+      await this.redis.del(...keys);
+    } catch (err: any) {
+      this.logger.warn(`Failed to invalidate dashboard cache: ${err.message}`);
+    }
+  }
+
+  /**
    * Aggregates platform KPIs in a single batch without N+1 queries.
    * Cached in Redis for 60 seconds to ensure high performance.
    */

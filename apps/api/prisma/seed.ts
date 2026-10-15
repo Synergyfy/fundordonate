@@ -334,60 +334,8 @@ async function main() {
   }
   console.log(`Seeded ${citiesData.length} UK Cities with complete hierarchy.`);
 
-  // 3. Seed Reward Definitions
-  const rewards = [
-    {
-      code: "feed_manchester_champion",
-      name: "City Champion",
-      description: "Contributed over £50,000 to city campaigns.",
-      icon: "🏆",
-      criteria: { type: "TOTAL_CONTRIBUTION", target: 5000000 },
-    },
-    {
-      code: "holiday_hero_2026",
-      name: "Holiday Hero 2026",
-      description: "Participated in the Holiday Meal Drive.",
-      icon: "🎄",
-      criteria: { type: "SEASON_PARTICIPATION", season: "winter-2026" },
-    },
-    {
-      code: "community_builder",
-      name: "Community Builder",
-      description: "Supported 3+ community campaigns.",
-      icon: "🏘️",
-      criteria: { type: "CAMPAIGN_COUNT", target: 3 },
-    },
-    {
-      code: "youth_champion",
-      name: "Youth Champion",
-      description: "Contributed over £20,000 to youth programmes.",
-      icon: "🎓",
-      criteria: { type: "CATEGORY_CONTRIBUTION", category: "youth", target: 2000000 },
-    },
-    {
-      code: "seasonal_star",
-      name: "Seasonal Star",
-      description: "Top 5 contributor in any season.",
-      icon: "⭐",
-      criteria: { type: "LEADERBOARD_RANK", maxRank: 5 },
-    },
-    {
-      code: "platinum_achiever",
-      name: "Platinum Achiever",
-      description: "Reach £250,000 total contributions.",
-      icon: "💎",
-      criteria: { type: "TOTAL_CONTRIBUTION", target: 25000000 },
-    },
-  ];
-
-  for (const r of rewards) {
-    await prisma.rewardDefinition.upsert({
-      where: { code: r.code },
-      update: {},
-      create: r,
-    });
-  }
-  console.log(`Seeded ${rewards.length} Reward Definitions.`);
+  // 3. Reward definitions retired — campaign rewards are now authored on the
+  //    CampaignTemplate and issued into RewardIssuance (MCOM Rewards / local).
 
   // 3.5. Seed Seasons
   await prisma.season.upsert({
@@ -461,7 +409,25 @@ async function main() {
         },
       ],
       rewardsConfig: [
-        { id: "rw-1", name: "10% High Street Discount Card", category: "Discount" },
+        {
+          id: "rw-1",
+          name: "10% High Street Discount Card",
+          description: "Unlocked for backers contributing £25 or more",
+          rule: "Unlocked for backers contributing £25 or more",
+          category: "Discount",
+          rewardCategory: "voucher",
+          source: "fundordonate",
+          mcomRewardId: null,
+          valueGbp: null,
+          audience: "both",
+          delivery: "voucher_code",
+          qualificationMode: "highest",
+          quantityType: "unlimited",
+          quantityLimit: null,
+          conditions: [
+            { id: "cond-rw-1", mode: "minimum", minPence: 2500, maxPence: null, exactPence: null },
+          ],
+        },
       ],
       mcomAssetsConfig: [],
     },
@@ -572,7 +538,25 @@ async function main() {
         },
       ],
       rewardsConfig: [
-        { id: "rw-footfall", name: "High Street Welcome Voucher", category: "Voucher" },
+        {
+          id: "rw-footfall",
+          name: "High Street Welcome Voucher",
+          description: "Unlocked for backers contributing £10 or more",
+          rule: "Unlocked for backers contributing £10 or more",
+          category: "Voucher",
+          rewardCategory: "voucher",
+          source: "fundordonate",
+          mcomRewardId: null,
+          valueGbp: null,
+          audience: "both",
+          delivery: "voucher_code",
+          qualificationMode: "highest",
+          quantityType: "unlimited",
+          quantityLimit: null,
+          conditions: [
+            { id: "cond-rw-footfall", mode: "minimum", minPence: 1000, maxPence: null, exactPence: null },
+          ],
+        },
       ],
       mcomAssetsConfig: [],
     },
@@ -651,6 +635,13 @@ async function main() {
   });
 
   console.log("Seeded Campaign Master Templates.");
+
+  // Seeded templates are intended to be live; align the new lifecycle status
+  // with the legacy isActive flag so admin lists show them as Active.
+  await prisma.campaignTemplate.updateMany({
+    where: { isActive: true, status: "DRAFT" },
+    data: { status: "ACTIVE" },
+  });
 
   // 5. Seed Diverse Business Owners & Businesses
   const businessSeedData = [

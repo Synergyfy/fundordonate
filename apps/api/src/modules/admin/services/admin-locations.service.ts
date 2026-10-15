@@ -406,4 +406,109 @@ export class AdminLocationsService {
 
     return updated.value;
   }
+
+  /**
+   * Computes (without persisting) the projected roll-up for every city from its
+   * live active campaigns. Returns the per-city current vs projected raised and
+   * any activation status change.
+   */
+  async previewRollup() {
+    const [cities, locations, campaigns] = await Promise.all([
+      this.prisma.hubLocation.findMany({
+        where: { type: HubLocationType.CITY },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, targetAmount: true, activationStatus: true },
+      }),
+      this.prisma.hubLocation.findMany({ select: { id: true, parentId: true, type: true } }),
+      this.prisma.businessCampaign.findMany({
+        where: { status: "ACTIVE", business: { status: "ACTIVE" } },
+        select: { raisedAmount: true, business: { select: { locationId: true } } },
+      }),
+    ]);
+
+    // Walk a business location up the hierarchy to find its owning city.
+    const locationById = new Map(locations.map((l) => [l.id, l]));
+    const cityOf = (locationId: string | null): string | null => {
+      let current = locationId;
+      while (current) {
+        const loc = locationById.get(current);
+        if (!loc) return null;
+        if (loc.type === HubLocationType.CITY) return loc.id;
+        current = loc.parentId;
+      }
+      return null;
+    };
+
+    const raisedByCity = new Map<string, number>();
+    for (const campaign of campaigns) {
+      const cityId = cityOf(campaign.business?.locationId ?? null);
+      if (!cityId) continue;
+      raisedByCity.set(cityId, (raisedByCity.get(cityId) ?? 0) + campaign.raisedAmount);
+    }
+
+    const locationsView = cities.map((city) => {
+      const currentRaised = raisedByCity.get(city.id) ?? 0;
+      const target = Number(city.targetAmount) || 0;
+      const projectedRaised = currentRaised;
+      const pct = target > 0 ? Math.round((projectedRaised / target) * 100) : 0;
+      const currentStatus = (city.activationStatus || "PENDING").toUpperCase();
+      const projectedStatus =
+        pct >= 100 ? "ACTIVATED" : pct >= 50 ? "IN_PROGRESS" : "PENDING";
+      return {
+        id: city.id,
+        name: city.name,
+        currentRaised,
+        projectedRaised,
+        statusChange:
+          projectedStatus !== currentStatus
+            ? `${currentStatus} → ${projectedStatus}`
+            : null,
+      };
+    });
+
+    return {
+      locations: locationsView,
+      totalProjected: locationsView.reduce((s, l) => s + l.projectedRaised, 0),
+    };
+  }
+
+  /**
+   * Recomputes and persists the activation progress for every city from live
+   * campaign totals (safety net / manual trigger for the roll-up job).
+   */
+  async runRollup() {
+    const preview = await this.previewRollup();
+    const cities = await this.prisma.hubLocation.findMany({
+      where: { type: HubLocationType.CITY },
+      select: { id: true, targetAmount: true, metadata: true },
+    });
+
+    let updated = 0;
+    for (const city of cities) {
+      const target = Number(city.targetAmount) || 0;
+      const entry = preview.locations.find((l) => l.id === city.id);
+      const raised = entry?.projectedRaised ?? 0;
+      const activationProgress = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 0;
+
+      await this.prisma.hubLocation.update({
+        where: { id: city.id },
+        data: {
+          metadata: {
+            ...((city.metadata as Record<string, unknown>) ?? {}),
+            activationProgress,
+            lastRolledUpAt: new Date().toISOString(),
+          },
+        },
+      });
+      updated++;
+    }
+
+    await this.invalidateLocationCache();
+
+    return {
+      success: true,
+      message: `Roll-up complete — recomputed ${updated} cities.`,
+      citiesUpdated: updated,
+    };
+  }
 }

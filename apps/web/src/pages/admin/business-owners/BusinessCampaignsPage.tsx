@@ -1,46 +1,33 @@
 // =============================================================================
 // Business Campaigns — Admin
-// Campaigns created and run by business owners (frontend demo data).
+// Campaigns created and run by business owners (live database data).
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, ChevronRight, Target, X, Users, TrendingUp } from "lucide-react";
+import { adminApi, type AdminCampaign } from "@/services/admin";
 
-interface BusinessCampaign {
+interface FormattedCampaign {
   id: string;
   title: string;
   owner: string;
   business: string;
   city: string;
   mode: "donation" | "fund";
-  status: "DRAFT" | "PENDING REVIEW" | "ACTIVE" | "COMPLETED";
+  status: string;
   raised: number; // £
   target: number; // £
   backers: number;
   createdAt: string;
 }
 
-const DEMO_BUSINESS_CAMPAIGNS: BusinessCampaign[] = [
-  { id: "bc-1", title: "TechStart Manchester Starter Kits", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", mode: "fund", status: "ACTIVE", raised: 42000, target: 50000, backers: 180, createdAt: "2026-08-14" },
-  { id: "bc-2", title: "Green Initiative Planters", owner: "Sarah Chen", business: "Green Initiative Ltd", city: "Birmingham", mode: "donation", status: "ACTIVE", raised: 28000, target: 35000, backers: 120, createdAt: "2026-08-22" },
-  { id: "bc-3", title: "Community Fund London Grants", owner: "Michael Okafor", business: "Community Fund London", city: "London", mode: "fund", status: "ACTIVE", raised: 65000, target: 80000, backers: 290, createdAt: "2026-07-30" },
-  { id: "bc-4", title: "Digital Skills Leeds Workshop", owner: "Emma Thompson", business: "Digital Skills Leeds", city: "Leeds", mode: "donation", status: "PENDING REVIEW", raised: 15000, target: 25000, backers: 85, createdAt: "2026-09-05" },
-  { id: "bc-5", title: "Liverpool Green Spaces", owner: "Lisa Patel", business: "Liverpool Green Spaces", city: "Liverpool", mode: "donation", status: "COMPLETED", raised: 9500, target: 9500, backers: 45, createdAt: "2026-06-11" },
-  { id: "bc-6", title: "Bristol Tech Hub Expansion", owner: "David Brown", business: "Bristol Tech Hub", city: "Bristol", mode: "fund", status: "DRAFT", raised: 0, target: 60000, backers: 0, createdAt: "2026-09-18" },
-  { id: "bc-7", title: "Oldham Street Shopfront Fix", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", mode: "fund", status: "COMPLETED", raised: 12000, target: 12000, backers: 60, createdAt: "2026-05-02" },
-];
-
-const STATUS_COLORS: Record<BusinessCampaign["status"], string> = {
+const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
   "PENDING REVIEW": "bg-amber-100 text-amber-700",
+  PENDING: "bg-amber-100 text-amber-700",
   ACTIVE: "bg-green-100 text-green-700",
   COMPLETED: "bg-blue-100 text-blue-700",
-};
-
-const MODE_LABELS: Record<BusinessCampaign["mode"], string> = {
-  donation: "Donate",
-  fund: "Fund",
 };
 
 const gbp = (v: number) =>
@@ -49,30 +36,61 @@ const dateFmt = (d: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 
 export function BusinessCampaignsPage() {
+  const [campaigns, setCampaigns] = useState<FormattedCampaign[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<BusinessCampaign | null>(null);
+  const [selected, setSelected] = useState<FormattedCampaign | null>(null);
 
-  const filtered = useMemo(
-    () =>
-      DEMO_BUSINESS_CAMPAIGNS.filter((c) => {
-        const q = search.toLowerCase();
-        if (search && !c.title.toLowerCase().includes(q) && !c.business.toLowerCase().includes(q) && !c.owner.toLowerCase().includes(q)) return false;
-        if (statusFilter !== "all" && c.status !== statusFilter) return false;
-        return true;
-      }),
-    [search, statusFilter]
-  );
+  useEffect(() => {
+    let mounted = true;
+    async function fetchCampaigns() {
+      setLoading(true);
+      try {
+        const res = await adminApi.getCampaigns({
+          search: search || undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+          limit: 50,
+        });
+        if (!mounted) return;
+        const items = res?.items || [];
+        const mapped: FormattedCampaign[] = items.map((c: any) => ({
+          id: c.id,
+          title: c.title || "Untitled Campaign",
+          owner: c.business?.owner?.name || c.author?.name || c.business?.name || "Business Owner",
+          business: c.business?.name || "Independent",
+          city: c.business?.city || c.cityName || "United Kingdom",
+          mode: (c.mode || "fund").toLowerCase() === "donate" ? "donation" : "fund",
+          status: (c.status || "ACTIVE").toUpperCase(),
+          raised: Math.round((c.raisedAmount || 0) / 100),
+          target: Math.round((c.targetAmount || 0) / 100),
+          backers: c.backerCount || c.backersCount || 0,
+          createdAt: c.createdAt || new Date().toISOString(),
+        }));
+        setCampaigns(mapped);
+      } catch (err) {
+        console.error("Failed to load business campaigns:", err);
+        if (mounted) setCampaigns([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchCampaigns();
+    return () => {
+      mounted = false;
+    };
+  }, [search, statusFilter]);
 
   const stats = useMemo(() => {
-    const active = DEMO_BUSINESS_CAMPAIGNS.filter((c) => c.status === "ACTIVE");
+    const active = campaigns.filter((c) => c.status === "ACTIVE");
     return {
-      total: DEMO_BUSINESS_CAMPAIGNS.length,
+      total: campaigns.length,
       active: active.length,
-      raised: DEMO_BUSINESS_CAMPAIGNS.reduce((sum, c) => sum + c.raised, 0),
-      backers: DEMO_BUSINESS_CAMPAIGNS.reduce((sum, c) => sum + c.backers, 0),
+      raised: campaigns.reduce((sum, c) => sum + c.raised, 0),
+      backers: campaigns.reduce((sum, c) => sum + c.backers, 0),
     };
-  }, []);
+  }, [campaigns]);
 
   return (
     <div className="space-y-6">
@@ -128,7 +146,7 @@ export function BusinessCampaignsPage() {
         >
           <option value="all">All Statuses</option>
           <option value="DRAFT">Draft</option>
-          <option value="PENDING REVIEW">Pending Review</option>
+          <option value="PENDING">Pending Review</option>
           <option value="ACTIVE">Active</option>
           <option value="COMPLETED">Completed</option>
         </select>
@@ -136,93 +154,103 @@ export function BusinessCampaignsPage() {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-100 bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 font-medium text-gray-500">Campaign</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Business Owner</th>
-              <th className="px-4 py-3 font-medium text-gray-500 hidden md:table-cell">City</th>
-              <th className="px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Type</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Progress</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No campaigns match your filters.</td></tr>
-            )}
-            {filtered.map((c) => {
-              const pct = c.target > 0 ? Math.min(100, Math.round((c.raised / c.target) * 100)) : 0;
-              return (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{c.title}</p>
-                    <p className="text-xs text-gray-400">Created {dateFmt(c.createdAt)}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm text-gray-700">{c.owner}</p>
-                    <p className="text-xs text-gray-400">{c.business}</p>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell text-sm text-gray-600">{c.city}</td>
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{MODE_LABELS[c.mode]}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="w-32">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>{gbp(c.raised)}</span>
-                        <span>{pct}%</span>
-                      </div>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-gray-100">
-                        <div className="h-1.5 rounded-full bg-primary-500" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="mt-0.5 text-[10px] text-gray-400">of {gbp(c.target)}</div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[c.status]}`}>{c.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setSelected(c)}
-                      className="rounded px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50"
-                    >
-                      Details
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {loading ? (
+          <div className="p-12 text-center text-sm text-gray-400">Loading campaigns...</div>
+        ) : campaigns.length === 0 ? (
+          <div className="p-12 text-center text-sm text-gray-500">No campaigns found.</div>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-100 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-gray-700">Campaign</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Business & Location</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Type</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Raised / Target</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Status</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">Backers</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {campaigns.map((c) => {
+                const pct = c.target > 0 ? Math.min(100, Math.round((c.raised / c.target) * 100)) : 0;
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{c.title}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      <div>{c.business}</div>
+                      <div className="text-gray-400">{c.city}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="capitalize text-xs font-medium text-gray-600">{c.mode}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      <div className="font-semibold text-gray-900">{gbp(c.raised)} of {gbp(c.target)}</div>
+                      <div className="text-gray-400">{pct}%</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_COLORS[c.status] || "bg-gray-100 text-gray-500"}`}>
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-semibold text-gray-700">{c.backers}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => setSelected(c)}
+                        className="rounded border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        Details
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Details modal */}
+      {/* Drawer */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Campaign Details</h2>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
-                <X className="h-5 w-5" />
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white p-6 shadow-xl overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b">
+              <h2 className="text-lg font-bold text-gray-900">Campaign Details</h2>
+              <button onClick={() => setSelected(null)} className="rounded p-1 hover:bg-gray-100">
+                <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Campaign</span><span className="text-right font-medium text-gray-800">{selected.title}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Owner</span><span className="text-right text-gray-800">{selected.owner}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Business</span><span className="text-right text-gray-800">{selected.business}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">City</span><span className="text-right text-gray-800">{selected.city}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Type</span><span className="text-right text-gray-800">{MODE_LABELS[selected.mode]}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Raised</span><span className="font-semibold text-gray-900">{gbp(selected.raised)} of {gbp(selected.target)}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Backers</span><span className="text-gray-800">{selected.backers}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Status</span><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[selected.status]}`}>{selected.status}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-gray-500">Created</span><span className="text-gray-800">{dateFmt(selected.createdAt)}</span></div>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button onClick={() => setSelected(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                Close
-              </button>
+            <div className="mt-4 space-y-4 text-sm">
+              <div>
+                <span className="text-xs text-gray-400">Title</span>
+                <p className="font-semibold text-gray-900">{selected.title}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Business</span>
+                <p className="text-gray-800">{selected.business} ({selected.owner})</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">City</span>
+                <p className="text-gray-800">{selected.city}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-xs text-gray-400">Raised</span>
+                  <p className="font-bold text-gray-900">{gbp(selected.raised)}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400">Target</span>
+                  <p className="font-bold text-gray-900">{gbp(selected.target)}</p>
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Status</span>
+                <p><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_COLORS[selected.status] || "bg-gray-100"}`}>{selected.status}</span></p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400">Created</span>
+                <p className="text-gray-700">{dateFmt(selected.createdAt)}</p>
+              </div>
             </div>
           </div>
         </div>

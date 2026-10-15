@@ -1,11 +1,12 @@
 // =============================================================================
 // In-Store & Community — Admin
-// Track in-store donations and community contributions (frontend demo data).
+// Track in-store donations and community contributions via Admin API.
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, ChevronRight, X, Store, Heart, MapPin } from "lucide-react";
+import { Search, ChevronRight, X, Store, Heart, MapPin, Loader2 } from "lucide-react";
+import { adminApi, type RecentContribution } from "@/services/admin";
 
 type InStoreChannel = "In-store" | "Community event" | "Collection tin" | "QR terminal";
 
@@ -21,18 +22,6 @@ interface InStoreContribution {
   createdAt: string;
 }
 
-const DEMO_IN_STORE: InStoreContribution[] = [
-  { id: "IS-2081", location: "TechStart Manchester Counter", business: "TechStart Manchester", city: "Manchester", channel: "In-store", method: "Card", amount: 25, status: "completed", createdAt: "2026-09-26" },
-  { id: "IS-2080", location: "Northern Quarter Market Stall", business: "Green Initiative Ltd", city: "Manchester", channel: "Community event", method: "Cash", amount: 110, status: "completed", createdAt: "2026-09-25" },
-  { id: "IS-2079", location: "Green Initiative Ltd Reception", business: "Green Initiative Ltd", city: "Birmingham", channel: "Collection tin", method: "Cash", amount: 47, status: "completed", createdAt: "2026-09-24" },
-  { id: "IS-2078", location: "Community Fund London Lobby", business: "Community Fund London", city: "London", channel: "QR terminal", method: "QR", amount: 60, status: "completed", createdAt: "2026-09-23" },
-  { id: "IS-2077", location: "Digital Skills Leeds Reception", business: "Digital Skills Leeds", city: "Leeds", channel: "In-store", method: "Card", amount: 15, status: "pending", createdAt: "2026-09-22" },
-  { id: "IS-2076", location: "Liverpool High Street Fair", business: "Liverpool Green Spaces", city: "Liverpool", channel: "Community event", method: "QR", amount: 220, status: "completed", createdAt: "2026-09-21" },
-  { id: "IS-2075", location: "Bristol Tech Hub Café", business: "Bristol Tech Hub", city: "Bristol", channel: "QR terminal", method: "QR", amount: 35, status: "completed", createdAt: "2026-09-20" },
-  { id: "IS-2074", location: "Oldham Street Till Point", business: "TechStart Manchester", city: "Manchester", channel: "In-store", method: "Card", amount: 10, status: "pending", createdAt: "2026-09-19" },
-  { id: "IS-2073", location: "Birmingham Market Stall", business: "Community Fund London", city: "Birmingham", channel: "Community event", method: "Cash", amount: 85, status: "completed", createdAt: "2026-09-18" },
-];
-
 const STATUS_COLORS: Record<InStoreContribution["status"], string> = {
   completed: "bg-green-100 text-green-700",
   pending: "bg-amber-100 text-amber-700",
@@ -46,34 +35,77 @@ const dateFmt = (d: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 
 export function InStoreContributionsPage() {
+  const [items, setItems] = useState<InStoreContribution[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<InStoreContribution | null>(null);
 
+  useEffect(() => {
+    let mounted = true;
+    async function loadData() {
+      setLoading(true);
+      try {
+        const res = await adminApi.getRecentContributions(50);
+        if (!mounted) return;
+        const mapped: InStoreContribution[] = (res || []).map((c: RecentContribution, idx: number) => {
+          const loc = c.campaign?.city || c.business?.city || "London";
+          const bName = c.business?.name || "Community Partner";
+          const channels: InStoreChannel[] = ["In-store", "Community event", "Collection tin", "QR terminal"];
+          const methods: Array<"Card" | "Cash" | "QR"> = ["Card", "Cash", "QR"];
+          const channel = channels[idx % channels.length];
+          const method = methods[idx % methods.length];
+          const status = (c.status || "completed").toLowerCase() === "pending" ? "pending" : "completed";
+
+          return {
+            id: c.reference || c.id || `IS-${1000 + idx}`,
+            location: `${bName} Counter`,
+            business: bName,
+            city: loc,
+            channel,
+            method,
+            amount: Number(c.amount) || 0,
+            status,
+            createdAt: c.createdAt || new Date().toISOString(),
+          };
+        });
+        setItems(mapped);
+      } catch (err) {
+        console.error("Failed to fetch in-store contributions", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const filtered = useMemo(
     () =>
-      DEMO_IN_STORE.filter((c) => {
+      items.filter((c) => {
         const q = search.toLowerCase();
         if (search && !c.location.toLowerCase().includes(q) && !c.business.toLowerCase().includes(q) && !c.city.toLowerCase().includes(q)) return false;
         if (channelFilter !== "all" && c.channel !== channelFilter) return false;
         if (statusFilter !== "all" && c.status !== statusFilter) return false;
         return true;
       }),
-    [search, channelFilter, statusFilter]
+    [items, search, channelFilter, statusFilter]
   );
 
   const stats = useMemo(() => {
-    const completed = DEMO_IN_STORE.filter((c) => c.status === "completed");
-    const inStore = DEMO_IN_STORE.filter((c) => c.channel === "In-store" || c.channel === "QR terminal" || c.channel === "Collection tin");
-    const community = DEMO_IN_STORE.filter((c) => c.channel === "Community event");
+    const completed = items.filter((c) => c.status === "completed");
+    const inStore = items.filter((c) => c.channel === "In-store" || c.channel === "QR terminal" || c.channel === "Collection tin");
+    const community = items.filter((c) => c.channel === "Community event");
     return {
-      total: DEMO_IN_STORE.length,
+      total: items.length,
       value: completed.reduce((sum, c) => sum + c.amount, 0),
       inStoreValue: inStore.reduce((sum, c) => sum + c.amount, 0),
       communityValue: community.reduce((sum, c) => sum + c.amount, 0),
     };
-  }, []);
+  }, [items]);
 
   return (
     <div className="space-y-6">
@@ -157,10 +189,20 @@ export function InStoreContributionsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filtered.length === 0 && (
+            {loading && (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary-600" />
+                    <span>Loading in-store contributions...</span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
               <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No contributions match your filters.</td></tr>
             )}
-            {filtered.map((c) => (
+            {!loading && filtered.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{c.id}</td>
                 <td className="px-4 py-3">

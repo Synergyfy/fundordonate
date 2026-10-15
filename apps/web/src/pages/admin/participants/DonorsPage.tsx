@@ -1,57 +1,66 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight, Search, Users, HeartHandshake, Crown, TrendingUp } from "lucide-react";
+import { ChevronRight, Search, Users, HeartHandshake, Crown, TrendingUp, Loader2 } from "lucide-react";
+import { useAdminBackers } from "@/services/admin/hook";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
-interface DonorRow {
+interface DonorItem {
   id: string;
   name: string;
   email: string;
   city: string;
-  donations: number; // count
-  total: number; // pence
+  donations: number;
+  total: number;
   founding: boolean;
   lastDonation: string;
 }
-
-const SEED: DonorRow[] = [
-  { id: "D-501", name: "Henry Lewis", email: "henry.lewis@example.com", city: "London", donations: 14, total: 1_250_000, founding: true, lastDonation: "2026-09-22" },
-  { id: "D-502", name: "James Wilson", email: "j.wilson@example.com", city: "Manchester", donations: 9, total: 640_000, founding: true, lastDonation: "2026-09-26" },
-  { id: "D-503", name: "Sarah Chen", email: "sarah.chen@example.com", city: "London", donations: 11, total: 485_000, founding: false, lastDonation: "2026-09-26" },
-  { id: "D-504", name: "Grace Okoro", email: "g.okoro@example.com", city: "Leeds", donations: 6, total: 310_000, founding: false, lastDonation: "2026-09-24" },
-  { id: "D-505", name: "Oliver Smith", email: "oliver.s@example.com", city: "Birmingham", donations: 7, total: 275_000, founding: true, lastDonation: "2026-09-23" },
-  { id: "D-506", name: "Amelia Foster", email: "amelia.f@example.com", city: "Birmingham", donations: 5, total: 190_000, founding: false, lastDonation: "2026-09-25" },
-  { id: "D-507", name: "Noah Patel", email: "noah.patel@example.com", city: "Bristol", donations: 4, total: 145_000, founding: false, lastDonation: "2026-09-25" },
-  { id: "D-508", name: "Ava Thompson", email: "ava.t@example.com", city: "Bristol", donations: 3, total: 62_500, founding: false, lastDonation: "2026-09-20" },
-];
 
 export function DonorsPage() {
   const [search, setSearch] = useState("");
   const [foundingOnly, setFoundingOnly] = useState(false);
 
-  const filtered = useMemo(
-    () =>
-      SEED.filter((d) => {
-        if (foundingOnly && !d.founding) return false;
-        if (search && !`${d.name} ${d.email} ${d.city}`.toLowerCase().includes(search.toLowerCase())) return false;
-        return true;
-      }),
-    [search, foundingOnly]
-  );
+  const { data, isLoading, isError } = useAdminBackers({
+    search: search.trim() || undefined,
+  });
+
+  const rawItems: DonorItem[] = useMemo(() => {
+    const list = data?.items ?? (data as any)?.backers ?? [];
+    return list.map((b: any): DonorItem => {
+      const name = [b.firstName, b.lastName].filter(Boolean).join(" ") || b.email.split("@")[0];
+      const isFounding = Boolean(b.membershipTier && b.membershipTier.toUpperCase().includes("FOUNDING"));
+      return {
+        id: b.id,
+        name,
+        email: b.email,
+        city: b.city || "—",
+        donations: b.contributionsCount || 0,
+        total: b.totalContributed || 0,
+        founding: isFounding,
+        lastDonation: b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-GB") : "—",
+      };
+    });
+  }, [data]);
+
+  const filtered: DonorItem[] = useMemo(() => {
+    return rawItems.filter((d: DonorItem) => {
+      if (foundingOnly && !d.founding) return false;
+      return true;
+    });
+  }, [rawItems, foundingOnly]);
 
   const stats = useMemo(() => {
-    const total = SEED.reduce((s, d) => s + d.total, 0);
-    const donations = SEED.reduce((s, d) => s + d.donations, 0);
+    const total = rawItems.reduce((s: number, d: any) => s + d.total, 0);
+    const donations = rawItems.reduce((s: number, d: any) => s + d.donations, 0);
     return {
-      donors: SEED.length,
+      donors: data?.total ?? rawItems.length,
       donations,
       total,
-      founding: SEED.filter((d) => d.founding).length,
+      founding: rawItems.filter((d: any) => d.founding).length,
       avg: donations > 0 ? Math.round(total / donations) : 0,
     };
-  }, []);
+  }, [rawItems, data]);
 
   return (
     <div className="space-y-6">
@@ -125,12 +134,29 @@ export function DonorsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((d) => (
+            {isLoading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary-600" />
+                    <span>Loading donors...</span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {isError && !isLoading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-red-500">
+                  Failed to load donors from server.
+                </td>
+              </tr>
+            )}
+            {!isLoading && !isError && filtered.map((d) => (
               <tr key={d.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
-                      {d.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                      {d.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                     </span>
                     <span className="font-medium text-gray-900">{d.name}</span>
                   </div>
@@ -149,7 +175,7 @@ export function DonorsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {!isLoading && !isError && filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">No donors match.</td>
               </tr>

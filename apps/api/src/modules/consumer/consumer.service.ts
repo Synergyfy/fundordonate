@@ -8,31 +8,30 @@ export class ConsumerService {
   async getDashboardStats(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        contributions: {
-          where: { status: "COMPLETED" },
-          select: {
-            amount: true,
-            campaignId: true,
-          },
-        },
-      },
+      select: { id: true, email: true, mcomUserId: true },
     });
 
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    const totalContributed = user.contributions.reduce((acc, c) => acc + c.amount, 0);
-    const uniqueCampaigns = new Set(user.contributions.map((c) => c.campaignId));
-    const campaignsBacked = uniqueCampaigns.size;
-
-    // Count rewards from completed contributions that triggered rewards or earned rewards
-    const rewardsCount = Math.floor(campaignsBacked * 1.5);
+    const [contribAgg, uniqueCampaignGroups, rewardsCount] = await Promise.all([
+      this.prisma.contribution.aggregate({
+        where: { backerId: userId, status: "COMPLETED" },
+        _sum: { amount: true },
+      }),
+      this.prisma.contribution.groupBy({
+        by: ["campaignId"],
+        where: { backerId: userId, status: "COMPLETED" },
+      }),
+      this.prisma.rewardIssuance.count({
+        where: this.rewardOwnershipWhere(user),
+      }),
+    ]);
 
     return {
-      totalContributed,
-      campaignsBacked,
+      totalContributed: contribAgg._sum.amount ?? 0,
+      campaignsBacked: uniqueCampaignGroups.length,
       rewardsEarned: rewardsCount,
     };
   }
@@ -151,6 +150,138 @@ export class ConsumerService {
       activeSeason,
       featuredCampaigns,
     };
+  }
+
+  /**
+   * The current user's reward issuances (the rewards they have earned via their
+   * contributions), including the redemption code and lifecycle status.
+   *
+   * Ownership is matched on the contribution backer id, the recorded
+   * `mcomUserId`, or the recipient email — an issuance may have been created by
+   * a webhook or the reconciliation job before/without a local userId.
+   */
+  async getRewards(userId: string, page = 1, limit = 20) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, mcomUserId: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    const where = this.rewardOwnershipWhere(user);
+    const skip = (page - 1) * limit;
+
+    const [rows, total] = await Promise.all([
+      this.prisma.rewardIssuance.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.rewardIssuance.count({ where }),
+    ]);
+
+    const items = await this.decorateRewards(rows);
+    return { items, total, page, totalPages: Math.ceil(total / limit) || 1 };
+  }
+
+  /** A single issuance, scoped to the current user. */
+  async getReward(userId: string, id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, mcomUserId: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    const row = await this.prisma.rewardIssuance.findFirst({
+      where: {
+        AND: [
+          { OR: [{ id }, { externalIssuanceId: id }] },
+          this.rewardOwnershipWhere(user),
+        ],
+      },
+    });
+
+    if (!row) throw new NotFoundException("Reward not found");
+
+    const [item] = await this.decorateRewards([row]);
+    return item;
+  }
+
+  private rewardOwnershipWhere(user: {
+    id: string;
+    email: string | null;
+    mcomUserId: string | null;
+  }) {
+    const or: Array<Record<string, unknown>> = [{ userId: user.id }];
+    if (user.email) or.push({ recipientEmail: user.email });
+    if (user.mcomUserId) or.push({ mcomUserId: user.mcomUserId });
+    return { OR: or };
+  }
+
+  /** Attach the owning campaign's display fields (no Prisma relation exists). */
+  private async decorateRewards(
+    rows: Array<{
+      id: string;
+      campaignId: string | null;
+      rewardTitle: string | null;
+      rewardType: string | null;
+      status: string;
+      code: string | null;
+      value: number | null;
+      quantity: number;
+      externalIssuanceId: string;
+      externalRef: string | null;
+      metadata: unknown;
+      expiresAt: Date | null;
+      redeemedAt: Date | null;
+      revokedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>,
+  ) {
+    const campaignIds = [
+      ...new Set(rows.map((r) => r.campaignId).filter((id): id is string => !!id)),
+    ];
+
+    const campaigns = campaignIds.length
+      ? await this.prisma.businessCampaign.findMany({
+          where: { id: { in: campaignIds } },
+          select: {
+            id: true,
+            title: true,
+            business: {
+              select: { name: true, city: true, logoUrl: true, coverImageUrl: true },
+            },
+          },
+        })
+      : [];
+    const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
+
+    return rows.map((r) => {
+      const campaign = r.campaignId ? campaignMap.get(r.campaignId) : undefined;
+      return {
+        id: r.id,
+        externalIssuanceId: r.externalIssuanceId,
+        campaignId: r.campaignId,
+        campaignTitle: campaign?.title ?? null,
+        campaignImage:
+          campaign?.business?.coverImageUrl ?? campaign?.business?.logoUrl ?? null,
+        campaignLocation: campaign?.business?.city ?? null,
+        title: r.rewardTitle ?? "Reward",
+        rewardType: r.rewardType,
+        source: r.rewardType === "local" ? "fundordonate" : "mcom",
+        status: r.status,
+        code: r.code,
+        value: r.value,
+        quantity: r.quantity,
+        metadata: r.metadata ?? null,
+        expiresAt: r.expiresAt,
+        redeemedAt: r.redeemedAt,
+        revokedAt: r.revokedAt,
+        earnedAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      };
+    });
   }
 
   async getNotifications(userId: string) {

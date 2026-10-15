@@ -1,3 +1,9 @@
+// =============================================================================
+// Season Service — Live Database API
+// Connects frontend pages to PostgreSQL Season records via backend API client.
+// =============================================================================
+
+import api from "../api";
 import type {
   CreateSeasonPayload,
   Season,
@@ -9,289 +15,304 @@ import type {
   SeasonReview,
 } from "./type";
 
-const API_BASE = "/api/seasons";
-
-const DEMO_SEASONS: Season[] = [
-  {
-    id: "season-autumn-2026",
-    name: "Autumn 2026",
-    programmeName: "UK Activation Programme",
-    referenceCode: "S26-AUT",
-    description: "The autumn 2026 activation season.",
-    status: "ACTIVE",
-    startDate: "2026-09-01T00:00:00Z",
-    endDate: "2026-11-30T23:59:59Z",
-    durationDays: 91,
-    overallTarget: 50000000,
-    nationalTarget: 10000000,
-    cityTargetDefault: 5000000,
-    localAreaTargetDefault: 1000000,
-    highStreetTargetDefault: 500000,
-    businessCampaignTargetDefault: 100000,
-    totalRaised: 18750000,
-    totalContributions: 42500,
-    activeCampaigns: 156,
-    totalParticipants: 8900,
-    totalConsumers: 6200,
-    totalBusinessOwners: 2700,
-    totalBackers: 7100,
-    totalFoundingMembers: 1800,
+function mapDbSeason(raw: any): Season {
+  if (!raw) return raw;
+  return {
+    id: raw.id,
+    name: raw.name,
+    programmeName: raw.programmeName || undefined,
+    referenceCode: raw.referenceCode || undefined,
+    description: raw.description || undefined,
+    publicDescription: raw.publicDescription || undefined,
+    internalNotes: raw.internalNotes || undefined,
+    status: raw.status || "DRAFT",
+    startDate: raw.startDate ? new Date(raw.startDate).toISOString() : new Date().toISOString(),
+    endDate: raw.endDate ? new Date(raw.endDate).toISOString() : new Date().toISOString(),
+    durationDays: raw.durationDays || 90,
+    overallTarget: Number(raw.overallTarget || 0),
+    nationalTarget: Number(raw.nationalTarget || 0),
+    cityTargetDefault: Number(raw.cityTargetDefault || 0),
+    localAreaTargetDefault: Number(raw.localAreaTargetDefault || 0),
+    highStreetTargetDefault: Number(raw.highStreetTargetDefault || 0),
+    businessCampaignTargetDefault: Number(raw.businessCampaignTargetDefault || 0),
+    totalRaised: Number(raw.totalRaised || 0),
+    totalContributions: Number(raw.totalContributions || 0),
+    activeCampaigns: Number(raw.activeCampaigns || 0),
+    totalParticipants: Number(raw.totalParticipants || 0),
+    totalConsumers: Number(raw.totalConsumers || 0),
+    totalBusinessOwners: Number(raw.totalBusinessOwners || 0),
+    totalBackers: Number(raw.totalBackers || 0),
+    totalFoundingMembers: Number(raw.totalFoundingMembers || 0),
     activationScope: {
-      nationalEnabled: true,
-      cities: [
-        { cityId: "london", cityName: "London", enabled: true, localAreas: [] },
-        { cityId: "manchester", cityName: "Manchester", enabled: true, localAreas: [] },
-        { cityId: "birmingham", cityName: "Birmingham", enabled: true, localAreas: [] },
-        { cityId: "leeds", cityName: "Leeds", enabled: true, localAreas: [] },
-        { cityId: "bristol", cityName: "Bristol", enabled: false, localAreas: [] },
-      ],
+      nationalEnabled: raw.activationScope?.nationalEnabled ?? true,
+      cities: Array.isArray(raw.activationScope?.cities) ? raw.activationScope.cities : [],
     },
-    participationConfig: { consumerParticipation: true, businessOwnerParticipation: true, backerEnabled: true, foundingMemberEnabled: true, foundingMemberMonthlyEnabled: true },
-    engagementConfig: { rewardsEnabled: true, incentivesEnabled: true, leaderboardsEnabled: true, recognitionEnabled: true, leaderboardScopes: ["NATIONAL", "CITY", "LOCAL_AREA", "HIGH_STREET", "CAMPAIGN"] },
-    spilloverConfig: { onTargetReached: "CONTINUE_CAMPAIGN", surplusHandling: "CARRY_FORWARD_TO_NEXT_SEASON", allowTargetExtension: true, allowCarryForward: true },
-    communicationConfig: { publicTitle: "Autumn 2026 — Fund Or Donate", publicIntroduction: "Join thousands of communities raising funds across the UK this autumn." },
-    createdBy: "admin-1",
-    createdAt: "2026-07-15T10:00:00Z",
-    updatedAt: "2026-09-01T00:00:00Z",
-    activatedAt: "2026-09-01T00:00:00Z",
-  },
-  {
-    id: "season-winter-2026",
-    name: "Winter 2026",
-    programmeName: "UK Activation Programme",
-    referenceCode: "S26-WIN",
-    status: "SCHEDULED",
-    startDate: "2026-12-01T00:00:00Z",
-    endDate: "2027-02-28T23:59:59Z",
-    durationDays: 90,
-    overallTarget: 60000000,
-    nationalTarget: 12000000,
-    cityTargetDefault: 6000000,
-    localAreaTargetDefault: 1200000,
-    highStreetTargetDefault: 600000,
-    businessCampaignTargetDefault: 120000,
-    totalRaised: 0, totalContributions: 0, activeCampaigns: 0, totalParticipants: 0,
-    totalConsumers: 0, totalBusinessOwners: 0, totalBackers: 0, totalFoundingMembers: 0,
-    activationScope: { nationalEnabled: true, cities: [] },
-    participationConfig: { consumerParticipation: true, businessOwnerParticipation: true, backerEnabled: true, foundingMemberEnabled: true, foundingMemberMonthlyEnabled: true },
-    engagementConfig: { rewardsEnabled: true, incentivesEnabled: true, leaderboardsEnabled: true, recognitionEnabled: true, leaderboardScopes: ["NATIONAL", "CITY"] },
-    spilloverConfig: { onTargetReached: "EXTEND_TARGET", surplusHandling: "ALLOCATE_TO_CONFIGURED_OBJECTIVE", allowTargetExtension: true, allowCarryForward: true },
-    communicationConfig: {},
-    createdBy: "admin-1", createdAt: "2026-08-01T10:00:00Z", updatedAt: "2026-08-01T10:00:00Z",
-  },
-  {
-    id: "season-summer-2026",
-    name: "Summer 2026",
-    programmeName: "UK Activation Programme",
-    referenceCode: "S26-SUM",
-    status: "COMPLETED",
-    startDate: "2026-06-01T00:00:00Z",
-    endDate: "2026-08-31T23:59:59Z",
-    durationDays: 92,
-    overallTarget: 30000000,
-    nationalTarget: 6000000,
-    cityTargetDefault: 3000000,
-    localAreaTargetDefault: 600000,
-    highStreetTargetDefault: 300000,
-    businessCampaignTargetDefault: 60000,
-    totalRaised: 27500000, totalContributions: 38000, activeCampaigns: 0, totalParticipants: 7200,
-    totalConsumers: 5100, totalBusinessOwners: 2100, totalBackers: 5800, totalFoundingMembers: 1400,
-    activationScope: { nationalEnabled: true, cities: [] },
-    participationConfig: { consumerParticipation: true, businessOwnerParticipation: true, backerEnabled: true, foundingMemberEnabled: true, foundingMemberMonthlyEnabled: false },
-    engagementConfig: { rewardsEnabled: true, incentivesEnabled: true, leaderboardsEnabled: true, recognitionEnabled: true, leaderboardScopes: ["NATIONAL", "CITY"] },
-    spilloverConfig: { onTargetReached: "CONTINUE_CAMPAIGN", surplusHandling: "CARRY_FORWARD_TO_NEXT_SEASON", allowTargetExtension: true, allowCarryForward: true },
-    communicationConfig: {},
-    createdBy: "admin-1", createdAt: "2026-04-01T10:00:00Z", updatedAt: "2026-08-31T23:59:59Z", completedAt: "2026-08-31T23:59:59Z",
-  },
-  {
-    id: "season-spring-2026",
-    name: "Spring 2026",
-    programmeName: "UK Activation Programme",
-    referenceCode: "S26-SPR",
-    description: "The spring 2026 activation season.",
-    status: "COMPLETED",
-    startDate: "2026-03-01T00:00:00Z",
-    endDate: "2026-05-31T23:59:59Z",
-    durationDays: 92,
-    overallTarget: 25000000,
-    nationalTarget: 5000000,
-    cityTargetDefault: 2500000,
-    localAreaTargetDefault: 500000,
-    highStreetTargetDefault: 250000,
-    businessCampaignTargetDefault: 50000,
-    totalRaised: 22500000, totalContributions: 31000, activeCampaigns: 0, totalParticipants: 6500,
-    totalConsumers: 4600, totalBusinessOwners: 1900, totalBackers: 5200, totalFoundingMembers: 1300,
-    activationScope: { nationalEnabled: true, cities: [] },
-    participationConfig: { consumerParticipation: true, businessOwnerParticipation: true, backerEnabled: true, foundingMemberEnabled: true, foundingMemberMonthlyEnabled: false },
-    engagementConfig: { rewardsEnabled: true, incentivesEnabled: true, leaderboardsEnabled: true, recognitionEnabled: true, leaderboardScopes: ["NATIONAL", "CITY"] },
-    spilloverConfig: { onTargetReached: "CONTINUE_CAMPAIGN", surplusHandling: "CARRY_FORWARD_TO_NEXT_SEASON", allowTargetExtension: true, allowCarryForward: true },
-    communicationConfig: {},
-    createdBy: "admin-1", createdAt: "2026-01-15T10:00:00Z", updatedAt: "2026-05-31T23:59:59Z", completedAt: "2026-05-31T23:59:59Z",
-  },
-];
+    participationConfig: {
+      consumerParticipation: raw.participationConfig?.consumerParticipation ?? true,
+      businessOwnerParticipation: raw.participationConfig?.businessOwnerParticipation ?? true,
+      backerEnabled: raw.participationConfig?.backerEnabled ?? true,
+      foundingMemberEnabled: raw.participationConfig?.foundingMemberEnabled ?? true,
+      foundingMemberMonthlyEnabled: raw.participationConfig?.foundingMemberMonthlyEnabled ?? true,
+    },
+    engagementConfig: {
+      rewardsEnabled: raw.engagementConfig?.rewardsEnabled ?? true,
+      incentivesEnabled: raw.engagementConfig?.incentivesEnabled ?? true,
+      leaderboardsEnabled: raw.engagementConfig?.leaderboardsEnabled ?? true,
+      recognitionEnabled: raw.engagementConfig?.recognitionEnabled ?? true,
+      leaderboardScopes: raw.engagementConfig?.leaderboardScopes || ["NATIONAL", "CITY"],
+    },
+    spilloverConfig: {
+      onTargetReached: raw.spilloverConfig?.onTargetReached || "CONTINUE_CAMPAIGN",
+      surplusHandling: raw.spilloverConfig?.surplusHandling || "CARRY_FORWARD_TO_NEXT_SEASON",
+      allowTargetExtension: raw.spilloverConfig?.allowTargetExtension ?? true,
+      allowCarryForward: raw.spilloverConfig?.allowCarryForward ?? true,
+    },
+    communicationConfig: raw.communicationConfig || {},
+    createdBy: raw.createdById || raw.createdBy || "admin",
+    createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
+    updatedAt: raw.updatedAt ? new Date(raw.updatedAt).toISOString() : new Date().toISOString(),
+    activatedAt: raw.activatedAt ? new Date(raw.activatedAt).toISOString() : undefined,
+    completedAt: raw.completedAt ? new Date(raw.completedAt).toISOString() : undefined,
+    archivedAt: raw.archivedAt ? new Date(raw.archivedAt).toISOString() : undefined,
+  };
+}
 
 export const seasonService = {
-  /** List seasons with filters */
+  /** List seasons with filters from database */
   async list(filters?: SeasonFilters): Promise<SeasonListResponse> {
+    const params: Record<string, any> = {};
+    if (filters?.status?.length) params.status = filters.status.join(",");
+    if (filters?.search) params.search = filters.search;
+
     try {
-      const params = new URLSearchParams();
-      if (filters?.status?.length) params.set("status", filters.status.join(","));
-      if (filters?.search) params.set("search", filters.search);
-      const res = await fetch(`${API_BASE}?${params}`);
-      if (res.ok) return res.json();
-    } catch {}
-    let seasons = [...DEMO_SEASONS];
-    if (filters?.status?.length) seasons = seasons.filter((s) => filters.status!.includes(s.status));
-    if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      seasons = seasons.filter((s) => s.name.toLowerCase().includes(q) || s.referenceCode?.toLowerCase().includes(q));
+      const res: any = await api.get("/seasons", { params });
+      const rawList = res?.seasons || res?.items || (Array.isArray(res) ? res : []);
+      const total = res?.total ?? rawList.length;
+      return {
+        seasons: rawList.map(mapDbSeason),
+        total,
+        page: 1,
+        pageSize: 50,
+      };
+    } catch {
+      // Fallback to admin seasons endpoint if user is authenticated admin
+      try {
+        const adminRes: any = await api.get("/admin/seasons", { params });
+        const rawList = adminRes?.items || adminRes?.seasons || (Array.isArray(adminRes) ? adminRes : []);
+        const total = adminRes?.total ?? rawList.length;
+        return {
+          seasons: rawList.map(mapDbSeason),
+          total,
+          page: 1,
+          pageSize: 50,
+        };
+      } catch (err) {
+        console.error("Failed to fetch seasons from database:", err);
+        return { seasons: [], total: 0, page: 1, pageSize: 20 };
+      }
     }
-    return { seasons, total: seasons.length, page: 1, pageSize: 20 };
   },
 
-  /** Get a single season */
+  /** Get a single season by ID */
   async getById(id: string): Promise<Season | null> {
+    if (!id) return null;
     try {
-      const res = await fetch(`${API_BASE}/${id}`);
-      if (res.ok) return res.json();
-    } catch {}
-    return DEMO_SEASONS.find((s) => s.id === id) || null;
+      const res = await api.get(`/seasons/${id}`);
+      return res ? mapDbSeason(res) : null;
+    } catch {
+      try {
+        const res = await api.get(`/admin/seasons/${id}`);
+        return res ? mapDbSeason(res) : null;
+      } catch {
+        return null;
+      }
+    }
   },
 
-  /** Get the currently active season */
+  /** Get the currently active or scheduled season */
   async getCurrent(): Promise<Season | null> {
     try {
-      const res = await fetch(`${API_BASE}/current`);
-      if (res.ok) return res.json();
-    } catch {}
-    return DEMO_SEASONS.find((s) => s.status === "ACTIVE") || null;
+      const res = await api.get("/seasons/current");
+      return res ? mapDbSeason(res) : null;
+    } catch {
+      try {
+        const res = await api.get("/admin/seasons/current");
+        return res ? mapDbSeason(res) : null;
+      } catch {
+        return null;
+      }
+    }
   },
 
   /** Get season metrics */
   async getMetrics(seasonId: string): Promise<SeasonMetrics | null> {
     try {
-      const res = await fetch(`${API_BASE}/${seasonId}/metrics`);
-      if (res.ok) return res.json();
+      const res = await api.get(`/seasons/${seasonId}/metrics`);
+      if (res) return res;
     } catch {}
-    const season = DEMO_SEASONS.find((s) => s.id === seasonId);
+
+    const season = await this.getById(seasonId);
     if (!season) return null;
+
+    const overallTarget = Number(season.overallTarget || 0);
+    const totalRaised = Number(season.totalRaised || 0);
+
     return {
       seasonId,
-      overallTarget: season.overallTarget,
-      totalRaised: season.totalRaised,
-      progressPercent: Math.round((season.totalRaised / season.overallTarget) * 100),
-      remainingAmount: season.overallTarget - season.totalRaised,
-      citiesActive: season.activationScope.cities.filter((c) => c.enabled).length,
-      citiesTargeted: season.activationScope.cities.length,
-      localAreasActive: 8,
-      highStreetsActive: 12,
-      businessesActive: 45,
-      totalParticipants: season.totalParticipants,
-      consumers: season.totalConsumers,
-      businessOwners: season.totalBusinessOwners,
-      backers: season.totalBackers,
-      foundingMembers: season.totalFoundingMembers,
-      totalCampaigns: season.activeCampaigns + 23,
-      activeCampaigns: season.activeCampaigns,
-      completedCampaigns: 23,
-      campaignsTargetReached: 18,
-      rewardsIssued: 1250,
-      leaderboardActive: 12,
+      overallTarget,
+      totalRaised,
+      progressPercent: overallTarget > 0 ? Math.round((totalRaised / overallTarget) * 100) : 0,
+      remainingAmount: Math.max(0, overallTarget - totalRaised),
+      citiesActive: (season.activationScope?.cities || []).filter((c) => c.enabled).length,
+      citiesTargeted: (season.activationScope?.cities || []).length,
+      localAreasActive: 0,
+      highStreetsActive: 0,
+      businessesActive: 0,
+      totalParticipants: season.totalParticipants || 0,
+      consumers: season.totalConsumers || 0,
+      businessOwners: season.totalBusinessOwners || 0,
+      backers: season.totalBackers || 0,
+      foundingMembers: season.totalFoundingMembers || 0,
+      totalCampaigns: season.activeCampaigns || 0,
+      activeCampaigns: season.activeCampaigns || 0,
+      completedCampaigns: 0,
+      campaignsTargetReached: 0,
+      rewardsIssued: 0,
+      leaderboardActive: 0,
     };
   },
 
   /** Get city activities for a season */
   async getCityActivities(seasonId: string): Promise<SeasonCityActivity[]> {
     try {
-      const res = await fetch(`${API_BASE}/${seasonId}/cities`);
-      if (res.ok) return res.json();
+      const res = await api.get(`/admin/seasons/${seasonId}/cities`);
+      if (Array.isArray(res)) return res;
     } catch {}
-    return [
-      { id: "ca-1", seasonId, cityId: "london", cityName: "London", target: 8000000, raised: 4200000, contributions: 9500, participants: 2100, status: "ACTIVE" },
-      { id: "ca-2", seasonId, cityId: "manchester", cityName: "Manchester", target: 5000000, raised: 2800000, contributions: 6200, participants: 1400, status: "ACTIVE" },
-      { id: "ca-3", seasonId, cityId: "birmingham", cityName: "Birmingham", target: 4000000, raised: 1900000, contributions: 4100, participants: 950, status: "ACTIVE" },
-      { id: "ca-4", seasonId, cityId: "leeds", cityName: "Leeds", target: 3000000, raised: 1200000, contributions: 2800, participants: 680, status: "ACTIVE" },
-    ];
+
+    const season = await this.getById(seasonId);
+    if (!season || !season.activationScope?.cities) return [];
+
+    return season.activationScope.cities.map((c, i) => ({
+      id: `ca-${c.cityId || i}`,
+      seasonId,
+      cityId: c.cityId,
+      cityName: c.cityName,
+      target: season.cityTargetDefault || 1000000,
+      raised: 0,
+      contributions: 0,
+      participants: 0,
+      status: c.enabled ? "ACTIVE" : "INACTIVE",
+    }));
   },
 
-  /** Create a new season */
+  /** Create a new season in database */
   async create(payload: CreateSeasonPayload): Promise<Season> {
-    try {
-      const res = await fetch(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-    } catch {}
-    return {
-      id: `season-${Date.now()}`,
-      ...payload,
-      totalRaised: 0, totalContributions: 0, activeCampaigns: 0, totalParticipants: 0,
-      totalConsumers: 0, totalBusinessOwners: 0, totalBackers: 0, totalFoundingMembers: 0,
-      durationDays: Math.ceil((new Date(payload.endDate).getTime() - new Date(payload.startDate).getTime()) / (1000 * 60 * 60 * 24)),
-      createdBy: "admin-current", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    };
+    const res = await api.post("/admin/seasons", payload);
+    return mapDbSeason(res);
   },
 
-  /** Perform a season action */
+  /** Update an existing season */
+  async update(id: string, payload: Partial<CreateSeasonPayload>): Promise<Season> {
+    const res = await api.put(`/admin/seasons/${id}`, payload);
+    return mapDbSeason(res);
+  },
+
+  /** Perform a lifecycle action on a season */
   async performAction(seasonId: string, action: SeasonAction): Promise<{ success: boolean; message: string }> {
-    try {
-      const res = await fetch(`${API_BASE}/${seasonId}/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) return res.json();
-    } catch {}
-    return { success: true, message: `Season ${action.toLowerCase()}d successfully` };
+    const res = await api.post(`/admin/seasons/${seasonId}/action`, { action });
+    return res || { success: true, message: `Season ${action.toLowerCase()} performed successfully` };
   },
 
-  /** Get season review */
+  /** Get season review from database */
   async getReview(seasonId: string): Promise<SeasonReview | null> {
-    try {
-      const res = await fetch(`${API_BASE}/${seasonId}/review`);
-      if (res.ok) return res.json();
-    } catch {}
-    const season = DEMO_SEASONS.find((s) => s.id === seasonId);
+    const season = await this.getById(seasonId);
     if (!season) return null;
+
+    let apiReview: any = null;
+    try {
+      apiReview = await api.get(`/admin/seasons/${seasonId}/review`);
+    } catch {}
+
+    const reviewSeason = apiReview?.season ? mapDbSeason(apiReview.season) : season;
+    const campaignsOutcome = apiReview?.campaignsOutcome || apiReview?.campaignOutcomes || {};
+    const reviewMetrics = apiReview?.metrics || {};
+
     return {
       seasonId,
-      season,
-      metrics: (await this.getMetrics(seasonId)) as any,
-      performanceByLevel: [],
-      campaignOutcomes: { total: 179, targetReached: 18, exceededTarget: 5, completedBelowTarget: 12, carriedForward: 3, closed: 141, extended: 0 },
-      fundingAndSurplus: { totalSeasonFunding: season.totalRaised, fundsAllocated: Math.round(season.totalRaised * 0.85), surplus: Math.round(season.totalRaised * 0.15), fundsAwaitingAllocation: Math.round(season.totalRaised * 0.1), carryForwardAmount: Math.round(season.totalRaised * 0.05), outstandingExceptions: 2 },
-      participationBreakdown: { byIdentity: [], byRoute: [], byLocation: [] },
-      rewardsAndRecognition: { rewardsIssued: 1250, rewardsQualified: 1800, rewardOpportunitiesActive: 8, rewardOpportunitiesClosed: 4, leaderboardOutcomes: [], recognitionAwarded: 350, campaignIncentivesTriggered: 42 },
-      unfinishedItems: [
-        { id: "u1", type: "ACTIVE_CAMPAIGN", description: "3 campaigns still active past planned end date", severity: "HIGH" },
-        { id: "u2", type: "SURPLUS_AWAITING_ALLOCATION", description: "£2.8M surplus awaiting allocation decision", severity: "MEDIUM" },
-      ],
-      nextSeasonPrep: { duplicateAvailable: true, carryForwardAvailable: true, configurationReady: false, unresolvedItemsCount: 2 },
+      season: reviewSeason,
+      metrics: {
+        overallTarget: reviewSeason.overallTarget,
+        totalRaised: reviewSeason.totalRaised,
+        totalContributions: reviewSeason.totalContributions,
+        activeCampaigns: reviewSeason.activeCampaigns,
+        totalParticipants: reviewSeason.totalParticipants,
+        totalConsumers: reviewSeason.totalConsumers,
+        totalBusinessOwners: reviewSeason.totalBusinessOwners,
+        totalBackers: reviewSeason.totalBackers,
+        totalFoundingMembers: reviewSeason.totalFoundingMembers,
+        progressPercent: reviewSeason.overallTarget > 0 ? Math.round((reviewSeason.totalRaised / reviewSeason.overallTarget) * 100) : 0,
+        ...reviewMetrics,
+      },
+      performanceByLevel: apiReview?.performanceByLevel || [],
+      campaignOutcomes: {
+        total: campaignsOutcome.totalCampaigns ?? campaignsOutcome.total ?? reviewSeason.activeCampaigns ?? 0,
+        targetReached: campaignsOutcome.completed ?? campaignsOutcome.targetReached ?? 0,
+        exceededTarget: campaignsOutcome.exceededTarget ?? 0,
+        completedBelowTarget: campaignsOutcome.completedBelowTarget ?? 0,
+        carriedForward: campaignsOutcome.carriedForward ?? 0,
+        closed: campaignsOutcome.closed ?? 0,
+        extended: campaignsOutcome.extended ?? 0,
+      },
+      fundingAndSurplus: apiReview?.fundingAndSurplus || {
+        totalSeasonFunding: reviewSeason.totalRaised,
+        fundsAllocated: reviewSeason.totalRaised,
+        surplus: Math.max(0, reviewSeason.totalRaised - reviewSeason.overallTarget),
+        fundsAwaitingAllocation: 0,
+        carryForwardAmount: 0,
+        outstandingExceptions: 0,
+      },
+      participationBreakdown: apiReview?.participationBreakdown || { byIdentity: [], byRoute: [], byLocation: [] },
+      rewardsAndRecognition: apiReview?.rewardsAndRecognition || {
+        rewardsIssued: 0,
+        rewardsQualified: 0,
+        rewardOpportunitiesActive: 0,
+        rewardOpportunitiesClosed: 0,
+        leaderboardOutcomes: [],
+        recognitionAwarded: 0,
+        campaignIncentivesTriggered: 0,
+      },
+      unfinishedItems: apiReview?.unfinishedItems || [],
+      nextSeasonPrep: apiReview?.nextSeasonPrep || {
+        duplicateAvailable: true,
+        carryForwardAvailable: true,
+        configurationReady: true,
+        unresolvedItemsCount: 0,
+      },
     };
   },
 
-  /** Duplicate a season */
+  /** Duplicate a season in database */
   async duplicate(sourceId: string, newName: string, startDate: string, endDate: string): Promise<Season> {
-    try {
-      const res = await fetch(`${API_BASE}/${sourceId}/duplicate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName, startDate, endDate }),
-      });
-      if (res.ok) return res.json();
-    } catch {}
-    const source = DEMO_SEASONS.find((s) => s.id === sourceId);
-    if (!source) throw new Error("Source season not found");
+    const source = await this.getById(sourceId);
+    if (!source) throw new Error("Source season not found in database");
+
     return this.create({
-      name: newName, programmeName: source.programmeName, description: source.description,
-      startDate, endDate, status: "DRAFT",
-      overallTarget: source.overallTarget, nationalTarget: source.nationalTarget,
-      cityTargetDefault: source.cityTargetDefault, localAreaTargetDefault: source.localAreaTargetDefault,
-      highStreetTargetDefault: source.highStreetTargetDefault, businessCampaignTargetDefault: source.businessCampaignTargetDefault,
-      activationScope: source.activationScope, participationConfig: source.participationConfig,
-      engagementConfig: source.engagementConfig, spilloverConfig: source.spilloverConfig,
+      name: newName,
+      programmeName: source.programmeName,
+      description: source.description,
+      startDate,
+      endDate,
+      status: "DRAFT",
+      overallTarget: source.overallTarget,
+      nationalTarget: source.nationalTarget,
+      cityTargetDefault: source.cityTargetDefault,
+      localAreaTargetDefault: source.localAreaTargetDefault,
+      highStreetTargetDefault: source.highStreetTargetDefault,
+      businessCampaignTargetDefault: source.businessCampaignTargetDefault,
+      activationScope: source.activationScope,
+      participationConfig: source.participationConfig,
+      engagementConfig: source.engagementConfig,
+      spilloverConfig: source.spilloverConfig,
       communicationConfig: source.communicationConfig,
     });
   },

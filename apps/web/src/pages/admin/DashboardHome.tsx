@@ -21,10 +21,34 @@ const AUDIENCE_TABS: { id: Audience; label: string; icon: React.ReactNode }[] = 
 interface TopCampaign {
   id: string;
   title: string;
-  goalAmount: number;
+  businessName?: string;
+  businessCity?: string;
   raisedAmount: number;
-  author: { firstName: string; lastName: string };
-  _count: { donations: number; pledges: number };
+  targetAmount: number;
+  percentage?: number;
+  status?: string;
+  backerCount?: number;
+}
+
+/** Best-effort display name for a contribution row (backer, or the business). */
+function contributionParty(item: RecentContribution): string {
+  const backer = item.backer;
+  if (backer) {
+    const name = [backer.firstName, backer.lastName].filter(Boolean).join(" ").trim();
+    return name || backer.email || "Anonymous";
+  }
+  return item.business?.name ?? "Anonymous";
+}
+
+function contributionType(type: unknown): string {
+  switch (String(type ?? "").toUpperCase()) {
+    case "PLEDGE":
+      return "Pledge";
+    case "SELF_FUNDING":
+      return "Self-funding";
+    default:
+      return "Donation";
+  }
 }
 
 export function DashboardHome() {
@@ -215,7 +239,9 @@ export function DashboardHome() {
           ) : (
             <div className="space-y-3">
               {topCampaigns.map((c) => {
-                const pct = c.goalAmount > 0 ? Math.round((c.raisedAmount / c.goalAmount) * 100) : 0;
+                const pct =
+                  c.percentage ??
+                  (c.targetAmount > 0 ? Math.round((c.raisedAmount / c.targetAmount) * 100) : 0);
                 return (
                   <div key={c.id} className="rounded-lg border border-gray-50 p-3 hover:bg-gray-50">
                     <div className="flex items-center justify-between">
@@ -225,8 +251,8 @@ export function DashboardHome() {
                       <span className="text-xs font-bold text-primary-600">{pct}%</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-                      <span>{c.author?.firstName} {c.author?.lastName}</span>
-                      <span>{formatCurrency(c.raisedAmount)} of {formatCurrency(c.goalAmount)}</span>
+                      <span>{c.businessName ?? "—"}</span>
+                      <span>{formatCurrency(c.raisedAmount)} of {formatCurrency(c.targetAmount)}</span>
                     </div>
                     <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100">
                       <div className="h-1.5 rounded-full bg-primary-600" style={{ width: `${Math.min(pct, 100)}%` }} />
@@ -253,14 +279,14 @@ export function DashboardHome() {
               {recent.map((item) => (
                 <div key={item.id} className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0">
                   <div>
-                    <p className="text-xs font-medium text-gray-900">{item.user}</p>
+                    <p className="text-xs font-medium text-gray-900">{contributionParty(item)}</p>
                     <p className="text-[11px] text-gray-400">
-                      {item.type === "donation" ? "Donation" : "Pledge"} to {item.campaign}
+                      {contributionType(item.type)} to {item.campaign?.title ?? "a campaign"}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs font-semibold text-gray-900">{formatCurrency(item.amount)}</p>
-                    <p className="text-[11px] text-gray-400">{formatDate(item.date)}</p>
+                    <p className="text-[11px] text-gray-400">{formatDate(item.createdAt ?? item.date)}</p>
                   </div>
                 </div>
               ))}

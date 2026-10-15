@@ -101,7 +101,6 @@ export const AdminHubContentPage = lazy(() => import("@/pages/admin/AdminHubCont
 export const AllCampaignsPage = lazy(() => import("@/pages/admin/campaigns/AllCampaignsPage").then(m => ({ default: m.AllCampaignsPage })));
 export const NewAdminCampaignWizard = lazy(() => import("@/components/admin/wizard/AdminCampaignWizard").then(m => ({ default: m.AdminCampaignWizard })));
 export const AdminCampaignDetailPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignDetailPage"));
-export const AdminTemplatesPage = lazy(() => import("@/pages/admin/AdminTemplatesPage"));
 export const AdminCampaignTemplatesPage = lazy(() => import("@/pages/admin/campaigns/CampaignTemplatesPage").then(m => ({ default: m.CampaignTemplatesPage })));
 export const AdminTemplateWizardPage = lazy(() => import("@/pages/admin/campaigns/TemplateWizardPage").then(m => ({ default: m.TemplateWizardPage })));
 export const AdminTargetCalculationPage = lazy(() => import("@/pages/admin/AdminTargetCalculationPage"));

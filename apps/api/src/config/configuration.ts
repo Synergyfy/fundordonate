@@ -4,6 +4,9 @@ export default () => ({
   cors: {
     origin: process.env.CORS_ORIGIN ?? "http://localhost:5023",
   },
+  stripe: {
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+  },
   database: {
     url: process.env.DATABASE_URL,
   },
@@ -39,5 +42,19 @@ export default () => ({
       baseUrl: process.env.MCOM_SERVICE_BASE_URL,
       scopes: process.env.MCOM_SERVICE_SCOPES ?? "",
     },
+    // Ecosystem peer: MCOM Rewards provider API (direct app-to-app, service mesh).
+    rewardsBaseUrl: process.env.MCOM_REWARDS_BASE_URL ?? "http://localhost:4000",
+    rewardsAudience: process.env.MCOM_REWARDS_AUDIENCE ?? "mcom-rewards",
+    // Shared HMAC secret for inbound MCOM Rewards lifecycle webhooks.
+    // Must match the value configured on the MCOM Rewards side.
+    rewardsWebhookSecret: process.env.MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET,
+  },
+  rewards: {
+    // Periodic reconciliation safety net (mirror drift repair).
+    reconcileEnabled: (process.env.REWARDS_RECONCILE_ENABLED ?? "true") === "true",
+    reconcileIntervalMs: parseInt(
+      process.env.REWARDS_RECONCILE_INTERVAL_MS ?? "900000",
+      10,
+    ),
   },
 });

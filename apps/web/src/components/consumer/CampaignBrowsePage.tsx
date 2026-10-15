@@ -1,6 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { campaignService } from "@/services/campaign";
 
-interface Campaign {
+export interface Campaign {
   id: string;
   slug: string;
   title: string;
@@ -17,131 +19,34 @@ interface Campaign {
   status: string;
 }
 
-const DEMO_CAMPAIGNS: Campaign[] = [
-  {
-    id: "camp-1",
-    slug: "birmingham-community-hub",
-    title: "Birmingham Community Hub",
-    shortDescription: "Building a vibrant community space in the heart of Birmingham",
-    goalAmount: 5000000,
-    raisedAmount: 3250000,
-    deadline: "2026-12-31",
-    mode: "fund",
-    featuredImage: "",
-    location: "Birmingham High Street",
-    cityName: "Birmingham",
-    category: "Community",
-    backersCount: 234,
-    status: "active",
-  },
-  {
-    id: "camp-2",
-    slug: "manchester-youth-sports",
-    title: "Manchester Youth Sports Fund",
-    shortDescription: "Supporting young athletes across Manchester",
-    goalAmount: 2500000,
-    raisedAmount: 1800000,
-    deadline: "2026-11-15",
-    mode: "donate",
-    featuredImage: "",
-    location: "Manchester High Street",
-    cityName: "Manchester",
-    category: "Sports",
-    backersCount: 156,
-    status: "active",
-  },
-  {
-    id: "camp-3",
-    slug: "london-art-revival",
-    title: "London Art Revival",
-    shortDescription: "Revitalizing public art across London boroughs",
-    goalAmount: 7500000,
-    raisedAmount: 4200000,
-    deadline: "2027-03-01",
-    mode: "fund",
-    featuredImage: "",
-    location: "London High Street",
-    cityName: "London",
-    category: "Arts",
-    backersCount: 312,
-    status: "active",
-  },
-  {
-    id: "camp-4",
-    slug: "bristol-green-initiative",
-    title: "Bristol Green Initiative",
-    shortDescription: "Making Bristol greener, one tree at a time",
-    goalAmount: 1500000,
-    raisedAmount: 900000,
-    deadline: "2026-10-30",
-    mode: "donate",
-    featuredImage: "",
-    location: "Bristol High Street",
-    cityName: "Bristol",
-    category: "Environment",
-    backersCount: 89,
-    status: "active",
-  },
-  {
-    id: "camp-5",
-    slug: "leeds-tech-hub",
-    title: "Leeds Tech Hub",
-    shortDescription: "Empowering the next generation of tech talent in Leeds",
-    goalAmount: 3000000,
-    raisedAmount: 1200000,
-    deadline: "2027-01-15",
-    mode: "fund",
-    featuredImage: "",
-    location: "Leeds High Street",
-    cityName: "Leeds",
-    category: "Education",
-    backersCount: 178,
-    status: "active",
-  },
-  {
-    id: "camp-6",
-    slug: "liverpool-heritage",
-    title: "Liverpool Heritage Preservation",
-    shortDescription: "Preserving Liverpool's rich cultural heritage for future generations",
-    goalAmount: 4000000,
-    raisedAmount: 2800000,
-    deadline: "2027-02-28",
-    mode: "fund",
-    featuredImage: "",
-    location: "Liverpool High Street",
-    cityName: "Liverpool",
-    category: "Heritage",
-    backersCount: 245,
-    status: "active",
-  },
-];
-
 function formatCurrency(pence: number): string {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
+  const pounds = pence / 100;
+  return `£${pounds.toLocaleString("en-GB", {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(pence / 100);
-}
-
-function daysLeft(deadline: string): number {
-  const now = new Date();
-  const end = new Date(deadline);
-  const diff = end.getTime() - now.getTime();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  })}`;
 }
 
 function getProgressPercentage(raised: number, goal: number): number {
-  if (goal === 0) return 0;
+  if (goal <= 0) return 0;
   return Math.min(Math.round((raised / goal) * 100), 100);
+}
+
+function daysLeft(deadline: string): number {
+  if (!deadline) return 0;
+  const now = new Date();
+  const end = new Date(deadline);
+  const diffTime = end.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(diffDays, 0);
 }
 
 function getModeColor(mode: string): string {
   switch (mode) {
     case "fund":
-      return "bg-primary-500 text-white";
-    case "donate":
       return "bg-secondary-500 text-white";
+    case "donate":
+      return "bg-primary-500 text-white";
     default:
       return "bg-gray-500 text-white";
   }
@@ -163,23 +68,71 @@ interface CampaignBrowsePageProps {
 }
 
 export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps) {
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMode, setActiveMode] = useState<string>("all");
   const [selectedCity, setSelectedCity] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
+  useEffect(() => {
+    let mounted = true;
+    async function fetchCampaigns() {
+      setLoading(true);
+      try {
+        const res = await campaignService.list({ limit: 60 });
+        if (!mounted) return;
+        const items = res?.items || [];
+        const mapped: Campaign[] = items.map((c: any) => {
+          const target = c.targetAmount || c.goalAmount || 0;
+          const raised = c.raisedAmount || 0;
+          const modeStr = (c.mode || "fund").toLowerCase() === "donate" ? "donate" : "fund";
+          return {
+            id: c.id,
+            slug: c.slug || c.id,
+            title: c.title || "Community Campaign",
+            shortDescription: c.tagline || c.shortDescription || c.description || "",
+            goalAmount: target,
+            raisedAmount: raised,
+            deadline: c.endDate || c.deadline || "",
+            mode: modeStr,
+            featuredImage: c.featuredImage || c.coverImage || "",
+            location: c.business?.name || c.cityName || c.location || "United Kingdom",
+            cityName: c.city || c.cityName || (c.business?.city) || "UK",
+            category: c.category || "Community",
+            backersCount: c.backerCount || c.backersCount || 0,
+            status: c.status || "ACTIVE",
+          };
+        });
+        setCampaigns(mapped);
+      } catch (err) {
+        console.error("Failed to load campaigns:", err);
+        if (mounted) setCampaigns([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchCampaigns();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const cities = useMemo(
-    () => Array.from(new Set(DEMO_CAMPAIGNS.map((c) => c.cityName))).sort(),
-    []
+    () => Array.from(new Set(campaigns.map((c) => c.cityName).filter(Boolean))).sort(),
+    [campaigns]
   );
 
   const categories = useMemo(
-    () => Array.from(new Set(DEMO_CAMPAIGNS.map((c) => c.category))).sort(),
-    []
+    () => Array.from(new Set(campaigns.map((c) => c.category).filter(Boolean))).sort(),
+    [campaigns]
   );
 
   const filteredCampaigns = useMemo(() => {
-    return DEMO_CAMPAIGNS.filter((campaign) => {
+    return campaigns.filter((campaign) => {
       const matchesSearch =
         searchQuery === "" ||
         campaign.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -191,13 +144,21 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
 
       return matchesSearch && matchesMode && matchesCity && matchesCategory;
     });
-  }, [searchQuery, activeMode, selectedCity, selectedCategory]);
+  }, [campaigns, searchQuery, activeMode, selectedCity, selectedCategory]);
 
   const modeTabs = [
     { key: "all", label: "All" },
     { key: "fund", label: "Fund" },
     { key: "donate", label: "Donate" },
   ];
+
+  const handleCardClick = (campaign: Campaign) => {
+    if (onCampaignSelect) {
+      onCampaignSelect(campaign);
+    } else {
+      navigate(`/campaigns/${campaign.slug || campaign.id}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -302,8 +263,12 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
         </p>
 
         {/* Campaign Grid */}
-        {filteredCampaigns.length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
+        {loading ? (
+          <div className="rounded-xl border border-gray-100 bg-white py-16 text-center text-sm text-gray-400">
+            Loading campaigns from database...
+          </div>
+        ) : filteredCampaigns.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 bg-white py-16 text-center">
             <svg
               className="mx-auto h-12 w-12 text-gray-300"
               fill="none"
@@ -331,7 +296,7 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
               return (
                 <button
                   key={campaign.id}
-                  onClick={() => onCampaignSelect?.(campaign)}
+                  onClick={() => handleCardClick(campaign)}
                   className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm text-left transition-shadow hover:shadow-md"
                 >
                   {/* Image */}
@@ -418,7 +383,7 @@ export function CampaignBrowsePage({ onCampaignSelect }: CampaignBrowsePageProps
 
                     <div className="mt-1 flex items-center justify-between text-xs text-gray-400">
                       <span>{campaign.backersCount} backers</span>
-                      <span>{remaining} days left</span>
+                      <span>{remaining > 0 ? `${remaining} days left` : "Ended"}</span>
                     </div>
 
                     {/* Location */}

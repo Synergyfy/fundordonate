@@ -30,6 +30,7 @@ import {
   REFRESH_TOKEN_COOKIE,
   setAuthCookies,
 } from "./utils/auth-cookie";
+import { Throttle } from "@nestjs/throttler";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -40,6 +41,7 @@ export class AuthController {
   ) {}
 
   @Post("login")
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "User login (email + password)",
@@ -55,6 +57,7 @@ export class AuthController {
   }
 
   @Post("admin/login")
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Administrator login (email + password). Admin accounts only.",

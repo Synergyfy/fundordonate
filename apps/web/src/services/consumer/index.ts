@@ -1,5 +1,13 @@
 import api from "../api";
 import { setUnreadCount } from "@/hooks/useUnreadNotifications";
+import type { IssuedReward } from "@/types/rewards";
+
+export interface PaginatedIssuedRewards {
+  items: IssuedReward[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
 
 export interface ConsumerStats {
   totalContributed: number;
@@ -77,6 +85,15 @@ export const consumerService = {
 
   async getNotifications(): Promise<ConsumerNotification[]> {
     return api.get("/consumer/notifications");
+  },
+
+  /** The current user's issued rewards (real codes + lifecycle status). */
+  async getRewards(params: { page?: number; limit?: number } = {}): Promise<PaginatedIssuedRewards> {
+    return api.get("/consumer/rewards", { params });
+  },
+
+  async getReward(id: string): Promise<IssuedReward> {
+    return api.get(`/consumer/rewards/${id}`);
   },
 };
 

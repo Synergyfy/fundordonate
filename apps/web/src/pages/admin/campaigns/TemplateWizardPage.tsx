@@ -9,10 +9,10 @@
 //   5. Contribution         (self-funding / business contribution)
 //   6. Preview              (business experience check)
 //   7. Review               (summary, status, save / activate)
-// Frontend only — no backend calls.
+// Backend-connected: persists the full template config via the admin API.
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -76,11 +76,14 @@ import {
   type RewardCategory,
 } from "@/types/rewards";
 import {
-  getAdminTemplateById,
-  saveTemplate,
+  adaptAdminTemplateToMaster,
+  buildTemplatePayload,
   type MasterTemplate,
   type TemplateLifecycle,
 } from "@/services/templates";
+import { adminApi } from "@/services/admin";
+import { useAdminSeasons } from "@/services/admin/hook";
+import type { McomCatalogueReward } from "@/services/admin/type";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,6 +144,47 @@ interface TemplateRewardEntry {
   reward: LibraryReward;
   conditions: ConditionRow[];
   delivery: DeliveryConfig;
+  // Availability + per-rule quantity cap (enforced at issuance).
+  quantityType: "unlimited" | "limited";
+  quantityLimit: string;
+  availableFrom: string;
+  availableUntil: string;
+}
+
+/** Maps an MCOM Rewards catalogue `rewardType` to a FundOrDonate reward category. */
+function mcomRewardCategory(rewardType: string): RewardCategory {
+  const t = (rewardType ?? "").toLowerCase();
+  if (t.includes("gift")) return "gift_card";
+  if (t.includes("voucher")) return "voucher";
+  if (t.includes("coupon")) return "coupon";
+  if (t.includes("point") || t.includes("physical")) return "other";
+  return "other";
+}
+
+/** Maps an MCOM catalogue audience to a FundOrDonate reward audience. */
+function mcomRewardAudience(audience: string): RewardAudience {
+  const a = (audience ?? "").toLowerCase();
+  if (a.includes("consumer")) return "consumer";
+  if (a.includes("all") || a.includes("business")) return "business";
+  return "both";
+}
+
+/** Builds a FundOrDonate reward entry from an MCOM Rewards catalogue item. */
+function mcomItemToLibraryReward(item: McomCatalogueReward): LibraryReward {
+  return {
+    id: `mcom-${item.id}`,
+    mcomRewardId: item.id,
+    name: item.title,
+    description: item.description ?? "",
+    category: mcomRewardCategory(item.rewardType),
+    valueGbp: item.value ?? null,
+    audience: mcomRewardAudience(item.audience),
+    source: "mcom",
+    status: "active",
+    defaultDelivery: "mcom_asset",
+    uses: 0,
+    tags: [item.rewardType, "mcom"],
+  };
 }
 
 interface FundingConfig {
@@ -364,20 +408,54 @@ const ACCESS_PRESETS: { id: string; label: string; rules: string[]; type: Access
   { id: "manual", label: "Admin assigned", rules: ["business_account", "admin_approval"], type: "admin_assigned" },
 ];
 
-const FIELD_SOURCE_META: Record<FieldSource, { label: string; color: string }> = {
+const FIELD_SOURCE_META: Record<string, { label: string; color: string }> = {
   template: { label: "Template", color: "bg-indigo-100 text-indigo-700" },
   business_account: { label: "Business account", color: "bg-blue-100 text-blue-700" },
+  business_input: { label: "Business input", color: "bg-blue-100 text-blue-700" },
+  business: { label: "Business", color: "bg-blue-100 text-blue-700" },
+  location: { label: "Location", color: "bg-emerald-100 text-emerald-700" },
   business_mcom: { label: "Business-MCOM", color: "bg-teal-100 text-teal-700" },
   audit_business: { label: "Audit-Business", color: "bg-amber-100 text-amber-700" },
   admin: { label: "Admin", color: "bg-purple-100 text-purple-700" },
   admin_mcom: { label: "Admin-MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
 };
 
+function getFieldSourceMeta(src?: string): { label: string; color: string } {
+  if (src && FIELD_SOURCE_META[src]) return FIELD_SOURCE_META[src];
+  if (src && FIELD_SOURCE_META[src.toLowerCase()]) return FIELD_SOURCE_META[src.toLowerCase()];
+  return { label: src || "Template", color: "bg-indigo-100 text-indigo-700" };
+}
+
 const FIELD_ACCESS_META: Record<FieldAccess, { label: string; hint: string; color: string }> = {
   no: { label: "No", hint: "No, unless selection enabled", color: "bg-gray-100 text-gray-600" },
   configurable: { label: "Configurable", hint: "Business can edit the value", color: "bg-green-100 text-green-700" },
   conditional: { label: "Conditional", hint: "Only if enabled", color: "bg-yellow-100 text-yellow-800" },
 };
+
+function getFieldAccessMeta(acc?: string): { label: string; hint: string; color: string } {
+  if (acc && (FIELD_ACCESS_META as any)[acc]) return (FIELD_ACCESS_META as any)[acc];
+  return { label: "No", hint: "No, unless selection enabled", color: "bg-gray-100 text-gray-600" };
+}
+
+function getRewardCategoryMeta(cat?: string): { label: string; color: string } {
+  if (cat && (REWARD_CATEGORY_META as any)[cat]) return (REWARD_CATEGORY_META as any)[cat];
+  return { label: cat || "Other", color: "bg-gray-100 text-gray-700" };
+}
+
+function getRewardSourceMeta(src?: string): { label: string; color: string } {
+  if (src && (SOURCE_META as any)[src]) return (SOURCE_META as any)[src];
+  return { label: src || "Local", color: "bg-gray-100 text-gray-700" };
+}
+
+function getRewardAudienceMeta(aud?: string): { label: string; color: string } {
+  if (aud && (AUDIENCE_META as any)[aud]) return (AUDIENCE_META as any)[aud];
+  return { label: aud || "Both", color: "bg-gray-100 text-gray-700" };
+}
+
+function getMcomGroupMeta(grp?: string): { label: string; color: string } {
+  if (grp && (MCOM_GROUP_META as any)[grp]) return (MCOM_GROUP_META as any)[grp];
+  return { label: grp || "Service", color: "bg-gray-100 text-gray-700" };
+}
 
 const DEFAULT_FIELD_ACCESS: FieldAccessRow[] = [
   { id: "f_title", field: "Campaign title", source: "template", access: "no" },
@@ -407,15 +485,8 @@ const CONTRIBUTION_AMOUNT_TYPES: { id: ContributionAmountType; label: string; de
   { id: "admin_rule", label: "Admin-defined rule", description: "A custom Admin rule decides the amount." },
 ];
 
-const SEASONS: { id: string; label: string }[] = [
-  { id: "none", label: "No season / evergreen" },
-  { id: "spring_2026", label: "Spring 2026" },
-  { id: "summer_2026", label: "Summer 2026" },
-  { id: "autumn_2026", label: "Autumn 2026" },
-  { id: "winter_2026", label: "Winter 2026" },
-  { id: "ramadan_2026", label: "Ramadan 2026" },
-  { id: "christmas_2026", label: "Christmas 2026" },
-];
+// Season options are loaded from the database (see `useAdminSeasons`); the
+// "none" entry is a local sentinel for templates that are not tied to a season.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -465,6 +536,13 @@ function buildRewardRule(conditions: ConditionRow[]): string {
     })
     .filter((p): p is string => Boolean(p));
   return parts.length > 0 ? parts.join(" or ") : "Any contribution";
+}
+
+/** Converts a pounds string to integer pence (null when blank/invalid). */
+function toPence(value: string): number | null {
+  if (value == null || `${value}`.trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -648,15 +726,79 @@ function EmptyRewardsStep() {
 // ---------------------------------------------------------------------------
 
 export function TemplateWizardPage() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+  const [existing, setExisting] = useState<MasterTemplate | undefined>(undefined);
+  const [loadingTemplate, setLoadingTemplate] = useState(isEdit);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      setExisting(undefined);
+      setLoadingTemplate(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingTemplate(true);
+    setLoadError(null);
+
+    adminApi
+      .getTemplate(id)
+      .then((tpl) => {
+        if (!cancelled) setExisting(adaptAdminTemplateToMaster(tpl));
+      })
+      .catch((err: any) => {
+        if (!cancelled) setLoadError(err?.message ?? "Failed to load template");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTemplate(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loadingTemplate) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+          <p className="mt-3 text-sm text-gray-500">Loading template…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-xl rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+        <p className="text-sm font-semibold text-red-700">Could not load template</p>
+        <p className="mt-1 text-sm text-red-600">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return <TemplateWizard existing={existing} />;
+}
+
+function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
-  /** Stored master template when editing — the source of truth for seeding. */
-  const existing: MasterTemplate | undefined = id ? getAdminTemplateById(id) : undefined;
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Area 1 — Basic template (spec step 3)
   const [name, setName] = useState(existing?.name ?? "");
@@ -668,6 +810,19 @@ export function TemplateWizardPage() {
     existing?.audience ?? "business"
   );
   const [season, setSeason] = useState(existing?.structure.config.seasonId ?? "none");
+
+  // Season options come from the database so templates link to real seasons.
+  const { data: seasonsData, isLoading: seasonsLoading } = useAdminSeasons({ limit: 100 });
+  const seasonOptions = useMemo(
+    () => [
+      { id: "none", label: "No season / evergreen" },
+      ...(seasonsData?.items ?? []).map((s) => ({
+        id: s.id,
+        label: s.referenceCode ? `${s.name} (${s.referenceCode})` : s.name,
+      })),
+    ],
+    [seasonsData]
+  );
 
   // Area 1 — Admin-controlled campaign content (spec step 4)
   const [adminSections, setAdminSections] = useState<StructureSection[]>(() => {
@@ -717,11 +872,17 @@ export function TemplateWizardPage() {
   );
 
   // Area 3 — Business editable fields
-  const [fieldAccess, setFieldAccess] = useState<FieldAccessRow[]>(() =>
-    existing
-      ? existing.fieldRows.map((r) => ({ ...r }))
-      : DEFAULT_FIELD_ACCESS.map((r) => ({ ...r }))
-  );
+  const [fieldAccess, setFieldAccess] = useState<FieldAccessRow[]>(() => {
+    if (existing && Array.isArray(existing.fieldRows) && existing.fieldRows.length > 0) {
+      return existing.fieldRows.map((r, idx) => ({
+        id: r.id || `f_${idx}`,
+        field: r.field || (r as any).label || (r as any).name || (r as any).question || `Field ${idx + 1}`,
+        source: (((r.source as string) === "business_input" ? "business_account" : r.source) || "template") as FieldSource,
+        access: (r.access || ((r as any).editable ? "configurable" : "no")) as FieldAccess,
+      }));
+    }
+    return DEFAULT_FIELD_ACCESS.map((r) => ({ ...r }));
+  });
 
   // Area 5 — Self-funding / business contribution (spec step 12)
   const [selfFunding, setSelfFunding] = useState<SelfFundingConfig>(() =>
@@ -748,6 +909,40 @@ export function TemplateWizardPage() {
     const used = new Set<string>();
     const entries: TemplateRewardEntry[] = [];
     for (const templateReward of existing.rewards) {
+      // Rewards sourced from the MCOM Rewards engine carry a provider id.
+      if (templateReward.mcomRewardId || templateReward.source === "mcom") {
+        const id = templateReward.id ?? `mcom-${templateReward.mcomRewardId}`;
+        if (used.has(id)) continue;
+        used.add(id);
+        const lib: LibraryReward = {
+          id,
+          mcomRewardId: templateReward.mcomRewardId ?? null,
+          name: templateReward.name ?? "MCOM Reward",
+          description: templateReward.description ?? "",
+          category: (templateReward.rewardCategory as RewardCategory) ?? "other",
+          valueGbp: templateReward.valueGbp ?? null,
+          audience: (templateReward.audience as RewardAudience) ?? "both",
+          source: "mcom",
+          status: "active",
+          defaultDelivery: "mcom_asset",
+          uses: 0,
+          tags: ["mcom"],
+        };
+        entries.push({
+          id: lib.id,
+          reward: lib,
+          conditions: [createCondition("minimum")],
+          delivery: createDelivery(lib),
+          quantityType:
+            (templateReward.quantityType as "unlimited" | "limited") ?? "unlimited",
+          quantityLimit:
+            templateReward.quantityLimit != null ? String(templateReward.quantityLimit) : "",
+          availableFrom: templateReward.availableFrom ?? "",
+          availableUntil: templateReward.availableUntil ?? "",
+        });
+        continue;
+      }
+
       const lib = LIBRARY_REWARDS.find(
         (l) => l.id === templateReward.id || l.name === templateReward.name
       );
@@ -758,10 +953,19 @@ export function TemplateWizardPage() {
         reward: lib,
         conditions: [createCondition("minimum")],
         delivery: createDelivery(lib),
+        quantityType:
+          (templateReward.quantityType as "unlimited" | "limited") ?? "unlimited",
+        quantityLimit:
+          templateReward.quantityLimit != null ? String(templateReward.quantityLimit) : "",
+        availableFrom: templateReward.availableFrom ?? "",
+        availableUntil: templateReward.availableUntil ?? "",
       });
     }
     return entries;
   });
+
+  // Area 4 — Reward qualification mode (per-contribution vs cumulative)
+  const [qualificationMode, setQualificationMode] = useState<"highest" | "cumulative">("highest");
 
   // Area 4 — Connected Internal Assets (spec step 11)
   const [connectedServiceIds, setConnectedServiceIds] = useState<string[]>(() => {
@@ -802,6 +1006,32 @@ export function TemplateWizardPage() {
   const [libAudience, setLibAudience] = useState<"all" | RewardAudience>("all");
   const [libSelected, setLibSelected] = useState<string[]>([]);
 
+  // MCOM Rewards catalogue picker (admin selects rewards owned by MCOM Rewards)
+  const [mcomOpen, setMcomOpen] = useState(false);
+  const [mcomLoading, setMcomLoading] = useState(false);
+  const [mcomError, setMcomError] = useState("");
+  const [mcomItems, setMcomItems] = useState<McomCatalogueReward[]>([]);
+  const [mcomSearch, setMcomSearch] = useState("");
+  const [mcomSelected, setMcomSelected] = useState<string[]>([]);
+
+  // Create-your-own reward form (a FundOrDonate-local reward)
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customReward, setCustomReward] = useState<{
+    name: string;
+    description: string;
+    category: RewardCategory;
+    valueGbp: string;
+    audience: RewardAudience;
+    delivery: DeliveryMethod;
+  }>({
+    name: "",
+    description: "",
+    category: "gift_card",
+    valueGbp: "",
+    audience: "both",
+    delivery: "digital_delivery",
+  });
+
   const selectedIds = useMemo(() => new Set(rewards.map((r) => r.id)), [rewards]);
 
   const connectablePlatforms = useMemo(
@@ -818,6 +1048,14 @@ export function TemplateWizardPage() {
       return true;
     });
   }, [libSearch, libCategory, libAudience]);
+
+  const mcomResults = useMemo(() => {
+    const q = mcomSearch.trim().toLowerCase();
+    return mcomItems.filter((r) => {
+      if (!q) return true;
+      return `${r.title} ${r.description ?? ""} ${r.rewardType} ${r.source}`.toLowerCase().includes(q);
+    });
+  }, [mcomItems, mcomSearch]);
 
   const enabledSections = sections.filter((s) => s.enabled);
   const requiredSections = enabledSections.filter((s) => s.required);
@@ -963,6 +1201,10 @@ export function TemplateWizardPage() {
     reward,
     conditions: [createCondition("minimum")],
     delivery: createDelivery(reward),
+    quantityType: "unlimited",
+    quantityLimit: "",
+    availableFrom: "",
+    availableUntil: "",
   });
 
   const toggleService = (serviceId: string) => {
@@ -1000,6 +1242,77 @@ export function TemplateWizardPage() {
       return [...prev, ...additions];
     });
     setLibraryOpen(false);
+  };
+
+  // ── Create-your-own reward (FundOrDonate-local) ──────────────────────
+  const openCustomReward = () => {
+    setCustomReward({
+      name: "",
+      description: "",
+      category: "gift_card",
+      valueGbp: "",
+      audience: "both",
+      delivery: "digital_delivery",
+    });
+    setCustomOpen(true);
+  };
+
+  const saveCustomReward = () => {
+    const name = customReward.name.trim();
+    if (!name) return;
+    const reward: LibraryReward = {
+      id: `lr-custom-${Date.now()}`,
+      name,
+      description: customReward.description.trim(),
+      category: customReward.category,
+      valueGbp: customReward.valueGbp.trim() ? Number(customReward.valueGbp) : null,
+      audience: customReward.audience,
+      source: "fundordonate",
+      status: "active",
+      defaultDelivery: customReward.delivery,
+      uses: 0,
+      tags: ["custom"],
+    };
+    setRewards((prev) => [...prev, addRewardEntry(reward)]);
+    setCustomOpen(false);
+  };
+
+  // ── Select rewards from MCOM Rewards ─────────────────────────────────
+  const openMcomPicker = () => {
+    setMcomOpen(true);
+    setMcomSelected([]);
+    setMcomSearch("");
+    setMcomError("");
+    setMcomLoading(true);
+    adminApi
+      .getMcomRewards({ limit: 100 })
+      .then((res) => setMcomItems(res?.data ?? []))
+      .catch((err) =>
+        setMcomError(err instanceof Error ? err.message : "Failed to load MCOM Rewards"),
+      )
+      .finally(() => setMcomLoading(false));
+  };
+
+  const toggleMcomReward = (id: string) => {
+    setMcomSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const confirmAddMcomRewards = () => {
+    setRewards((prev) => {
+      const have = new Set(prev.map((r) => r.id));
+      const additions: TemplateRewardEntry[] = [];
+      for (const id of mcomSelected) {
+        const item = mcomItems.find((r) => r.id === id);
+        if (!item) continue;
+        const reward = mcomItemToLibraryReward(item);
+        if (have.has(reward.id)) continue;
+        additions.push(addRewardEntry(reward));
+      }
+      return [...prev, ...additions];
+    });
+    setMcomOpen(false);
   };
 
   const removeReward = (rewardId: string) => {
@@ -1049,6 +1362,20 @@ export function TemplateWizardPage() {
     );
   };
 
+  const updateRewardMeta = (
+    rewardId: string,
+    patch: Partial<
+      Pick<
+        TemplateRewardEntry,
+        "quantityType" | "quantityLimit" | "availableFrom" | "availableUntil"
+      >
+    >
+  ) => {
+    setRewards((prev) =>
+      prev.map((r) => (r.id === rewardId ? { ...r, ...patch } : r))
+    );
+  };
+
   // ---------------------------------------------------------------------
   // Location handlers
   // ---------------------------------------------------------------------
@@ -1073,47 +1400,78 @@ export function TemplateWizardPage() {
   // Save (spec steps 16 + 18) — persist to the master template store
   // ---------------------------------------------------------------------
 
-  const handleSave = (lifecycle: TemplateLifecycle) => {
+  const handleSave = async (lifecycle: TemplateLifecycle) => {
     setSaving(true);
-    setTimeout(() => {
-      const seasonOption = SEASONS.find((s) => s.id === season);
-      saveTemplate(
-        {
-          name: name.trim() || "Untitled Template",
-          purpose: description.trim() || name.trim() || "Campaign template",
-          campaignType,
-          audience,
-          seasonId: season,
-          seasonLabel: seasonOption?.label ?? "No season / evergreen",
-          sections: [...adminSections, ...sections],
-          funding,
-          location,
-          visibility,
-          access,
-          accessTypeName: accessMeta?.label ?? "Automatic",
-          fieldRows: fieldAccess,
-          selfFundingRules: selfFunding,
-          rewards: rewards.map((entry) => ({
-            id: entry.reward.id,
-            name: entry.reward.name,
-            category: REWARD_CATEGORY_META[entry.reward.category].label,
-            rule: buildRewardRule(entry.conditions),
-            source: entry.reward.source,
+    setSaveError(null);
+
+    try {
+      const seasonOption = seasonOptions.find((s) => s.id === season);
+
+      const payload = buildTemplatePayload({
+        name: name.trim() || "Untitled Template",
+        purpose: description.trim() || name.trim() || "Campaign template",
+        campaignType,
+        audience,
+        seasonId: season,
+        seasonLabel: seasonOption?.label ?? "No season / evergreen",
+        sections: [...adminSections, ...sections],
+        funding,
+        location,
+        visibility,
+        access,
+        accessTypeName: accessMeta?.label ?? "Automatic",
+        fieldRows: fieldAccess,
+        selfFundingRules: selfFunding,
+        rewards: rewards.map((entry) => ({
+          id: entry.reward.id,
+          name: entry.reward.name,
+          description: entry.reward.description,
+          category: getRewardCategoryMeta(entry.reward.category).label,
+          rewardCategory: entry.reward.category,
+          rule: buildRewardRule(entry.conditions),
+          source: entry.reward.source,
+          mcomRewardId: entry.reward.mcomRewardId ?? null,
+          valueGbp: entry.reward.valueGbp,
+          audience: entry.reward.audience,
+          delivery: entry.delivery.method,
+          qualificationMode,
+          quantityType: entry.quantityType,
+          quantityLimit:
+            entry.quantityType === "limited" && entry.quantityLimit
+              ? Number(entry.quantityLimit)
+              : null,
+          availableFrom: entry.availableFrom || null,
+          availableUntil: entry.availableUntil || null,
+          conditions: entry.conditions.map((c) => ({
+            id: c.id,
+            mode: c.mode,
+            minPence: toPence(c.min),
+            maxPence: toPence(c.max),
+            exactPence: toPence(c.exact),
           })),
-          mcomAssets: connectedServices.map((s) => ({
-            id: s.id,
-            name: s.name,
-            type: MCOM_GROUP_META[s.group].label,
-          })),
-          campaignTypeName:
-            CAMPAIGN_TYPES.find((t) => t.id === campaignType)?.label ?? "Fund",
-          lifecycle,
-        },
-        isEdit ? id : undefined
-      );
-      setSaving(false);
+        })),
+        mcomAssets: connectedServices.map((s) => ({
+          id: s.id,
+          name: s.name,
+          type: getMcomGroupMeta(s.group).label,
+        })),
+        campaignTypeName:
+          CAMPAIGN_TYPES.find((t) => t.id === campaignType)?.label ?? "Fund",
+        lifecycle,
+      });
+
+      if (isEdit && id) {
+        await adminApi.updateTemplate(id, payload);
+      } else {
+        await adminApi.createTemplate(payload);
+      }
+
       navigate(`/admin/campaigns/templates?status=${lifecycle}`);
-    }, 700);
+    } catch (err: any) {
+      setSaveError(err?.message ?? "Failed to save template. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ---------------------------------------------------------------------
@@ -1296,6 +1654,13 @@ export function TemplateWizardPage() {
             but hidden. Save at any point and return later.
           </Callout>
         </div>
+
+        {saveError && (
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+        )}
       </div>
 
       {/* Area + step indicator */}
@@ -1305,20 +1670,23 @@ export function TemplateWizardPage() {
             const areaSteps = STEPS.filter((s) => s.area === a.id);
             const activeArea = STEPS.find((s) => s.id === step)?.area === a.id;
             const areaDone = step > Math.max(...areaSteps.map((s) => s.id));
+            const firstStepId = areaSteps[0]?.id ?? 1;
             return (
-              <span
+              <button
                 key={a.id}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                type="button"
+                onClick={() => goToStep(firstStepId)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
                   activeArea
-                    ? "border-primary-300 bg-primary-50 text-primary-700"
+                    ? "border-primary-400 bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-300"
                     : areaDone
-                    ? "border-green-200 bg-green-50 text-green-700"
-                    : "border-gray-200 bg-white text-gray-500"
+                    ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-300"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-primary-300 hover:bg-gray-50 hover:text-gray-900"
                 }`}
-                title={a.description}
+                title={`Jump to ${a.label} (Step ${firstStepId})`}
               >
                 {areaDone && !activeArea ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                 ) : (
                   <span
                     className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${
@@ -1329,7 +1697,7 @@ export function TemplateWizardPage() {
                   </span>
                 )}
                 {a.label}
-              </span>
+              </button>
             );
           })}
         </div>
@@ -1343,23 +1711,20 @@ export function TemplateWizardPage() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => {
-                  if (s.id < step) goToStep(s.id);
-                }}
-                className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${
+                onClick={() => goToStep(s.id)}
+                className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-medium transition-all cursor-pointer ${
                   active
-                    ? "bg-primary-600 text-white shadow-sm"
+                    ? "bg-primary-600 text-white shadow-sm ring-2 ring-primary-400 ring-offset-1"
                     : done
-                    ? "text-primary-700 hover:bg-primary-50"
+                    ? "text-primary-700 bg-primary-50/50 hover:bg-primary-100"
                     : error
-                    ? "bg-red-50 text-red-600"
-                    : "text-gray-500 hover:bg-gray-50"
+                    ? "bg-red-50 text-red-600 hover:bg-red-100"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                 }`}
-                title={`Area ${s.area} · ${s.label}`}
+                title={`Jump to Area ${s.area} · Step ${s.id}: ${s.label}`}
               >
                 {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : s.icon}
-                <span className="hidden xl:inline">{s.label}</span>
-                <span className="xl:hidden">{s.id}</span>
+                <span>{s.label}</span>
               </button>
             );
           })}
@@ -1468,13 +1833,18 @@ export function TemplateWizardPage() {
             <select
               value={season}
               onChange={(e) => setSeason(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={seasonsLoading}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-400"
             >
-              {SEASONS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
+              {seasonsLoading ? (
+                <option value={season}>Loading seasons…</option>
+              ) : (
+                seasonOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))
+              )}
             </select>
             <p className="mt-1.5 text-xs text-gray-400">
               Season is optional. Templates without a season stay available all year.
@@ -2164,16 +2534,26 @@ export function TemplateWizardPage() {
         <div className="space-y-5">
           <Panel
             title="Reusable Rewards"
-            description="Select rewards from the central library. The same reward can be used across many campaigns — no need to recreate it."
+            description="Add a reward by creating your own, or by selecting one from the MCOM Rewards catalogue. The same reward can be reused across campaigns — no need to recreate it."
             action={
-              <button
-                type="button"
-                onClick={openLibrary}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
-              >
-                <Plus className="h-4 w-4" />
-                Add Reward
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openCustomReward}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create reward
+                </button>
+                <button
+                  type="button"
+                  onClick={openMcomPicker}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+                >
+                  <Store className="h-4 w-4" />
+                  Select from MCOM Rewards
+                </button>
+              </div>
             }
           >
             {rewards.length === 0 ? (
@@ -2181,17 +2561,35 @@ export function TemplateWizardPage() {
                 <Gift className="mx-auto mb-3 h-9 w-9 text-gray-300" />
                 <p className="text-sm font-medium text-gray-500">No rewards connected yet</p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-gray-400">
-                  Pick existing rewards from the library — for example the £5, £10 and £15
-                  e-gift cards or MCOM Rewards &amp; Loyalty access.
+                  Create your own reward, or pick one from the MCOM Rewards catalogue — for
+                  example the £5, £10 and £15 e-gift cards or MCOM Rewards &amp; Loyalty access.
                 </p>
-                <button
-                  type="button"
-                  onClick={openLibrary}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  <Search className="h-4 w-4" />
-                  Open Reward Library
-                </button>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openCustomReward}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create your own reward
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openMcomPicker}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+                  >
+                    <Store className="h-4 w-4" />
+                    Select from MCOM Rewards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openLibrary}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    <Search className="h-4 w-4" />
+                    Reward Library
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -2204,19 +2602,19 @@ export function TemplateWizardPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-sm font-semibold text-gray-900">{entry.reward.name}</span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${REWARD_CATEGORY_META[entry.reward.category].color}`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardCategoryMeta(entry.reward.category).color}`}
                         >
-                          {REWARD_CATEGORY_META[entry.reward.category].label}
+                          {getRewardCategoryMeta(entry.reward.category).label}
                         </span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_META[entry.reward.source].color}`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardSourceMeta(entry.reward.source).color}`}
                         >
-                          {SOURCE_META[entry.reward.source].label}
+                          {getRewardSourceMeta(entry.reward.source).label}
                         </span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${AUDIENCE_META[entry.reward.audience].color}`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardAudienceMeta(entry.reward.audience).color}`}
                         >
-                          {AUDIENCE_META[entry.reward.audience].label}
+                          {getRewardAudienceMeta(entry.reward.audience).label}
                         </span>
                       </div>
                       <p className="mt-0.5 truncate text-xs text-gray-500">{entry.reward.description}</p>
@@ -2256,6 +2654,34 @@ export function TemplateWizardPage() {
             Define when each reward applies. The reward itself stays reusable — the campaign
             determines how it is applied.
           </Callout>
+
+          {rewards.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Qualification mode</p>
+                <p className="text-xs text-gray-500">
+                  Whether a reward qualifies on a single contribution, or on the contributor&apos;s
+                  cumulative total for the campaign.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(["highest", "cumulative"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setQualificationMode(m)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      qualificationMode === m
+                        ? "bg-primary-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {m === "highest" ? "Per contribution" : "Cumulative"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {rewards.length === 0 ? (
             <EmptyRewardsStep />
@@ -2347,6 +2773,82 @@ export function TemplateWizardPage() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Availability & quantity */}
+                  <div className="rounded-lg border border-gray-200 p-3.5">
+                    <p className="mb-2 text-[11px] font-semibold uppercase text-gray-400">
+                      Availability &amp; quantity
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold uppercase text-gray-400">
+                          Quantity
+                        </label>
+                        <select
+                          value={entry.quantityType}
+                          onChange={(e) =>
+                            updateRewardMeta(entry.id, {
+                              quantityType: e.target.value as "unlimited" | "limited",
+                            })
+                          }
+                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        >
+                          <option value="unlimited">Unlimited</option>
+                          <option value="limited">Limited</option>
+                        </select>
+                      </div>
+
+                      {entry.quantityType === "limited" && (
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold uppercase text-gray-400">
+                            Max issuances
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={entry.quantityLimit}
+                            onChange={(e) =>
+                              updateRewardMeta(entry.id, { quantityLimit: e.target.value })
+                            }
+                            placeholder="e.g. 100"
+                            className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold uppercase text-gray-400">
+                          Available from
+                        </label>
+                        <input
+                          type="date"
+                          value={entry.availableFrom}
+                          onChange={(e) =>
+                            updateRewardMeta(entry.id, { availableFrom: e.target.value })
+                          }
+                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold uppercase text-gray-400">
+                          Available until
+                        </label>
+                        <input
+                          type="date"
+                          value={entry.availableUntil}
+                          onChange={(e) =>
+                            updateRewardMeta(entry.id, { availableUntil: e.target.value })
+                          }
+                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] text-gray-400">
+                      Availability is evaluated against the contribution date; the cap limits
+                      how many rewards this rule issues in total.
+                    </p>
+                  </div>
                 </div>
               </Panel>
             ))
@@ -2864,8 +3366,8 @@ export function TemplateWizardPage() {
                 </thead>
                 <tbody>
                   {fieldAccess.map((row) => {
-                    const source = FIELD_SOURCE_META[row.source];
-                    const accessMetaRow = FIELD_ACCESS_META[row.access];
+                    const source = getFieldSourceMeta(row.source);
+                    const accessMetaRow = getFieldAccessMeta(row.access);
                     return (
                       <tr key={row.id} className="border-b border-gray-100 last:border-0">
                         <td className="px-3 py-3 text-sm font-medium text-gray-900">
@@ -3091,9 +3593,9 @@ export function TemplateWizardPage() {
                       <li key={entry.id} className="flex items-center justify-between gap-2 text-xs">
                         <span className="truncate text-gray-700">{entry.reward.name}</span>
                         <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${SOURCE_META[entry.reward.source].color}`}
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${getRewardSourceMeta(entry.reward.source).color}`}
                         >
-                          {SOURCE_META[entry.reward.source].label}
+                          {getRewardSourceMeta(entry.reward.source).label}
                         </span>
                       </li>
                     ))}
@@ -3125,9 +3627,9 @@ export function TemplateWizardPage() {
                       <li key={s.id} className="flex items-center justify-between gap-2">
                         <span className="truncate">{s.name}</span>
                         <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${MCOM_GROUP_META[s.group].color}`}
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${getMcomGroupMeta(s.group).color}`}
                         >
-                          {MCOM_GROUP_META[s.group].label}
+                          {getMcomGroupMeta(s.group).label}
                         </span>
                       </li>
                     ))}
@@ -3216,7 +3718,18 @@ export function TemplateWizardPage() {
       {/* ══ Step 17 — Review, Save & Activate, Area 7 (spec 16,18,19) ══ */}
       {step === REVIEW_STEP_ID && (
         <div className="space-y-5">
-          <Panel title="Basic Information">
+          <Panel
+            title="Basic Information"
+            action={
+              <button
+                type="button"
+                onClick={() => goToStep(1)}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+              >
+                Edit
+              </button>
+            }
+          >
             <div className="space-y-3">
               <SummaryRow label="Template name" value={name || "Not set"} />
               <SummaryRow label="Internal description" value={description || "Not provided"} />
@@ -3225,7 +3738,7 @@ export function TemplateWizardPage() {
                 <SummaryRow label="Audience" value={audienceMeta?.label ?? "—"} />
                 <SummaryRow
                   label="Season / programme"
-                  value={SEASONS.find((s) => s.id === season)?.label ?? "—"}
+                  value={seasonOptions.find((s) => s.id === season)?.label ?? "—"}
                 />
                 <SummaryRow
                   label="Admin-controlled content"
@@ -3238,6 +3751,15 @@ export function TemplateWizardPage() {
           <Panel
             title="Content Requirements"
             description={`${enabledSections.length} sections · ${requiredSections.length} required`}
+            action={
+              <button
+                type="button"
+                onClick={() => goToStep(3)}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+              >
+                Edit
+              </button>
+            }
           >
             <div className="flex flex-wrap gap-1.5">
               {enabledSections.map((s, i) => (
@@ -3254,7 +3776,18 @@ export function TemplateWizardPage() {
           </Panel>
 
           <div className="grid gap-5 lg:grid-cols-2">
-            <Panel title="Funding Requirements">
+            <Panel
+              title="Funding Requirements"
+              action={
+                <button
+                  type="button"
+                  onClick={() => goToStep(4)}
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                >
+                  Edit
+                </button>
+              }
+            >
               <div className="grid gap-3 sm:grid-cols-2">
                 <SummaryRow label="Funding target" value={funding.targetRequired ? "Required" : "Optional"} />
                 <SummaryRow label="Duration" value={durationLabel} />
@@ -3282,7 +3815,18 @@ export function TemplateWizardPage() {
               </div>
             </Panel>
 
-            <Panel title="Access & Contribution">
+            <Panel
+              title="Access & Contribution"
+              action={
+                <button
+                  type="button"
+                  onClick={() => goToStep(7)}
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                >
+                  Edit
+                </button>
+              }
+            >
               <div className="grid gap-3">
                 <SummaryRow
                   label="Access type"
@@ -3337,24 +3881,46 @@ export function TemplateWizardPage() {
           <Panel
             title="Business Editable Fields"
             description={`${editableFieldCount} of ${fieldAccess.length} fields editable by the business`}
+            action={
+              <button
+                type="button"
+                onClick={() => goToStep(10)}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+              >
+                Edit
+              </button>
+            }
           >
             <div className="flex flex-wrap gap-1.5">
-              {fieldAccess.map((row) => (
-                <span
-                  key={row.id}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${FIELD_ACCESS_META[row.access].color}`}
-                  title={`${row.field} · ${FIELD_SOURCE_META[row.source].label} · ${FIELD_ACCESS_META[row.access].hint}`}
-                >
-                  {row.field}
-                  <span className="opacity-70">· {FIELD_ACCESS_META[row.access].label}</span>
-                </span>
-              ))}
+              {fieldAccess.map((row) => {
+                const source = getFieldSourceMeta(row.source);
+                const accessMetaRow = getFieldAccessMeta(row.access);
+                return (
+                  <span
+                    key={row.id}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${accessMetaRow.color}`}
+                    title={`${row.field} · ${source.label} · ${accessMetaRow.hint}`}
+                  >
+                    {row.field}
+                    <span className="opacity-70">· {accessMetaRow.label}</span>
+                  </span>
+                );
+              })}
             </div>
           </Panel>
 
           <Panel
             title="Rewards"
             description={`${rewards.length} reward(s) connected · ${connectedServices.length} internal asset(s)`}
+            action={
+              <button
+                type="button"
+                onClick={() => goToStep(12)}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+              >
+                Edit
+              </button>
+            }
           >
             {rewards.length === 0 ? (
               <p className="text-sm text-gray-400">No rewards connected.</p>
@@ -3368,9 +3934,9 @@ export function TemplateWizardPage() {
                       </span>
                       <span className="text-sm font-semibold text-gray-900">{entry.reward.name}</span>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_META[entry.reward.source].color}`}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardSourceMeta(entry.reward.source).color}`}
                       >
-                        {SOURCE_META[entry.reward.source].label}
+                        {getRewardSourceMeta(entry.reward.source).label}
                       </span>
                     </div>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -3641,19 +4207,19 @@ export function TemplateWizardPage() {
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-sm font-semibold text-gray-900">{reward.name}</span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${REWARD_CATEGORY_META[reward.category].color}`}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardCategoryMeta(reward.category).color}`}
                             >
-                              {REWARD_CATEGORY_META[reward.category].label}
+                              {getRewardCategoryMeta(reward.category).label}
                             </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_META[reward.source].color}`}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardSourceMeta(reward.source).color}`}
                             >
-                              {SOURCE_META[reward.source].label}
+                              {getRewardSourceMeta(reward.source).label}
                             </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${AUDIENCE_META[reward.audience].color}`}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardAudienceMeta(reward.audience).color}`}
                             >
-                              {AUDIENCE_META[reward.audience].label}
+                              {getRewardAudienceMeta(reward.audience).label}
                             </span>
                             {reward.status === "draft" && (
                               <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-700">
@@ -3702,6 +4268,276 @@ export function TemplateWizardPage() {
                   Add {libSelected.length} Reward{libSelected.length === 1 ? "" : "s"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MCOM Rewards catalogue picker ───────────────────────────────── */}
+      {mcomOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+                  <Store className="h-5 w-5 text-primary-600" />
+                  MCOM Rewards
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Rewards are owned by the MCOM Rewards engine. Select the ones this campaign
+                  offers — they are issued to contributors when they qualify.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMcomOpen(false)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="border-b border-gray-100 px-6 py-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={mcomSearch}
+                  onChange={(e) => setMcomSearch(e.target.value)}
+                  placeholder="Search MCOM rewards..."
+                  className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {mcomLoading ? (
+                <div className="py-12 text-center text-sm text-gray-500">Loading MCOM Rewards…</div>
+              ) : mcomError ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm font-medium text-red-600">{mcomError}</p>
+                  <button
+                    type="button"
+                    onClick={openMcomPicker}
+                    className="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : mcomResults.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Store className="mx-auto mb-3 h-9 w-9 text-gray-300" />
+                  <p className="text-sm font-medium text-gray-500">No MCOM rewards found</p>
+                  <p className="mt-1 text-xs text-gray-400">Try a different keyword.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {mcomResults.map((item) => {
+                    const alreadyAdded = selectedIds.has(`mcom-${item.id}`);
+                    const checked = mcomSelected.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors ${
+                          checked
+                            ? "border-primary-400 bg-primary-50"
+                            : alreadyAdded
+                            ? "border-gray-200 bg-gray-50 opacity-70"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked || alreadyAdded}
+                          disabled={alreadyAdded}
+                          onChange={() => toggleMcomReward(item.id)}
+                          className="mt-1 h-4 w-4 shrink-0 rounded text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium capitalize text-gray-600">
+                              {item.rewardType}
+                            </span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_META.mcom.color}`}>
+                              {SOURCE_META.mcom.label}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-gray-500">{item.description}</p>
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            {item.value != null ? `£${item.value} value · ` : ""}
+                            {item.isPointsEnabled ? "Points" : ""}
+                            {item.isPointsEnabled && item.isStampsEnabled ? " · " : ""}
+                            {item.isStampsEnabled ? "Stamps" : ""}
+                            {!item.isPointsEnabled && !item.isStampsEnabled ? item.source : ""}
+                          </p>
+                        </div>
+                        {alreadyAdded && (
+                          <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                            Added
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-gray-200 px-6 py-3.5">
+              <span className="text-xs text-gray-500">
+                {mcomSelected.length} reward{mcomSelected.length === 1 ? "" : "s"} selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMcomOpen(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAddMcomRewards}
+                  disabled={mcomSelected.length === 0}
+                  className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add {mcomSelected.length} Reward{mcomSelected.length === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create your own reward ──────────────────────────────────────── */}
+      {customOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+                  <Gift className="h-5 w-5 text-primary-600" />
+                  Create your own reward
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Define a reward owned by FundOrDonate for this template.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomOpen(false)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-gray-700">Reward name</span>
+                <input
+                  type="text"
+                  value={customReward.name}
+                  onChange={(e) => setCustomReward((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. £5 High Street Voucher"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-gray-700">Description</span>
+                <textarea
+                  value={customReward.description}
+                  onChange={(e) => setCustomReward((p) => ({ ...p, description: e.target.value }))}
+                  rows={2}
+                  placeholder="What the contributor receives"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-gray-700">Category</span>
+                  <select
+                    value={customReward.category}
+                    onChange={(e) =>
+                      setCustomReward((p) => ({ ...p, category: e.target.value as RewardCategory }))
+                    }
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
+                  >
+                    {Object.entries(REWARD_CATEGORY_META).map(([value, meta]) => (
+                      <option key={value} value={value}>
+                        {meta.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-gray-700">Value (£)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={customReward.valueGbp}
+                    onChange={(e) => setCustomReward((p) => ({ ...p, valueGbp: e.target.value }))}
+                    placeholder="Optional"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-gray-700">Audience</span>
+                  <select
+                    value={customReward.audience}
+                    onChange={(e) =>
+                      setCustomReward((p) => ({ ...p, audience: e.target.value as RewardAudience }))
+                    }
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
+                  >
+                    <option value="business">Business</option>
+                    <option value="consumer">Consumer</option>
+                    <option value="both">Both</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-gray-700">Delivery</span>
+                  <select
+                    value={customReward.delivery}
+                    onChange={(e) =>
+                      setCustomReward((p) => ({ ...p, delivery: e.target.value as DeliveryMethod }))
+                    }
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
+                  >
+                    {DELIVERY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-3.5">
+              <button
+                type="button"
+                onClick={() => setCustomOpen(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveCustomReward}
+                disabled={!customReward.name.trim()}
+                className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add reward
+              </button>
             </div>
           </div>
         </div>

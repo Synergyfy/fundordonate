@@ -172,6 +172,8 @@ export interface LibraryReward {
   defaultDelivery: DeliveryMethod;
   uses: number;
   tags: string[];
+  /** MCOM Rewards provider id — set only when `source === "mcom"`. */
+  mcomRewardId?: string | null;
 }
 
 export const REWARD_CATEGORY_META: Record<RewardCategory, { label: string; color: string }> = {
@@ -249,6 +251,54 @@ export const LIBRARY_REWARDS: LibraryReward[] = [
     tags: ["voucher", "high street"],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Issued rewards (MCOM Rewards mirror / FundOrDonate-local)
+// ---------------------------------------------------------------------------
+export type IssuedRewardStatus =
+  | "ISSUED"
+  | "REDEEMED"
+  | "EXPIRED"
+  | "REVOKED"
+  | "FAILED";
+
+export interface IssuedReward {
+  id: string;
+  externalIssuanceId: string;
+  campaignId: string | null;
+  campaignTitle: string | null;
+  campaignImage: string | null;
+  campaignLocation: string | null;
+  title: string;
+  rewardType: string | null;
+  source: "mcom" | "fundordonate";
+  status: IssuedRewardStatus | string;
+  code: string | null;
+  value: number | null;
+  quantity: number;
+  /** Reason metadata for FAILED issuances (needsActivation / businessNotEntitled / failureReason). */
+  metadata?: Record<string, unknown> | null;
+  expiresAt: string | null;
+  redeemedAt: string | null;
+  revokedAt: string | null;
+  earnedAt: string;
+  updatedAt: string;
+}
+
+/** Human guidance for a FAILED issuance, derived from its metadata. */
+export function issuedRewardGuidance(
+  reward: Pick<IssuedReward, "status" | "metadata">,
+): string | null {
+  if ((reward.status ?? "").toUpperCase() !== "FAILED") return null;
+  const meta = reward.metadata ?? {};
+  if (meta.needsActivation) {
+    return "Activate your MCOM Rewards account and this reward will be issued automatically.";
+  }
+  if (meta.businessNotEntitled) {
+    return "This reward is temporarily unavailable — the campaign owner needs an active MCOM Rewards plan.";
+  }
+  return "We couldn't issue this reward automatically. Our team has been notified.";
+}
 
 export interface DemoReward {
   id: string;

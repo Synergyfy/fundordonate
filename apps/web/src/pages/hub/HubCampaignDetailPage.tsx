@@ -8,6 +8,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { campaignApi } from "@/services/campaign";
+import { consumerService } from "@/services/consumer";
 import { seasonApi } from "@/services/season";
 import { PostPaymentRewardCard } from "@/components/campaign/PostPaymentRewardCard";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
@@ -175,25 +176,50 @@ export default function HubCampaignDetailPage() {
 
   const modeLabel = campaign.mode === "fund" ? "Fund" : "Donate";
 
-  // Evaluate rewards when payment completes
+  // Surface the rewards actually issued for this contribution once payment
+  // completes. Issuance now runs on the queue (durable, retried), so poll
+  // briefly for the mirror to catch up before giving up.
   useEffect(() => {
-    if (backerStep === "complete" && campaign && backerAmount > 0) {
-      const qualifying = (campaignRewards as any[]).filter((r: any) => {
-        const minPence = r.minAmount || r.triggerConfig?.min || 0;
-        return (backerAmount * 100) >= minPence;
-      });
-      const highest = qualifying[qualifying.length - 1];
-      if (highest) {
-        setEarnedRewards([{
-          entitlementId: `ent-${Date.now()}-${highest.id}`,
-          rewardTitle: highest.title,
-          rewardDescription: highest.description,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          items: highest.items || [{ title: highest.title, physicalType: "digital" }],
-        }]);
+    if (backerStep !== "complete" || !campaign?.id) return;
+    let cancelled = false;
+    let attempt = 0;
+
+    const poll = async () => {
+      try {
+        const res = await consumerService.getRewards({ limit: 100 });
+        const mine = (res?.items ?? []).filter(
+          (r) => r.campaignId === campaign.id,
+        );
+        if (cancelled) return;
+        if (mine.length > 0) {
+          setEarnedRewards(
+            mine.map((r) => ({
+              entitlementId: r.id,
+              rewardTitle: r.title,
+              rewardDescription:
+                r.source === "mcom"
+                  ? "Issued via MCOM Rewards"
+                  : "FundOrDonate reward",
+              expiresAt: r.expiresAt ?? "",
+              items: [],
+            })),
+          );
+          return;
+        }
+      } catch {
+        /* transient — retry below */
       }
-    }
-  }, [backerStep, campaign, backerAmount, campaignRewards]);
+      attempt += 1;
+      if (!cancelled && attempt < 6) {
+        window.setTimeout(poll, 1500);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [backerStep, campaign]);
 
   const resetModal = () => {
     setShowJoinModal(false);
@@ -574,12 +600,16 @@ export default function HubCampaignDetailPage() {
                       {backerPayment === "stripe" && (
                         <StripeSandboxForm
                           amount={backerAmount}
+                          campaignId={campaign.id}
+                          type="DONATION"
                           onSubmit={() => setBackerStep("complete")}
                         />
                       )}
                       {backerPayment === "paypal" && (
                         <PayPalSandboxForm
                           amount={backerAmount}
+                          campaignId={campaign.id}
+                          type="DONATION"
                           onSubmit={() => setBackerStep("complete")}
                         />
                       )}
@@ -629,7 +659,6 @@ export default function HubCampaignDetailPage() {
                       {earnedRewards.length > 0 && (
                         <PostPaymentRewardCard
                           rewards={earnedRewards}
-                          onClaim={() => { /* TODO: claim flow */ }}
                           onClose={resetModal}
                         />
                       )}
@@ -928,12 +957,16 @@ export default function HubCampaignDetailPage() {
                       {(foundingOption === "monthly" ? monthlyPayment : foundingPayment) === "stripe" && (
                         <StripeSandboxForm
                           amount={foundingOption === "monthly" ? monthlyAmount : selectedVariant?.price || 0}
+                          campaignId={campaign.id}
+                          type="PLEDGE"
                           onSubmit={() => setFoundingStep("complete")}
                         />
                       )}
                       {(foundingOption === "monthly" ? monthlyPayment : foundingPayment) === "paypal" && (
                         <PayPalSandboxForm
                           amount={foundingOption === "monthly" ? monthlyAmount : selectedVariant?.price || 0}
+                          campaignId={campaign.id}
+                          type="PLEDGE"
                           onSubmit={() => setFoundingStep("complete")}
                         />
                       )}

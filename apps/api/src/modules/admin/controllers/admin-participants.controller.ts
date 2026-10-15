@@ -5,7 +5,6 @@ import {
   Param,
   Put,
   Query,
-  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -15,6 +14,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
+import { CurrentUser } from "@/auth/decorators/current-user.decorator";
 import { AdminGuard } from "../guards/admin.guard";
 import { AdminParticipantsService } from "../services/admin-participants.service";
 import {
@@ -26,7 +26,6 @@ import {
   UsersQueryDto,
   VerifyBusinessDto,
 } from "../dto/participant-query.dto";
-import { Request } from "express";
 
 @ApiTags("Admin Participants")
 @ApiBearerAuth()
@@ -59,9 +58,8 @@ export class AdminParticipantsController {
   async updateUserRole(
     @Param("id") id: string,
     @Body() dto: UpdateUserRoleDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.participantsService.updateUserRole(id, dto, adminUserId);
   }
 
@@ -89,9 +87,8 @@ export class AdminParticipantsController {
   async verifyBusiness(
     @Param("id") id: string,
     @Body() dto: VerifyBusinessDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.participantsService.verifyBusiness(id, dto, adminUserId);
   }
 
@@ -101,9 +98,8 @@ export class AdminParticipantsController {
   async updateBusinessTier(
     @Param("id") id: string,
     @Body() dto: UpdateBusinessTierDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.participantsService.updateBusinessTier(id, dto, adminUserId);
   }
 

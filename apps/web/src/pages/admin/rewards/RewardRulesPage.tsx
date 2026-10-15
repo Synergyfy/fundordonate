@@ -3,7 +3,7 @@
 // Configure rules that determine when rewards are earned and delivered.
 // =============================================================================
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   Plus,
@@ -23,7 +23,9 @@ import {
   Copy,
   ArrowUp,
   ArrowDown,
+  Loader2,
 } from "lucide-react";
+import { adminApi } from "@/services/admin";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,56 +69,25 @@ const TAB_OPTIONS: { value: TabFilter; label: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Demo Data
+// Storage Helpers
 // ---------------------------------------------------------------------------
 
-const DEMO_RULES: RewardRule[] = [
-  {
-    id: "rule-1",
-    name: "Minimum Backer Contribution",
-    description: "Rewards are only given for contributions of £10 or more",
-    type: "contribution",
-    conditions: { minAmount: 10 },
-    enabled: true,
-    priority: 1,
-  },
-  {
-    id: "rule-2",
-    name: "Early Bird Bonus",
-    description: "Extra reward for contributions made within the first 7 days",
-    type: "timing",
-    conditions: { earlyBirdDays: 7 },
-    enabled: true,
-    priority: 2,
-  },
-  {
-    id: "rule-3",
-    name: "First 100 Backers",
-    description: "Special recognition for the first 100 contributors",
-    type: "quantity",
-    conditions: { maxQuantity: 100, orderType: "first" },
-    enabled: true,
-    priority: 3,
-  },
-  {
-    id: "rule-4",
-    name: "Business Contributor Exclusive",
-    description: "Certain rewards are only available to business contributors",
-    type: "audience",
-    conditions: { audience: "business" },
-    enabled: false,
-    priority: 4,
-  },
-  {
-    id: "rule-5",
-    name: "High Value Supporter",
-    description: "Special rewards for contributions of £100 or more",
-    type: "contribution",
-    conditions: { minAmount: 100 },
-    enabled: true,
-    priority: 5,
-  },
-];
+const RULES_STORAGE_KEY = "synergify:reward_rules";
+
+function loadRulesFromStorage(): RewardRule[] {
+  try {
+    const raw = localStorage.getItem(RULES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRulesToStorage(rules: RewardRule[]): void {
+  try {
+    localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(rules));
+  } catch {}
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -638,11 +609,80 @@ function RuleModal({ open, onClose, onSave, initial }: RuleModalProps) {
 // ---------------------------------------------------------------------------
 
 export function RewardRulesPage() {
-  const [rules, setRules] = useState<RewardRule[]>(DEMO_RULES);
+  const [rules, setRules] = useState<RewardRule[]>(() => loadRulesFromStorage());
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<RewardRule | null>(null);
+
+  const isInitialLoad = useRef(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function initRules() {
+      setLoading(true);
+      try {
+        // 1. First attempt to load server-persisted rules
+        const settings = await adminApi.getSettings().catch(() => null);
+        if (mounted && settings?.reward_rules && Array.isArray(settings.reward_rules) && settings.reward_rules.length > 0) {
+          setRules(settings.reward_rules);
+          saveRulesToStorage(settings.reward_rules);
+          return;
+        }
+
+        // 2. Check local storage
+        const stored = loadRulesFromStorage();
+        if (stored.length > 0) {
+          if (mounted) setRules(stored);
+          return;
+        }
+
+        // 3. Fallback to extracting from existing rewards
+        const res = await adminApi.getRewards();
+        if (!mounted) return;
+        const extracted: RewardRule[] = (res || []).map((r: any, idx: number) => {
+          const crit = r.criteria || {};
+          return {
+            id: `rule-${r.id || idx}`,
+            name: `${r.name || "Reward"} Qualification Rule`,
+            description: r.description || "Automatic rule configured from reward criteria",
+            type: (crit.type || "contribution") as RuleType,
+            conditions: crit.conditions || { minAmount: Number(crit.minAmount || crit.triggerMin) || 10 },
+            enabled: Boolean(r.isActive ?? true),
+            priority: idx + 1,
+          };
+        });
+        if (extracted.length > 0) {
+          setRules(extracted);
+          saveRulesToStorage(extracted);
+          adminApi.updateSettings({ reward_rules: extracted }).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Failed to load rules", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    initRules();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    saveRulesToStorage(rules);
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      adminApi.updateSettings({ reward_rules: rules }).catch((err) => {
+        console.warn("Failed to persist reward rules to server settings:", err);
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [rules]);
 
   const filtered = useMemo(() => {
     let result = rules;

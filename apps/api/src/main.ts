@@ -8,10 +8,6 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 
-(BigInt.prototype as any).toJSON = function () {
-  return Number(this);
-};
-
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(ConfigService);
@@ -52,22 +48,25 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("FundorDonate API")
-    .setDescription("Crowdfunding & Donation Platform API")
-    .setVersion("1.0")
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api/docs", app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  });
-
   const port = config.get<number>("port") ?? 5024;
+
+  if (config.get<string>("nodeEnv") !== "production") {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("FundorDonate API")
+      .setDescription("Crowdfunding & Donation Platform API")
+      .setVersion("1.0")
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api/docs", app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+    logger.log(`Swagger docs on http://localhost:${port}/api/docs`);
+  }
+
   await app.listen(port);
 
   logger.log(`API running on http://localhost:${port}/api/v1`);
-  logger.log(`Swagger docs on http://localhost:${port}/api/docs`);
   logger.log(`Health check on http://localhost:${port}/health`);
 }
 

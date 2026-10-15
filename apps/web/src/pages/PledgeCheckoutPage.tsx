@@ -90,8 +90,9 @@ export function PledgeCheckoutPage() {
   }, [campaignSlug]);
 
   useEffect(() => {
-    if (selectedReward && details.amount < selectedReward.amount) {
-      setDetails((d) => ({ ...d, amount: selectedReward.amount }));
+    // `details.amount` is in pounds; the reward threshold is in pence.
+    if (selectedReward && details.amount < selectedReward.amount / 100) {
+      setDetails((d) => ({ ...d, amount: selectedReward.amount / 100 }));
     }
   }, [selectedRewardId]);
 
@@ -99,7 +100,7 @@ export function PledgeCheckoutPage() {
     switch (currentStep) {
       case 0: return true;
       case 1:
-        if (selectedReward && details.amount < selectedReward.amount) return false;
+        if (selectedReward && details.amount < selectedReward.amount / 100) return false;
         if (details.amount <= 0) return false;
         if (details.shippingRequired) {
           return !!(details.shippingFirstName && details.shippingLastName && details.shippingAddress1 && details.shippingCity && details.shippingState && details.shippingPostalCode);
@@ -261,7 +262,7 @@ export function PledgeCheckoutPage() {
                         Processing...
                       </span>
                     ) : (
-                      `Pledge £${(details.amount / 100).toFixed(2)}`
+                      `Pledge £${(details.amount + details.bonusSupport).toFixed(2)}`
                     )}
                   </button>
                 )}

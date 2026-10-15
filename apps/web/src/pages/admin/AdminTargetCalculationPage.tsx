@@ -12,6 +12,8 @@ import {
   type BulkImportResult,
 } from "@/services/target-calculation";
 import { ArrowLeft, Calculator, Upload, Check, Settings, RefreshCw, Edit, Save } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchHubCities } from "@/services/location";
 
 const formatCurrency = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(pence / 100);
@@ -23,12 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
   APPROVED: "bg-green-100 text-green-700",
 };
 
-const UK_CITIES = [
-  "London", "Birmingham", "Manchester", "Leeds", "Liverpool", "Sheffield", "Bristol",
-  "Newcastle", "Nottingham", "Southampton", "Leicester", "Coventry", "Bradford",
-  "Cardiff", "Belfast", "Edinburgh", "Glasgow", "Swansea", "Oxford", "Cambridge",
-  "Brighton", "Bath", "Exeter", "Norwich", "York", "Chester", "Durham", "Winchester",
-];
+
 
 export default function AdminTargetCalculationPage() {
   const [calculations, setCalculations] = useState<TargetCalculation[]>([]);
@@ -38,6 +35,7 @@ export default function AdminTargetCalculationPage() {
   const [importData, setImportData] = useState("");
   const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
   const [importing, setImporting] = useState(false);
+  const { data: hubCities } = useQuery({ queryKey: ["hubCities"], queryFn: fetchHubCities });
   const [editingConfig, setEditingConfig] = useState(false);
   const [configDraft, setConfigDraft] = useState<Partial<TargetCalculationConfig>>({});
   const [recalculating, setRecalculating] = useState(false);
@@ -380,7 +378,9 @@ Liverpool,498000,4192,119,55"
             <div className="mt-4 flex gap-3">
               <button
                 onClick={() => {
-                  const csv = UK_CITIES.map((city) => `${city},,,,\n`).join("");
+                  const cityNames = (hubCities || []).map((c) => c.name);
+                  const list = cityNames.length ? cityNames : ["London", "Manchester", "Birmingham"];
+                  const csv = list.map((city) => `${city},,,,\n`).join("");
                   setImportData(`location,population,density,areaSize,economicIndex\n${csv}`);
                 }}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

@@ -1,9 +1,14 @@
 // =============================================================================
 // Campaign Templates Service
-// Wires campaign template management to the live adminApi backend.
+// Adapts between the admin template wizard's view model (MasterTemplate) and
+// the live adminApi backend. No local/mock persistence.
 // =============================================================================
 
-import { adminApi } from "@/services/admin";
+import type {
+  AdminCampaignTemplate,
+  CreateCampaignTemplatePayload,
+  TemplateInstance,
+} from "@/services/admin";
 
 export type TemplateLifecycle = "draft" | "active" | "inactive" | "archived";
 export type TemplateCampaignType = "donation" | "crowdfunding" | "fund";
@@ -156,157 +161,253 @@ export interface TemplateSaveInput {
   lifecycle: TemplateLifecycle;
 }
 
-const templateCache = new Map<string, MasterTemplate>();
+// ---------------------------------------------------------------------------
+// Lifecycle <-> status mapping
+// ---------------------------------------------------------------------------
 
-export function getAdminTemplateById(id: string): MasterTemplate | undefined {
-  return templateCache.get(id);
+export type TemplateStatus = "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
+
+export function lifecycleToStatus(lifecycle: TemplateLifecycle): TemplateStatus {
+  switch (lifecycle) {
+    case "active":
+      return "ACTIVE";
+    case "inactive":
+      return "INACTIVE";
+    case "archived":
+      return "ARCHIVED";
+    default:
+      return "DRAFT";
+  }
 }
 
-export function saveTemplate(
-  input: TemplateSaveInput,
-  existingId?: string
-): MasterTemplate {
-  const id = existingId || `tpl-${Date.now()}`;
-  const master: MasterTemplate = {
-    id,
+export function statusToLifecycle(status?: string | null): TemplateLifecycle {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "INACTIVE":
+      return "inactive";
+    case "ARCHIVED":
+      return "archived";
+    default:
+      return "draft";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Defaults (used when a persisted template has no stored config yet)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_FUNDING: TemplateStructureConfig["funding"] = {
+  targetRequired: true,
+  methods: ["one_off"],
+  minContributionEnabled: false,
+  minContribution: "10",
+  duration: "60",
+  customDays: "",
+  rules: ["partial_allowed", "public_progress"],
+  payments: ["card_payments", "verified_payouts", "receipt_issue"],
+};
+
+const DEFAULT_LOCATION: TemplateStructureConfig["location"] = {
+  required: true,
+  levels: ["city", "local_area", "high_street"],
+  allowMultiple: false,
+};
+
+const DEFAULT_VISIBILITY: TemplateStructureConfig["visibility"] = {
+  marketplace: true,
+  hub: true,
+  search: true,
+  adminReview: true,
+  presentation: "image",
+};
+
+const DEFAULT_ACCESS: TemplateAccessRules = {
+  type: "automatic",
+  eligibility: ["business_account"],
+  minContributionEnabled: true,
+  minContribution: "100",
+  accessAsReward: false,
+  accessRewardThreshold: "100",
+  adminApproval: false,
+};
+
+const DEFAULT_CONTRIBUTION: ContributionRules = {
+  mode: "optional",
+  amountType: "from_audit",
+  fixedAmount: "100",
+  minAmount: "50",
+  auditRequirement: "2000",
+  auditPercent: "5",
+  adminRule: "",
+  rewardForOwnContribution: true,
+  countsTowardTarget: true,
+  showDisclosure: true,
+  maxSelfContribution: "",
+};
+
+// ---------------------------------------------------------------------------
+// Mapping
+// ---------------------------------------------------------------------------
+
+function deriveEligibilityTier(eligibility: string[]): string {
+  const tiers = ["PLATINUM", "GOLD", "SILVER", "BRONZE"];
+  for (const tier of tiers) {
+    if (eligibility.some((e) => e.toLowerCase().includes(tier.toLowerCase()))) {
+      return tier;
+    }
+  }
+  return "BRONZE";
+}
+
+/**
+ * Maps the wizard's view model to the create/update template API payload.
+ */
+export function buildTemplatePayload(input: TemplateSaveInput): CreateCampaignTemplatePayload {
+  return {
     name: input.name,
     tagline: input.purpose,
-    season: input.seasonLabel,
-    audience: input.audience,
-    accessType: input.accessTypeName,
-    origin: "direct",
-    requirements: [],
-    approval: input.visibility.adminReview || input.access.adminApproval ? "admin_review" : "automatic",
-    contributionRequirement: { required: input.access.minContributionEnabled, amount: Number(input.access.minContribution || 0) },
-    purpose: input.purpose,
-    campaignType: input.campaignType,
-    lifecycle: input.lifecycle,
-    owner: "admin",
-    masterTemplate: true,
-    campaignsUsing: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    structure: {
-      mode: "custom",
-      layout: "standard",
-      sections: input.sections,
-      config: {
-        funding: input.funding,
-        location: input.location,
-        visibility: input.visibility,
-        seasonId: input.seasonId,
-      },
-    },
-    dataSources: [],
-    accessRules: input.access,
-    accessConditions: [],
-    fieldRows: input.fieldRows,
-    contributionRules: input.selfFundingRules,
-    rewards: input.rewards,
-    mcomAssets: input.mcomAssets,
-  };
-  templateCache.set(id, master);
-
-  const payload = {
-    name: input.name,
+    seasonId: input.seasonId && input.seasonId !== "none" ? input.seasonId : undefined,
+    origin: "DIRECT",
+    approvalMode:
+      input.visibility.adminReview || input.access.adminApproval
+        ? "ADMIN_REVIEW"
+        : "AUTOMATIC",
+    status: lifecycleToStatus(input.lifecycle),
     category: input.campaignType,
-    description: input.purpose,
-    targetAudience: input.audience,
-    metadata: {
+    audience: input.audience.toUpperCase(),
+    minEligibilityTier: deriveEligibilityTier(input.access.eligibility),
+    minContributionRequired: input.access.minContributionEnabled,
+    minContributionAmount: Math.round(Number(input.access.minContribution || 0) * 100),
+    selfFundingEnabled: input.selfFundingRules.mode !== "not_allowed",
+    selfFundingMode: input.selfFundingRules.mode,
+    selfFundingAmount: Math.round(Number(input.selfFundingRules.fixedAmount || 0) * 100),
+    fieldsConfig: input.fieldRows,
+    rewardsConfig: input.rewards,
+    mcomAssetsConfig: input.mcomAssets,
+    requirementsConfig: [],
+    config: {
+      sections: input.sections,
       funding: input.funding,
       location: input.location,
       visibility: input.visibility,
       access: input.access,
-      fieldRows: input.fieldRows,
-      selfFundingRules: input.selfFundingRules,
-      rewards: input.rewards,
-      mcomAssets: input.mcomAssets,
+      contributionRules: input.selfFundingRules,
+      accessTypeName: input.accessTypeName,
+      seasonLabel: input.seasonLabel,
+      campaignTypeName: input.campaignTypeName,
       lifecycle: input.lifecycle,
     },
   };
-
-  if (existingId) {
-    adminApi.updateTemplate(existingId, payload).catch((err) => console.error("updateTemplate error:", err));
-  } else {
-    adminApi.createTemplate(payload as any).catch((err) => console.error("createTemplate error:", err));
-  }
-
-  return master;
 }
 
-export function adaptAdminTemplateToMaster(tpl: any): MasterTemplate {
-  const meta = tpl?.metadata || {};
+export function normalizeFieldRows(fields?: any[]): TemplateFieldRow[] {
+  if (!fields || !Array.isArray(fields) || fields.length === 0) {
+    return [
+      { id: "f_title", field: "Campaign title", source: "template", access: "no" },
+      { id: "f_desc", field: "Campaign description", source: "template", access: "no" },
+      { id: "f_design", field: "Campaign design / hero", source: "admin_mcom", access: "no" },
+      { id: "f_target", field: "Funding target", source: "template", access: "configurable" },
+      { id: "f_period", field: "Campaign period", source: "template", access: "conditional" },
+      { id: "f_media", field: "Images & video", source: "business_mcom", access: "configurable" },
+      { id: "f_location", field: "Location details", source: "business_account", access: "conditional" },
+      { id: "f_contact", field: "Contact information", source: "business_account", access: "configurable" },
+      { id: "f_rewards", field: "Reward selection", source: "template", access: "conditional" },
+      { id: "f_payout", field: "Payout / bank details", source: "audit_business", access: "no" },
+      { id: "f_disclosure", field: "Self-funding disclosure", source: "admin", access: "no" },
+      { id: "f_docs", field: "Supporting documents", source: "audit_business", access: "configurable" },
+    ];
+  }
+
+  return fields.map((r, idx) => {
+    const field = r.field || r.label || r.name || r.question || `Field ${idx + 1}`;
+
+    let source: TemplateFieldSource = "template";
+    const rawSource = String(r.source || "").toLowerCase().trim();
+    if (rawSource === "business_input" || rawSource === "business" || rawSource === "business_account") {
+      source = "business_account";
+    } else if (rawSource === "business_mcom") {
+      source = "business_mcom";
+    } else if (rawSource === "audit_business" || rawSource === "audit") {
+      source = "audit_business";
+    } else if (rawSource === "admin") {
+      source = "admin";
+    } else if (rawSource === "admin_mcom") {
+      source = "admin_mcom";
+    } else if (rawSource === "location") {
+      source = "business_account";
+    } else {
+      source = "template";
+    }
+
+    let access: TemplateFieldAccess = "no";
+    if (r.access === "no" || r.access === "configurable" || r.access === "conditional") {
+      access = r.access;
+    } else if (r.editable === true || r.configurable === true) {
+      access = "configurable";
+    } else if (r.conditional === true) {
+      access = "conditional";
+    } else {
+      access = "no";
+    }
+
+    return {
+      id: r.id || `field_${idx}`,
+      field,
+      source,
+      access,
+    };
+  });
+}
+
+/**
+ * Rehydrates a persisted admin template into the wizard's view model.
+ */
+export function adaptAdminTemplateToMaster(tpl: AdminCampaignTemplate): MasterTemplate {
+  const config = (tpl.config ?? {}) as Record<string, any>;
+  const accessRules: TemplateAccessRules = config.access ?? DEFAULT_ACCESS;
+
   return {
     id: tpl.id,
-    name: tpl.name || "",
-    tagline: tpl.description || "",
-    season: meta.seasonLabel || "Active Season",
-    audience: (tpl.targetAudience || "both") as any,
-    accessType: meta.access?.type || "automatic",
-    origin: "direct",
-    requirements: [],
-    approval: meta.visibility?.adminReview ? "admin_review" : "automatic",
-    contributionRequirement: { required: false, amount: 0 },
-    purpose: tpl.description || "",
-    campaignType: (tpl.category || "donation") as any,
-    lifecycle: meta.lifecycle || "active",
+    name: tpl.name,
+    tagline: tpl.tagline,
+    season: config.seasonLabel ?? tpl.season?.name ?? "No season / evergreen",
+    audience: (tpl.audience?.toLowerCase() ?? "both") as MasterTemplate["audience"],
+    accessType: config.accessTypeName ?? accessRules.type ?? "automatic",
+    origin: tpl.origin === "AUDIT" ? "audit" : "direct",
+    requirements: tpl.requirementsConfig ?? [],
+    approval: tpl.approvalMode === "AUTOMATIC" ? "automatic" : "admin_review",
+    contributionRequirement: {
+      required: tpl.minContributionRequired,
+      amount: tpl.minContributionAmount,
+    },
+    purpose: tpl.tagline,
+    campaignType: ((tpl.category ?? "fund") as TemplateCampaignType),
+    lifecycle: statusToLifecycle(tpl.status),
     owner: "admin",
     masterTemplate: true,
-    campaignsUsing: tpl.campaignsCount || 0,
-    createdAt: tpl.createdAt || new Date().toISOString(),
-    updatedAt: tpl.updatedAt || new Date().toISOString(),
+    campaignsUsing: tpl.instantiatedCount ?? 0,
+    createdAt: tpl.createdAt,
+    updatedAt: tpl.updatedAt,
     structure: {
       mode: "custom",
       layout: "standard",
-      sections: meta.sections || [],
+      sections: config.sections ?? [],
       config: {
-        funding: meta.funding || {
-          targetRequired: true,
-          methods: ["card"],
-          minContributionEnabled: false,
-          minContribution: "0",
-          duration: "30",
-          customDays: "30",
-          rules: [],
-          payments: [],
-        },
-        location: meta.location || { required: false, levels: ["national"], allowMultiple: false },
-        visibility: meta.visibility || {
-          marketplace: true,
-          hub: true,
-          search: true,
-          adminReview: true,
-          presentation: "image",
-        },
-        seasonId: meta.seasonId || "",
+        funding: config.funding ?? DEFAULT_FUNDING,
+        location: config.location ?? DEFAULT_LOCATION,
+        visibility: config.visibility ?? DEFAULT_VISIBILITY,
+        seasonId: tpl.seasonId ?? "none",
       },
     },
-    dataSources: meta.dataSources || [],
-    accessRules: meta.access || {
-      type: "automatic",
-      eligibility: [],
-      minContributionEnabled: false,
-      minContribution: "0",
-      accessAsReward: false,
-      accessRewardThreshold: "0",
-      adminApproval: false,
-    },
+    dataSources: [],
+    accessRules,
     accessConditions: [],
-    fieldRows: meta.fieldRows || [],
-    contributionRules: meta.selfFundingRules || {
-      mode: "optional",
-      amountType: "minimum",
-      fixedAmount: "0",
-      minAmount: "0",
-      auditRequirement: "none",
-      auditPercent: "0",
-      adminRule: "none",
-      rewardForOwnContribution: false,
-      countsTowardTarget: true,
-      showDisclosure: true,
-      maxSelfContribution: "1000",
-    },
-    rewards: meta.rewards || [],
-    mcomAssets: meta.mcomAssets || [],
+    fieldRows: normalizeFieldRows(tpl.fieldsConfig),
+    contributionRules: config.contributionRules ?? DEFAULT_CONTRIBUTION,
+    rewards: tpl.rewardsConfig ?? [],
+    mcomAssets: tpl.mcomAssetsConfig ?? [],
   };
 }
+
+export type { TemplateInstance };

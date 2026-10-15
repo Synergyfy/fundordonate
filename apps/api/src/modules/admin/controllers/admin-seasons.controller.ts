@@ -6,7 +6,6 @@ import {
   Post,
   Put,
   Query,
-  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -16,6 +15,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
+import { CurrentUser } from "@/auth/decorators/current-user.decorator";
 import { AdminGuard } from "../guards/admin.guard";
 import { AdminSeasonsService } from "../services/admin-seasons.service";
 import {
@@ -24,7 +24,6 @@ import {
   SeasonQueryDto,
   UpdateSeasonDto,
 } from "../dto/season.dto";
-import { Request } from "express";
 
 @ApiTags("Admin Seasons")
 @ApiBearerAuth()
@@ -74,8 +73,10 @@ export class AdminSeasonsController {
     summary: "Create a new activation season with target blueprints",
   })
   @ApiResponse({ status: 201, description: "Season successfully created" })
-  async createSeason(@Body() dto: CreateSeasonDto, @Req() req: Request) {
-    const adminUserId = (req.user as any)?.id;
+  async createSeason(
+    @Body() dto: CreateSeasonDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
     return this.seasonsService.createSeason(dto, adminUserId);
   }
 

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@/prisma/prisma.service";
 import {
   McomPaymentsService,
@@ -18,6 +19,8 @@ import {
 } from "./dto/create-charge.dto";
 import { ConfirmChargeDto } from "./dto/confirm-charge.dto";
 import { ContributionStatus, ContributionType } from "@prisma/client";
+import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
+import { RewardRevokeQueueService } from "@/modules/rewards/services/reward-revoke-queue.service";
 
 @Injectable()
 export class PaymentsService {
@@ -26,6 +29,9 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mcomPayments: McomPaymentsService,
+    private readonly rewardIssuanceQueue: RewardIssueQueueService,
+    private readonly rewardRevokeQueue: RewardRevokeQueueService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -194,8 +200,8 @@ export class PaymentsService {
         contributionId: contribution?.id ?? null,
         campaignId: campaign?.id ?? null,
         purpose: dto.type,
-        returnUrl: `${process.env.CORS_ORIGIN || "http://localhost:5023"}/payment/return`,
-        cancelUrl: `${process.env.CORS_ORIGIN || "http://localhost:5023"}/payment-failed`,
+        returnUrl: `${this.config.get<string>("cors.origin") ?? "http://localhost:5023"}/payment/return`,
+        cancelUrl: `${this.config.get<string>("cors.origin") ?? "http://localhost:5023"}/payment-failed`,
         customMetadata: dto.metadata ?? {},
       },
       idempotencyKey: `fundordonate-charge-${reference}`,
@@ -229,8 +235,9 @@ export class PaymentsService {
       reference,
       clientSecret: chargeResult.clientSecret,
       publishableKey:
-        process.env.STRIPE_PUBLISHABLE_KEY ||
-        "pk_test_51LXA6lGFql92GKp5ASHqWrABsdtBL3WDjEh6lFltPqt210uSaUfRU4U79mqU5RUhOBV4Ks3aRpF21BnnClQbBhmN000b359X8G",
+        this.config.get<string>("stripe.publishableKey") ||
+        this.config.get<string>("STRIPE_PUBLISHABLE_KEY") ||
+        "",
       approvalUrl: chargeResult.approvalUrl,
       contributionId: contribution?.id ?? null,
     };
@@ -335,17 +342,34 @@ export class PaymentsService {
       if (c.campaignId) {
         const isSelfFund = c.type === ContributionType.SELF_FUNDING;
         const rewardName = isSelfFund ? c.campaign?.template?.selfFundingRewardName : null;
+
+        const previousCount = c.backerId
+          ? await tx.contribution.count({
+              where: {
+                campaignId: c.campaignId,
+                backerId: c.backerId,
+                status: ContributionStatus.COMPLETED,
+                id: { not: contributionId },
+              },
+            })
+          : 0;
+        const isNewBacker = !isSelfFund && previousCount === 0;
+
         await tx.businessCampaign.update({
           where: { id: c.campaignId },
           data: {
             raisedAmount: { increment: c.amount },
-            backerCount: isSelfFund ? undefined : { increment: 1 },
+            ...(isNewBacker ? { backerCount: { increment: 1 } } : {}),
             businessContribution: isSelfFund ? { increment: c.amount } : undefined,
             ...(rewardName ? { rewardTriggered: rewardName } : {}),
           },
         });
       }
     });
+
+    // Queue reward evaluation so a slow/unavailable MCOM Rewards can never
+    // block or fail payment activation (retried with backoff; idempotent).
+    await this.rewardIssuanceQueue.enqueueContribution(contributionId);
 
     this.logger.log(`Contribution ${contributionId} activated successfully.`);
   }
@@ -369,14 +393,30 @@ export class PaymentsService {
       });
 
       if (c.campaignId) {
+        const remainingCount = c.backerId
+          ? await tx.contribution.count({
+              where: {
+                campaignId: c.campaignId,
+                backerId: c.backerId,
+                status: ContributionStatus.COMPLETED,
+                id: { not: contributionId },
+              },
+            })
+          : 0;
+        const shouldDecrement = c.backerId && remainingCount === 0;
+
         await tx.businessCampaign.update({
           where: { id: c.campaignId },
           data: {
             raisedAmount: { decrement: c.amount },
+            ...(shouldDecrement ? { backerCount: { decrement: 1 } } : {}),
           },
         });
       }
     });
+
+    // Revoke any reward issued for this contribution (durable, idempotent).
+    await this.rewardRevokeQueue.enqueueContribution(contributionId);
 
     this.logger.log(`Contribution ${contributionId} refunded successfully.`);
   }

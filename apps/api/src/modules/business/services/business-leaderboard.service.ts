@@ -39,28 +39,37 @@ export class BusinessLeaderboardService {
 
     const city = business.city;
 
-    // Aggregate contributions by business within the same city
-    const rankings: Array<{
-      business_id: string;
+    // Aggregate rank and contributions directly in PostgreSQL
+    const result: Array<{
       total_contributed: bigint;
       rank: bigint;
+      total_businesses: bigint;
     }> = await this.prisma.$queryRaw`
-      SELECT 
-        b.id AS business_id,
-        COALESCE(SUM(c.amount), 0) AS total_contributed,
-        DENSE_RANK() OVER (ORDER BY COALESCE(SUM(c.amount), 0) DESC) AS rank
-      FROM businesses b
-      LEFT JOIN contributions c ON c."businessId" = b.id AND c.status = 'COMPLETED'
-      WHERE b.status = 'ACTIVE' AND b.city = ${city}
-      GROUP BY b.id
+      WITH ranked AS (
+        SELECT 
+          b.id AS business_id,
+          COALESCE(SUM(c.amount), 0) AS total_contributed,
+          DENSE_RANK() OVER (ORDER BY COALESCE(SUM(c.amount), 0) DESC) AS rank,
+          COUNT(*) OVER() AS total_businesses
+        FROM businesses b
+        LEFT JOIN contributions c ON c."businessId" = b.id AND c.status = 'COMPLETED'
+        WHERE b.status = 'ACTIVE' AND b.city = ${city}
+        GROUP BY b.id
+      )
+      SELECT total_contributed, rank, total_businesses
+      FROM ranked
+      WHERE business_id = ${businessId}
+      LIMIT 1
     `;
 
-    const found = rankings.find((r) => r.business_id === businessId);
+    if (!result || result.length === 0) {
+      return { rank: 1, totalContributed: 0, totalBusinesses: 1 };
+    }
 
     return {
-      rank: found ? Number(found.rank) : 1,
-      totalContributed: found ? Number(found.total_contributed) : 0,
-      totalBusinesses: rankings.length,
+      rank: Number(result[0].rank),
+      totalContributed: Number(result[0].total_contributed),
+      totalBusinesses: Number(result[0].total_businesses),
     };
   }
 

@@ -7,45 +7,11 @@ import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
+import { adminApi } from "@/services/admin";
 import {
   Store, MapPin, CheckCircle, ArrowRight,
-  Clock, Users, Target, TrendingUp, Calendar,
+  Clock, Users, Target, TrendingUp, Calendar, Loader2,
 } from "lucide-react";
-
-const DEMO_BUSINESSES: Record<string, { id: string; name: string; category: string; location: string }> = {
-  b1: { id: "b1", name: "Vinyl Records Ltd", category: "Music & Entertainment", location: "142 Oldham Street" },
-  b2: { id: "b2", name: "Retro Revival", category: "Vintage Clothing", location: "78 Oldham Street" },
-  b3: { id: "b3", name: "The Coffee House", category: "Café & Food", location: "55 Oldham Street" },
-  b4: { id: "b4", name: "Craft Beer Co", category: "Bar & Drinks", location: "23 Oldham Street" },
-  b5: { id: "b5", name: "Northern Quarter Books", category: "Books & Stationery", location: "91 Oldham Street" },
-  b6: { id: "b6", name: "Tib Street Deli", category: "Food & Groceries", location: "12 Tib Street" },
-  b7: { id: "b7", name: "Urban Cuts", category: "Hair & Beauty", location: "45 Tib Street" },
-  b8: { id: "b8", name: "Tech Repair Hub", category: "Electronics", location: "78 Tib Street" },
-  b9: { id: "b9", name: "Square Gallery", category: "Art & Culture", location: "4 Stevenson Square" },
-  b10: { id: "b10", name: "Creative Space", category: "Co-working", location: "12 Stevenson Square" },
-  b11: { id: "b11", name: "Ancoats Bakehouse", category: "Bakery & Food", location: "8 Ancoats Row" },
-  b12: { id: "b12", name: "Pizza Express", category: "Restaurant", location: "22 Ancoats Row" },
-  b13: { id: "b13", name: "The Vine", category: "Bar & Drinks", location: "35 Ancoats Row" },
-  b14: { id: "b14", name: "Cutting Room Café", category: "Café & Food", location: "2 Cutting Room Square" },
-  b15: { id: "b15", name: "Artisan Coffee", category: "Coffee Shop", location: "15 Cutting Room Square" },
-  b16: { id: "b16", name: "Waterside Restaurant", category: "Restaurant", location: "42 Deansgate" },
-  b17: { id: "b17", name: "Castlefield Bar", category: "Bar & Drinks", location: "78 Deansgate" },
-  b18: { id: "b18", name: "Hotel & Spa", category: "Hospitality", location: "100 Deansgate" },
-  b19: { id: "b19", name: "Whitworth Gym", category: "Health & Fitness", location: "15 Whitworth Street" },
-  b20: { id: "b20", name: "Office Supplies Co", category: "Office & Business", location: "45 Whitworth Street" },
-  b21: { id: "b21", name: "Chapel Street Pharmacy", category: "Health & Pharmacy", location: "12 Chapel Street" },
-  b22: { id: "b22", name: "Salford Electronics", category: "Electronics", location: "56 Chapel Street" },
-  b23: { id: "b23", name: "Pendleton Corner Shop", category: "Convenience Store", location: "8 Pendleton Road" },
-  b24: { id: "b24", name: "Pendleton Dental", category: "Health & Dental", location: "22 Pendleton Road" },
-  b25: { id: "b25", name: "Stockport Antiques", category: "Antiques & Collectables", location: "5 Great Underbank" },
-  b26: { id: "b26", name: "The Cheese Shop", category: "Food & Groceries", location: "18 Great Underbank" },
-  b27: { id: "b27", name: "Merseyway Fashion", category: "Fashion & Clothing", location: "3 Merseyway" },
-  b28: { id: "b28", name: "Sport & Outdoor", category: "Sports & Leisure", location: "25 Merseyway" },
-  b29: { id: "b29", name: "Bolton Library Café", category: "Café & Food", location: "2 Le Mans Crescent" },
-  b30: { id: "b30", name: "Civic Office Supplies", category: "Office & Business", location: "15 Le Mans Crescent" },
-  b31: { id: "b31", name: "Bradshawgate Retail", category: "Retail", location: "8 Bradshawgate" },
-  b32: { id: "b32", name: "Bolton Electronics", category: "Electronics", location: "32 Bradshawgate" },
-};
 
 function useCountdown(targetDate: string) {
   const [timeLeft, setTimeLeft] = React.useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -78,9 +44,29 @@ export default function BusinessClaimedPage() {
     businessId: string;
   }>();
 
+  const { data: fetchedBusiness, isLoading: loadingBusiness } = useQuery({
+    queryKey: ["business", businessId],
+    queryFn: async () => {
+      if (!businessId || businessId === "new") return null;
+      try {
+        const res = await adminApi.getBusiness(businessId);
+        if (!res) return null;
+        return {
+          id: res.id,
+          name: res.name,
+          category: res.category || "Business",
+          location: res.address || res.highStreet || `${res.city || "UK"}`,
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: Boolean(businessId && businessId !== "new"),
+  });
+
   const business = businessId === "new"
     ? { id: "new", name: "Your New Business", category: "Business", location: "Your Location" }
-    : DEMO_BUSINESSES[businessId || "b4"];
+    : (fetchedBusiness || { id: businessId || "biz", name: "Your Business", category: "Business", location: highStreetSlug ? highStreetSlug.replace(/-/g, " ") : "Local Area" });
 
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],

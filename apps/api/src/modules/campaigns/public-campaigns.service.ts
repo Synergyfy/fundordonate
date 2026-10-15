@@ -6,6 +6,56 @@ import {
   Prisma,
 } from "@prisma/client";
 import { PublicCampaignQueryDto } from "./dto/public-campaign-query.dto";
+import {
+  effectiveConditions,
+  minQualifyingPence,
+} from "@/modules/rewards/reward-config.util";
+
+/** A reward rule as persisted in `CampaignTemplate.rewardsConfig`. */
+interface StoredRewardCondition {
+  mode?: string;
+  minPence?: number | null;
+  maxPence?: number | null;
+  exactPence?: number | null;
+  min?: number | null;
+  max?: number | null;
+  exact?: number | null;
+}
+
+interface StoredRewardConfig {
+  id?: string;
+  name?: string;
+  rule?: string;
+  source?: string;
+  mcomRewardId?: string | null;
+  rewardCategory?: string;
+  valueGbp?: number | null;
+  audience?: string;
+  delivery?: string;
+  qualificationMode?: string;
+  conditions?: StoredRewardCondition[];
+  trigger?: StoredRewardCondition;
+}
+
+/** Public (non-sensitive) view of a campaign reward rule. */
+export interface PublicCampaignReward {
+  id: string;
+  title: string;
+  description: string;
+  source: string;
+  mcomRewardId: string | null;
+  rewardType: string | null;
+  fulfilmentType: string | null;
+  audience: string | null;
+  qualificationMode: string;
+  valueGbp: number | null;
+  /** Minimum qualifying contribution in pence (for checkout gating). */
+  amount: number;
+  triggerConfig: { mode: string; min?: number; max?: number; exact?: number };
+  issuedCount: number;
+  status: "active";
+  items: { title: string; physicalType?: string }[];
+}
 
 export interface PublicCampaignItem {
   id: string;
@@ -51,6 +101,7 @@ export interface PublicCampaignItem {
     donations?: number;
     pledges?: number;
   };
+  rewards?: PublicCampaignReward[];
   createdAt: string;
 }
 
@@ -96,6 +147,11 @@ export class PublicCampaignsService {
     // Filter by city
     if (query.city) {
       businessWhere.city = { equals: query.city, mode: "insensitive" };
+    }
+
+    // Filter by location ID
+    if (query.locationId) {
+      businessWhere.locationId = query.locationId;
     }
 
     // Filter by category
@@ -309,8 +365,118 @@ export class PublicCampaignsService {
         donations: c.backerCount || c._count?.contributions || 0,
         pledges: 0,
       },
+      rewards: await this.buildRewards(c.id, c.template?.rewardsConfig),
       createdAt: c.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Public reward rules for a campaign, suitable for the campaign page and the
+   * pledge checkout (which uses `amount` to gate the minimum contribution).
+   *
+   * Codes and recipient details are intentionally excluded — a donor's own
+   * issuance (with code/status) is served from the authenticated consumer API.
+   */
+  async getRewards(campaignId: string): Promise<{
+    data: PublicCampaignReward[];
+    total: number;
+  }> {
+    const campaign = await this.prisma.businessCampaign.findUnique({
+      where: { id: campaignId },
+      include: { template: true },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException("Campaign not found");
+    }
+
+    const data = await this.buildRewards(campaignId, campaign.template?.rewardsConfig);
+    return { data, total: data.length };
+  }
+
+  /** Map stored reward configs (+ issuance counts) into public reward views. */
+  private async buildRewards(
+    campaignId: string,
+    rawConfig: unknown,
+  ): Promise<PublicCampaignReward[]> {
+    const configs: StoredRewardConfig[] = Array.isArray(rawConfig)
+      ? (rawConfig as unknown as StoredRewardConfig[])
+      : [];
+
+    if (configs.length === 0) return [];
+
+    const counts = await this.prisma.rewardIssuance.groupBy({
+      by: ["mcomRewardId"],
+      where: { campaignId },
+      _count: { _all: true },
+    });
+    const countMap = new Map(counts.map((c) => [c.mcomRewardId, c._count._all]));
+
+    return configs
+      .filter((cfg) => cfg && typeof cfg === "object")
+      .map((cfg, index) => this.toPublicReward(cfg, index, countMap));
+  }
+
+  private toPublicReward(
+    cfg: StoredRewardConfig,
+    index: number,
+    countMap: Map<string, number>,
+  ): PublicCampaignReward {
+    const condition = this.normalizeCondition(cfg);
+    const mode = this.normalizeMode(condition.mode);
+    // Minimum qualifying contribution in pence — falls back to the rule copy
+    // for legacy configs that predate `conditions[]`.
+    const amount = minQualifyingPence(cfg);
+
+    return {
+      id: cfg.id ?? `cfg-${index}`,
+      title: cfg.name ?? "Reward",
+      description: cfg.rule ?? "",
+      source: cfg.source ?? "fundordonate",
+      mcomRewardId: cfg.mcomRewardId ?? null,
+      rewardType: cfg.rewardCategory ?? null,
+      fulfilmentType: cfg.delivery ?? null,
+      audience: cfg.audience ?? null,
+      qualificationMode: cfg.qualificationMode ?? "highest",
+      valueGbp: cfg.valueGbp ?? null,
+      amount,
+      triggerConfig: {
+        mode,
+        ...(condition.minPence != null ? { min: condition.minPence } : {}),
+        ...(condition.maxPence != null ? { max: condition.maxPence } : {}),
+        ...(condition.exactPence != null ? { exact: condition.exactPence } : {}),
+      },
+      issuedCount: countMap.get(cfg.mcomRewardId ?? cfg.id ?? "") ?? 0,
+      status: "active",
+      items: [],
+    };
+  }
+
+  /** Pick the first effective trigger condition (conditions[] / legacy trigger / rule copy). */
+  private normalizeCondition(cfg: StoredRewardConfig): StoredRewardCondition {
+    const [first] = effectiveConditions(cfg);
+    if (!first) return { mode: undefined, minPence: null, maxPence: null, exactPence: null };
+    return {
+      mode: first.mode,
+      minPence: first.minPence ?? null,
+      maxPence: first.maxPence ?? null,
+      exactPence: first.exactPence ?? null,
+    };
+  }
+
+  /** The wizard stores "minimum"; the UI expects "min". */
+  private normalizeMode(mode?: string): string {
+    switch ((mode ?? "").toLowerCase()) {
+      case "minimum":
+      case "min":
+        return "min";
+      case "range":
+        return "range";
+      case "exact":
+        return "exact";
+      default:
+        return "min";
+    }
   }
 
   /**

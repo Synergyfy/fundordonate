@@ -3,8 +3,10 @@ import { Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 import { PrismaService } from "@/prisma/prisma.service";
 import { BusinessCampaignStatus, ContributionStatus } from "@prisma/client";
+import { AdminCampaignsService } from "../services/admin-campaigns.service";
+import { ADMIN_TASKS_QUEUE } from "./admin-tasks.constants";
 
-export const ADMIN_TASKS_QUEUE = "admin-tasks";
+export { ADMIN_TASKS_QUEUE };
 
 export interface BulkCampaignStatusJobData {
   action: "approve" | "reject" | "archive";
@@ -14,6 +16,19 @@ export interface BulkCampaignStatusJobData {
 
 export interface SeasonTargetRollupJobData {
   seasonId: string;
+}
+
+export interface TemplateInstantiateJobData {
+  templateId: string;
+  businessIds: string[];
+  targetAmount?: number;
+  deadlineDays?: number;
+  adminUserId?: string;
+}
+
+export interface SeasonTransitionJobData {
+  seasonId: string;
+  action: string;
 }
 
 export interface AuditLogJobData {
@@ -30,7 +45,10 @@ export interface AuditLogJobData {
 export class AdminTasksProcessor extends WorkerHost {
   private readonly logger = new Logger(AdminTasksProcessor.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly campaignsService: AdminCampaignsService,
+  ) {
     super();
   }
 
@@ -44,13 +62,124 @@ export class AdminTasksProcessor extends WorkerHost {
       case "season-target-rollup":
         return this.handleSeasonTargetRollup(job.data as SeasonTargetRollupJobData);
 
+      case "template-instantiate":
+        return this.handleTemplateInstantiate(job.data as TemplateInstantiateJobData);
+
+      case "campaign-lifecycle-sweep":
+        return this.handleCampaignLifecycleSweep();
+
+      case "season-rollup-sweep":
+        return this.handleSeasonRollupSweep();
+
+      case "season-transition":
+        return this.handleSeasonTransition(job.data as SeasonTransitionJobData);
+
       case "audit-log":
         return this.handleAuditLog(job.data as AuditLogJobData);
+
+      case "auth-cleanup-sweep":
+        return this.handleAuthCleanupSweep();
 
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         return null;
     }
+  }
+
+  /**
+   * Periodic sweep that starts campaigns whose start date has arrived and
+   * completes campaigns whose end date has passed.
+   */
+  private async handleCampaignLifecycleSweep() {
+    const now = new Date();
+
+    const activated = await this.prisma.businessCampaign.updateMany({
+      where: {
+        status: BusinessCampaignStatus.APPROVED,
+        startDate: { not: null, lte: now },
+      },
+      data: { status: BusinessCampaignStatus.ACTIVE },
+    });
+
+    const completed = await this.prisma.businessCampaign.updateMany({
+      where: {
+        status: BusinessCampaignStatus.ACTIVE,
+        endDate: { not: null, lt: now },
+      },
+      data: { status: BusinessCampaignStatus.COMPLETED },
+    });
+
+    this.logger.log(
+      `Campaign lifecycle sweep: ${activated.count} activated, ${completed.count} completed`,
+    );
+
+    return { activated: activated.count, completed: completed.count };
+  }
+
+  /**
+   * Periodic roll-up of metrics for every currently active season.
+   */
+  private async handleSeasonRollupSweep() {
+    const activeSeasons = await this.prisma.season.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+    });
+
+    const results = [];
+    for (const season of activeSeasons) {
+      results.push(await this.handleSeasonTargetRollup({ seasonId: season.id }));
+    }
+
+    return { seasons: activeSeasons.length, results };
+  }
+
+  /**
+   * Cascades a season lifecycle action to the campaigns linked to that season.
+   */
+  private async handleSeasonTransition(data: SeasonTransitionJobData) {
+    const season = await this.prisma.season.findUnique({ where: { id: data.seasonId } });
+    if (!season) {
+      this.logger.warn(`Season ${data.seasonId} not found for transition`);
+      return null;
+    }
+
+    const seasonScope = { template: { seasonId: season.id } };
+
+    if (data.action === "ACTIVATE") {
+      const res = await this.prisma.businessCampaign.updateMany({
+        where: { ...seasonScope, status: BusinessCampaignStatus.APPROVED },
+        data: { status: BusinessCampaignStatus.ACTIVE, startDate: new Date() },
+      });
+      this.logger.log(`Season ${season.name} activated ${res.count} campaign(s)`);
+      return { action: data.action, activated: res.count };
+    }
+
+    if (data.action === "CLOSE" || data.action === "COMPLETE") {
+      const res = await this.prisma.businessCampaign.updateMany({
+        where: { ...seasonScope, status: BusinessCampaignStatus.ACTIVE },
+        data: { status: BusinessCampaignStatus.COMPLETED },
+      });
+      this.logger.log(`Season ${season.name} completed ${res.count} campaign(s)`);
+      return { action: data.action, completed: res.count };
+    }
+
+    return { action: data.action, affected: 0 };
+  }
+
+  private async handleTemplateInstantiate(data: TemplateInstantiateJobData) {
+    const result = await this.campaignsService.instantiateTemplateForBusinesses({
+      templateId: data.templateId,
+      businessIds: data.businessIds,
+      targetAmount: data.targetAmount,
+      deadlineDays: data.deadlineDays,
+      adminUserId: data.adminUserId,
+    });
+
+    this.logger.log(
+      `Template ${data.templateId} instantiated: ${result.created} created, ${result.skipped} skipped`,
+    );
+
+    return result;
   }
 
   private async handleBulkCampaignStatus(data: BulkCampaignStatusJobData) {
@@ -104,7 +233,7 @@ export class AdminTasksProcessor extends WorkerHost {
     }
 
     // Aggregate contributions and campaigns within season's dates
-    const [contributionAgg, activeCampaignCount, participantsCount] = await Promise.all([
+    const [contributionAgg, activeCampaignCount, participantsRes] = await Promise.all([
       this.prisma.contribution.aggregate({
         where: {
           status: ContributionStatus.COMPLETED,
@@ -125,22 +254,19 @@ export class AdminTasksProcessor extends WorkerHost {
           },
         },
       }),
-      this.prisma.contribution.groupBy({
-        by: ["backerId"],
-        where: {
-          status: ContributionStatus.COMPLETED,
-          createdAt: {
-            gte: season.startDate,
-            lte: season.endDate,
-          },
-          backerId: { not: null },
-        },
-      }),
+      this.prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(DISTINCT "backerId") AS count
+        FROM contributions
+        WHERE status = 'COMPLETED'
+          AND "backerId" IS NOT NULL
+          AND "createdAt" >= ${season.startDate}
+          AND "createdAt" <= ${season.endDate}
+      `,
     ]);
 
     const totalRaised = BigInt(contributionAgg._sum.amount ?? 0);
     const totalContributions = contributionAgg._count.id ?? 0;
-    const totalParticipants = participantsCount.length;
+    const totalParticipants = Number(participantsRes[0]?.count ?? 0);
 
     await this.prisma.season.update({
       where: { id: seasonId },
@@ -168,5 +294,19 @@ export class AdminTasksProcessor extends WorkerHost {
         userAgent: data.userAgent,
       },
     });
+  }
+
+  private async handleAuthCleanupSweep() {
+    const now = new Date();
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lte: now } },
+          { used: true },
+        ],
+      },
+    });
+    this.logger.log(`Auth cleanup sweep completed: removed ${result.count} expired or used refresh tokens.`);
+    return { deletedCount: result.count };
   }
 }

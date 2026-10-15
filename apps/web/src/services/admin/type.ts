@@ -351,11 +351,13 @@ export interface AdminCampaignTemplate {
   name: string;
   slug: string;
   tagline: string;
-  category?: string;
+  category?: string | null;
   description?: string;
   seasonId?: string | null;
   origin: string;
   approvalMode: string;
+  status: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  audience: string;
   minEligibilityTier: string;
   minContributionRequired: boolean;
   minContributionAmount: number;
@@ -367,7 +369,11 @@ export interface AdminCampaignTemplate {
   rewardsConfig: any[];
   mcomAssetsConfig: any[];
   requirementsConfig: any[];
+  config: Record<string, any>;
   isActive: boolean;
+  version: number;
+  createdById?: string | null;
+  updatedById?: string | null;
   instantiatedCount: number;
   season?: {
     id: string;
@@ -379,6 +385,53 @@ export interface AdminCampaignTemplate {
   updatedAt: string;
 }
 
+export interface TemplateInstance {
+  id: string;
+  businessId: string;
+  title: string;
+  status: string;
+  targetAmount: number;
+  raisedAmount: number;
+  percentage: number;
+  contributionCount: number;
+  business?: {
+    id: string;
+    name: string;
+    slug: string;
+    city?: string | null;
+    membershipTier?: string;
+  };
+  createdAt: string;
+}
+
+export interface McomCatalogueReward {
+  id: string;
+  title: string;
+  description: string | null;
+  image: string | null;
+  gallery: string[] | null;
+  rewardType: string;
+  source: string;
+  audience: string;
+  status: string;
+  value: number | null;
+  maxPoints: number | null;
+  maxStampsRequired: number | null;
+  isPointsEnabled: boolean;
+  isStampsEnabled: boolean;
+  quantity: number;
+  expiresAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface McomRewardCataloguePage {
+  data: McomCatalogueReward[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface CreateCampaignTemplatePayload {
   name: string;
   slug?: string;
@@ -386,6 +439,9 @@ export interface CreateCampaignTemplatePayload {
   seasonId?: string;
   origin?: string;
   approvalMode?: string;
+  status?: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  category?: string;
+  audience?: string;
   minEligibilityTier?: string;
   minContributionRequired?: boolean;
   minContributionAmount?: number;
@@ -397,10 +453,31 @@ export interface CreateCampaignTemplatePayload {
   rewardsConfig?: any[];
   mcomAssetsConfig?: any[];
   requirementsConfig?: any[];
+  config?: Record<string, any>;
 }
 
 export interface UpdateCampaignTemplatePayload extends Partial<CreateCampaignTemplatePayload> {
   isActive?: boolean;
+}
+
+export interface DuplicateCampaignTemplatePayload {
+  name?: string;
+}
+
+export interface InstantiateCampaignTemplatePayload {
+  businessIds?: string[];
+  locationId?: string;
+  targetAmount?: number;
+  deadlineDays?: number;
+}
+
+export interface InstantiateCampaignTemplateResult {
+  queued: boolean;
+  count: number;
+  skipped?: number;
+  campaignIds?: string[];
+  jobId?: string;
+  message?: string;
 }
 
 export interface TargetCalculationResult {
@@ -503,6 +580,15 @@ export interface AdminBacker {
 export interface AdminFoundingMember {
   id: string;
   email: string;
+  name?: string;
+  userName?: string | null;
+  businessName?: string | null;
+  locationName?: string;
+  audience?: "BUSINESS" | "CONSUMER";
+  status?: string;
+  contributionAmount?: number;
+  isOriginal?: boolean;
+  isMonthly?: boolean;
   firstName?: string | null;
   lastName?: string | null;
   avatar?: string | null;

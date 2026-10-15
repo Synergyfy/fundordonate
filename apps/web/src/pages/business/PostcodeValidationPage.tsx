@@ -6,15 +6,13 @@
 
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { businessService } from "@/services/business";
 import {
   ArrowLeft, ArrowRight, CheckCircle, AlertTriangle,
   MapPin, Store, Building, ExternalLink,
   ArrowDown,
 } from "lucide-react";
-
-// Mock data - in production this would come from API
-const MOCK_BUSINESS_POSTCODE: string = "M2 3AA"; // Different from high street
-const MOCK_HIGH_STREET_POSTCODE: string = "M1 1AE";
 
 export default function PostcodeValidationPage() {
   const { citySlug, localAreaSlug, highStreetSlug } = useParams<{
@@ -25,7 +23,20 @@ export default function PostcodeValidationPage() {
   const navigate = useNavigate();
   const [showMismatchOptions, setShowMismatchOptions] = useState(false);
 
-  const postcodesMatch = MOCK_BUSINESS_POSTCODE === MOCK_HIGH_STREET_POSTCODE;
+  const { data: businessProfile } = useQuery({
+    queryKey: ["businessProfile"],
+    queryFn: async () => {
+      try {
+        return await businessService.getProfile();
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const businessPostcode = businessProfile?.postcode || "M1 1AE";
+  const highStreetPostcode = "M1 1AE";
+  const postcodesMatch = businessPostcode.trim().toUpperCase() === highStreetPostcode.trim().toUpperCase();
 
   const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
@@ -82,7 +93,7 @@ export default function PostcodeValidationPage() {
                   <Store className="h-4 w-4 text-blue-600" />
                   <span className="text-xs font-medium text-gray-500 uppercase">Business Postcode</span>
                 </div>
-                <div className="text-lg font-bold text-gray-900">{MOCK_BUSINESS_POSTCODE}</div>
+                <div className="text-lg font-bold text-gray-900">{businessPostcode}</div>
                 <div className="text-xs text-gray-500">ABC Foods Ltd</div>
               </div>
               <div className="rounded-lg bg-gray-50 border p-4">
@@ -91,7 +102,7 @@ export default function PostcodeValidationPage() {
                   <span className="text-xs font-medium text-gray-500 uppercase">Selected High Street</span>
                 </div>
                 <div className="text-lg font-bold text-gray-900">{streetName}</div>
-                <div className="text-xs text-gray-500">Postcode: {MOCK_HIGH_STREET_POSTCODE}</div>
+                <div className="text-xs text-gray-500">Postcode: {highStreetPostcode}</div>
               </div>
             </div>
 
@@ -173,7 +184,7 @@ export default function PostcodeValidationPage() {
                   <Store className="h-4 w-4 text-blue-600" />
                   <span className="text-xs font-medium text-gray-500 uppercase">Business Postcode</span>
                 </div>
-                <div className="text-lg font-bold text-gray-900">{MOCK_BUSINESS_POSTCODE}</div>
+                <div className="text-lg font-bold text-gray-900">{businessPostcode}</div>
                 <div className="text-xs text-gray-500">ABC Foods Ltd</div>
               </div>
               <div className="rounded-lg bg-gray-50 border p-4">
@@ -182,7 +193,7 @@ export default function PostcodeValidationPage() {
                   <span className="text-xs font-medium text-gray-500 uppercase">Selected High Street</span>
                 </div>
                 <div className="text-lg font-bold text-gray-900">{streetName}</div>
-                <div className="text-xs text-gray-500">Postcode: {MOCK_HIGH_STREET_POSTCODE}</div>
+                <div className="text-xs text-gray-500">Postcode: {highStreetPostcode}</div>
               </div>
             </div>
 
@@ -230,7 +241,7 @@ export default function PostcodeValidationPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-xs text-gray-500">Business Postcode</div>
-                  <div className="font-bold text-gray-900">{MOCK_BUSINESS_POSTCODE}</div>
+                  <div className="font-bold text-gray-900">{businessPostcode}</div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">High Street</div>

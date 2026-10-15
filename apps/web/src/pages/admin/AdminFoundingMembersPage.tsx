@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminApi } from "@/services/admin";
+import { adminApi, type AdminFoundingMember } from "@/services/admin";
 import { FoundingMemberBadge, getFoundingBadgeType } from "@/components/hub/FoundingMemberBadge";
 import { AlertCircle, Loader2, Users } from "lucide-react";
 
@@ -19,21 +19,21 @@ export default function AdminFoundingMembersPage() {
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<AdminFoundingMember | null>(null);
 
-  const { data: apiMembers, isLoading, error } = useQuery({
+  const { data: apiMembers, isLoading, error } = useQuery<AdminFoundingMember[]>({
     queryKey: ["admin-founding-members"],
     queryFn: () => adminApi.getFoundingMembers(),
   });
 
   const members = useMemo(() => {
     let filtered = apiMembers || [];
-    if (audienceFilter) filtered = filtered.filter((m: any) => m.audience === audienceFilter);
-    if (statusFilter) filtered = filtered.filter((m: any) => m.status === statusFilter);
+    if (audienceFilter) filtered = filtered.filter((m) => m.audience === audienceFilter);
+    if (statusFilter) filtered = filtered.filter((m) => m.status === statusFilter);
     if (search) {
       const q = search.toLowerCase();
-      filtered = filtered.filter((m: any) => {
-        const name = m.name || m.userName || m.businessName || m.userId || "";
+      filtered = filtered.filter((m) => {
+        const name = m.name || m.userName || m.businessName || m.id || "";
         return (
           name.toLowerCase().includes(q) ||
           m.locationName?.toLowerCase().includes(q) ||
@@ -46,9 +46,9 @@ export default function AdminFoundingMembersPage() {
 
   const stats = useMemo(() => ({
     total: members.length,
-    business: members.filter((m: any) => m.audience === "BUSINESS").length,
-    consumer: members.filter((m: any) => m.audience === "CONSUMER").length,
-    totalRaised: members.reduce((s: number, m: any) => s + (m.contributionAmount || 0), 0),
+    business: members.filter((m) => m.audience === "BUSINESS").length,
+    consumer: members.filter((m) => m.audience === "CONSUMER").length,
+    totalRaised: members.reduce((s: number, m) => s + (m.contributionAmount || 0), 0),
   }), [members]);
 
   if (isLoading) {
@@ -136,9 +136,9 @@ export default function AdminFoundingMembersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {members.map((m: any) => (
+              {members.map((m) => (
                 <tr key={m.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelected(m)}>
-                  <td className="px-4 py-3 font-medium text-gray-900">{m.name || m.userName || m.businessName || m.userId}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{m.name || m.userName || m.businessName || m.id}</td>
                   <td className="px-4 py-3 text-gray-600">{m.locationName || "National"}</td>
                   <td className="px-4 py-3 text-gray-600">{m.audience}</td>
                   <td className="px-4 py-3 font-semibold text-gray-900">{fmt(m.contributionAmount || 0)}</td>
@@ -150,7 +150,7 @@ export default function AdminFoundingMembersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <FoundingMemberBadge type={getFoundingBadgeType(m.audience, m.isOriginal, m.isMonthly)} size="sm" />
+                    <FoundingMemberBadge type={getFoundingBadgeType(m.audience === "BUSINESS" ? "BUSINESS" : "CONSUMER", m.isOriginal ?? false, m.isMonthly ?? false)} size="sm" />
                   </td>
                 </tr>
               ))}

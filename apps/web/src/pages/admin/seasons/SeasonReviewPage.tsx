@@ -19,13 +19,16 @@ const formatCurrency = (pence: number) =>
 
 function ReviewSummary({ review }: { review: SeasonReview }) {
   const { season, metrics } = review;
+  const target = season?.overallTarget || 0;
+  const raised = season?.totalRaised || 0;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Target", value: formatCurrency(season.overallTarget) },
-          { label: "Raised", value: formatCurrency(season.totalRaised) },
-          { label: "Difference", value: formatCurrency(season.totalRaised - season.overallTarget), highlight: season.totalRaised >= season.overallTarget },
+          { label: "Target", value: formatCurrency(target) },
+          { label: "Raised", value: formatCurrency(raised) },
+          { label: "Difference", value: formatCurrency(raised - target), highlight: raised >= target },
           { label: "Progress", value: `${metrics?.progressPercent || 0}%` },
         ].map((item) => (
           <div key={item.label} className="rounded-xl bg-white border p-4">
@@ -221,21 +224,26 @@ export default function SeasonReviewPage() {
     );
   }
 
-  if (!review) {
+  if (!review || !review.season) {
     return (
       <div className="text-center py-16">
         <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
         <h2 className="text-lg font-bold text-gray-900">No Season to Review</h2>
+        <p className="text-sm text-gray-500 mt-1">Please select an active or completed season from the seasons list.</p>
       </div>
     );
   }
+
+  const seasonName = review.season.name || "Season";
+  const startStr = review.season.startDate ? new Date(review.season.startDate).toLocaleDateString("en-GB") : "—";
+  const endStr = review.season.endDate ? new Date(review.season.endDate).toLocaleDateString("en-GB") : "—";
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Season Review</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {review.season.name} — {new Date(review.season.startDate).toLocaleDateString("en-GB")} to {new Date(review.season.endDate).toLocaleDateString("en-GB")}
+          {seasonName} — {startStr} to {endStr}
         </p>
       </div>
 

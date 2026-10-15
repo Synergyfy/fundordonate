@@ -47,6 +47,17 @@ export class HubController {
     return this.hubService.getLocationTree();
   }
 
+  @Get("hub/locations/:id/stats")
+  @ApiOperation({
+    summary: "Get live aggregated stats for a location",
+    description:
+      "Returns funding, campaigns, backers and per-child roll-up for a city, local area, or high street.",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved location stats" })
+  async getLocationStats(@Param("id") id: string) {
+    return this.hubService.getLocationStats(id);
+  }
+
   @Get("locations")
   @ApiOperation({
     summary: "List locations publicly with optional type/parentId filter",
@@ -58,5 +69,33 @@ export class HubController {
     @Query("search") search?: string,
   ) {
     return this.hubService.getLocations({ type, parentId, search });
+  }
+
+  @Get("seasons")
+  @ApiOperation({ summary: "List active or all seasons publicly" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved seasons" })
+  async getSeasons(@Query("status") status?: string) {
+    return this.hubService.getSeasons(status);
+  }
+
+  @Get("seasons/current")
+  @ApiOperation({ summary: "Get current or next scheduled season publicly" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved current season" })
+  async getCurrentSeason() {
+    return this.hubService.getCurrentSeason();
+  }
+
+  @Get("seasons/:id")
+  @ApiOperation({ summary: "Get season detail publicly" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved season detail" })
+  async getSeasonById(@Param("id") id: string) {
+    return this.hubService.getSeasonById(id);
+  }
+
+  @Get("seasons/:id/metrics")
+  @ApiOperation({ summary: "Get season metrics publicly" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved season metrics" })
+  async getSeasonMetrics(@Param("id") id: string) {
+    return this.hubService.getSeasonMetrics(id);
   }
 }

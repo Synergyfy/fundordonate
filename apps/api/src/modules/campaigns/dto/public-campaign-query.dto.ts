@@ -24,6 +24,11 @@ export class PublicCampaignQueryDto {
   @IsString()
   city?: string;
 
+  @ApiPropertyOptional({ description: "Filter by location ID (UUID)" })
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
   @ApiPropertyOptional({ description: "Filter by category name" })
   @IsOptional()
   @IsString()

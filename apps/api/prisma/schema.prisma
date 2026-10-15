@@ -212,7 +212,6 @@ model Business {
   // Relations
   campaigns            BusinessCampaign[]
   contributions        Contribution[]
-  earnedRewards        BusinessEarnedReward[]
   settings             BusinessSettings?
   payouts              PayoutRequest[]
   createdAt            DateTime          @default(now())
@@ -256,6 +255,13 @@ enum TemplateApprovalMode {
   ADMIN_REVIEW
 }
 
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 enum BusinessCampaignStatus {
   DRAFT
   PENDING_REVIEW
@@ -275,6 +281,9 @@ model CampaignTemplate {
   season                  Season?              @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   origin                  TemplateOrigin       @default(DIRECT)
   approvalMode            TemplateApprovalMode @default(ADMIN_REVIEW)
+  status                  TemplateStatus       @default(DRAFT)
+  category                String?              // donation | crowdfunding | fund
+  audience                String               @default("BOTH") // BUSINESS | CONSUMER | BOTH
   minEligibilityTier      MembershipTier       @default(BRONZE)
   minContributionRequired Boolean              @default(false)
   minContributionAmount   Int                  @default(0) // In pence
@@ -288,14 +297,19 @@ model CampaignTemplate {
   rewardsConfig           Json                 @default("[]") // Reward configs
   mcomAssetsConfig        Json                 @default("[]") // Assets/collateral
   requirementsConfig      Json                 @default("[]") // Eligibility requirements
+  config                  Json                 @default("{}") // Full wizard config (sections, funding, location, visibility, access, contribution rules)
   
   isActive                Boolean              @default(true)
+  version                 Int                  @default(1)
+  createdById             String?
+  updatedById             String?
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 
   instances               BusinessCampaign[]
 
   @@index([isActive, seasonId])
+  @@index([status, seasonId])
   @@map("campaign_templates")
 }
 
@@ -403,36 +417,11 @@ model Contribution {
 
 // =============================================================================
 // REWARDS & GAMIFICATION
+//
+// Legacy `RewardDefinition` / `BusinessEarnedReward` models retired — campaign
+// rewards are authored on `CampaignTemplate.rewardsConfig` and issued/tracked
+// via `RewardIssuance` (MCOM Rewards mirror + local rewards).
 // =============================================================================
-
-model RewardDefinition {
-  id          String   @id @default(uuid())
-  code        String   @unique
-  name        String
-  description String
-  icon        String
-  criteria    Json     // Rule definition: e.g. { type: "TOTAL_CONTRIBUTION", threshold: 5000000 }
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-
-  earnedBy    BusinessEarnedReward[]
-  fulfilments RewardFulfilment[]
-
-  @@map("reward_definitions")
-}
-
-model BusinessEarnedReward {
-  id         String           @id @default(uuid())
-  businessId String
-  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  rewardId   String
-  reward     RewardDefinition @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  earnedAt   DateTime         @default(now())
-
-  @@unique([businessId, rewardId])
-  @@index([businessId])
-  @@map("business_earned_rewards")
-}
 
 // =============================================================================
 // SEASONS & CAMPAIGN CYCLES
@@ -553,30 +542,60 @@ model AuditLog {
 
 // =============================================================================
 // REWARD FULFILMENT
+//
+// Legacy `RewardFulfilment` retired — reward delivery/lifecycle now lives on
+// `RewardIssuance` (status/code/expiry mirrored from MCOM Rewards).
 // =============================================================================
 
-model RewardFulfilment {
-  id              String           @id @default(uuid())
-  rewardId        String
-  reward          RewardDefinition @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  userId          String?
-  businessId      String?
-  status          String           @default("PENDING") // PENDING | PROCESSING | DISPATCHED | DELIVERED | CANCELLED
-  recipientName   String?
-  recipientEmail  String?
-  shippingAddress Json?
-  trackingNumber  String?
-  courier         String?
-  notes           String?          @db.Text
-  fulfilledAt     DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+// (removed model RewardFulfilment)
 
-  @@index([status])
-  @@index([rewardId])
+// =============================================================================
+// MCOM REWARD ISSUANCES (mirror of rewards issued by the MCOM Rewards engine)
+// =============================================================================
+
+/**
+ * Local mirror of a reward issued by the MCOM Rewards provider API. The reward
+ * catalogue + fulfilment live in MCOM Rewards; FundOrDonate stores the
+ * reference (issuance id, code, status) for display and reconciliation.
+ */
+model RewardIssuance {
+  id                 String    @id @default(uuid())
+  /** Provider issuance id (unique per issuance in MCOM Rewards). */
+  externalIssuanceId String    @unique
+  mcomRewardId       String
+  rewardTitle        String?
+  rewardType         String?
+  /** Correlation ref sent to the provider (e.g. campaignId). */
+  externalRef        String?
+  /** Stable idempotency key used when issuing. */
+  idempotencyKey     String    @unique
+  campaignId         String?
+  /** Reward rule (config id within the campaign) this issuance satisfies. */
+  rewardConfigId     String?
+  contributionId     String?
+  userId             String?
+  mcomUserId         String?
+  recipientEmail     String?
+  recipientName      String?
+  // PENDING (reserved, provider call in flight) | ISSUED | REDEEMED | EXPIRED | REVOKED | FAILED
+  status             String    @default("ISSUED")
+  code               String?
+  value              Int?
+  quantity           Int       @default(1)
+  metadata           Json?
+  expiresAt          DateTime?
+  redeemedAt         DateTime?
+  revokedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([campaignId])
+  @@index([campaignId, rewardConfigId])
+  @@index([externalRef])
   @@index([userId])
-  @@index([businessId])
-  @@map("reward_fulfilments")
+  @@index([mcomRewardId])
+  @@index([status])
+  @@map("reward_issuances")
 }
 
 // =============================================================================

@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  Post,
   Put,
   Query,
   UseGuards,
@@ -17,14 +16,16 @@ import {
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 import { AdminGuard } from "../guards/admin.guard";
 import { AdminRewardsService } from "../services/admin-rewards.service";
-import {
-  CreateRewardDefinitionDto,
-  FulfilmentQueryDto,
-  UpdateFulfilmentDto,
-  UpdateRewardDefinitionDto,
-} from "../dto/reward-admin.dto";
 
-@ApiTags("Admin Rewards")
+/**
+ * Admin Reward Library.
+ *
+ * Rewards are authored on `CampaignTemplate.rewardsConfig` and issued through
+ * `RewardIssuance`; this controller exposes them as the library + fulfilment
+ * views the admin UI consumes. It is intentionally read-mostly: fulfilment
+ * updates persist against the issuance metadata.
+ */
+@ApiTags("Admin Reward Library")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller("admin/rewards")
@@ -32,50 +33,52 @@ export class AdminRewardsController {
   constructor(private readonly rewardsService: AdminRewardsService) {}
 
   @Get()
-  @ApiOperation({ summary: "List reward definitions with awarded counts" })
+  @ApiOperation({ summary: "List the reward library (campaign reward rules)" })
   @ApiResponse({ status: 200, description: "Successfully retrieved rewards" })
   async getRewards() {
     return this.rewardsService.getRewards();
   }
 
   @Get("fulfilment")
-  @ApiOperation({ summary: "List reward fulfilment delivery orders" })
-  @ApiResponse({ status: 200, description: "Successfully retrieved fulfilment orders" })
-  async getFulfilments(@Query() query: FulfilmentQueryDto) {
-    return this.rewardsService.getFulfilments(query);
+  @ApiOperation({ summary: "List reward fulfilment records (issuances)" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved fulfilments" })
+  async getFulfilments(
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("status") status?: string,
+    @Query("rewardId") rewardId?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.rewardsService.getFulfilments({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      status,
+      rewardId,
+      search,
+    });
   }
 
   @Put("fulfilment/:id")
-  @ApiOperation({ summary: "Update fulfilment dispatch and delivery status" })
-  @ApiResponse({ status: 200, description: "Fulfilment updated successfully" })
+  @ApiOperation({ summary: "Update a reward fulfilment record" })
+  @ApiResponse({ status: 200, description: "Fulfilment updated" })
   async updateFulfilment(
     @Param("id") id: string,
-    @Body() dto: UpdateFulfilmentDto,
+    @Body()
+    body: {
+      status?: string;
+      trackingNumber?: string;
+      courier?: string;
+      notes?: string;
+      shippingAddress?: Record<string, unknown>;
+    },
   ) {
-    return this.rewardsService.updateFulfilment(id, dto);
+    return this.rewardsService.updateFulfilment(id, body);
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Get single reward definition detail" })
-  @ApiResponse({ status: 200, description: "Successfully retrieved reward detail" })
+  @ApiOperation({ summary: "Get a single reward library entry" })
+  @ApiResponse({ status: 200, description: "Reward detail" })
   async getReward(@Param("id") id: string) {
     return this.rewardsService.getReward(id);
-  }
-
-  @Post()
-  @ApiOperation({ summary: "Create a new reward badge or perk blueprint" })
-  @ApiResponse({ status: 201, description: "Reward definition created successfully" })
-  async createReward(@Body() dto: CreateRewardDefinitionDto) {
-    return this.rewardsService.createReward(dto);
-  }
-
-  @Put(":id")
-  @ApiOperation({ summary: "Update an existing reward definition" })
-  @ApiResponse({ status: 200, description: "Reward definition updated successfully" })
-  async updateReward(
-    @Param("id") id: string,
-    @Body() dto: UpdateRewardDefinitionDto,
-  ) {
-    return this.rewardsService.updateReward(id, dto);
   }
 }

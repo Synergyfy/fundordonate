@@ -10,10 +10,14 @@ import {
 } from "@prisma/client";
 import { ContributionQueryDto } from "../dto/contribution-query.dto";
 import { SelfFundDto } from "../dto/self-fund.dto";
+import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
 
 @Injectable()
 export class BusinessContributionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rewardIssuanceQueue: RewardIssueQueueService,
+  ) {}
 
   /**
    * Retrieves paginated contribution ledger and overall summary totals for the business.
@@ -115,9 +119,11 @@ export class BusinessContributionService {
 
     const rewardName = campaign.template.selfFundingRewardName;
 
+    let contributionId = "";
+
     await this.prisma.$transaction(async (tx) => {
       // 1. Record contribution ledger entry
-      await tx.contribution.create({
+      const contribution = await tx.contribution.create({
         data: {
           businessId,
           campaignId,
@@ -129,6 +135,7 @@ export class BusinessContributionService {
           paymentIntentId: dto.paymentToken,
         },
       });
+      contributionId = contribution.id;
 
       // 2. Increment campaign raised and self-contribution amounts
       const updateResult = await tx.businessCampaign.updateMany({
@@ -144,6 +151,10 @@ export class BusinessContributionService {
         throw new NotFoundException("Campaign not found");
       }
     });
+
+    // 3. Queue reward evaluation (durable + retried; never blocks the
+    //    contribution).
+    await this.rewardIssuanceQueue.enqueueContribution(contributionId);
 
     return {
       reference,

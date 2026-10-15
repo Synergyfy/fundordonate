@@ -4,7 +4,7 @@
 // Local Areas → High Streets → HS Overview → Activation Rules → Review & Activate
 // =============================================================================
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Search, ChevronRight, ChevronLeft, MapPin, Check, X, Globe,
@@ -12,6 +12,7 @@ import {
   TrendingUp, AlertCircle,
 } from "lucide-react";
 import { adminApi } from "@/services/admin";
+import { useAdminSeasons } from "@/services/admin/hook";
 import { getCommunityRecommendations } from "@/services/recommendations";
 
 export type LocationOrigin = "geographic data" | "manual" | "recommendation";
@@ -98,7 +99,7 @@ interface ActivationRule {
   consumerThreshold?: number;
 }
 
-// ───────────────────── Demo UK Cities for Search ─────────────────────
+// ───────────────────── UK Cities for Search ─────────────────────
 
 const UK_CITIES = [
   { name: "London", region: "Greater London", lat: 51.5074, lng: -0.1278, population: "8,982,000" },
@@ -168,7 +169,7 @@ export function AddCityWizard() {
     boundaryMode: "detected",
     radiusMiles: 10,
     status: "NOT_ACTIVATED",
-    currentSeason: "autumn-2026",
+    currentSeason: "",
     areaTerminology: "Local Area",
     localAreas: [],
     highStreets: [],
@@ -643,12 +644,24 @@ function StepConfirmCity({ data, update }: { data: CitySetupData; update: (u: Pa
 // ───────────────────── Step 3: City Hub Config ─────────────────────
 
 function StepCityHubConfig({ data, update }: { data: CitySetupData; update: (u: Partial<CitySetupData>) => void }) {
-  const seasons = [
-    { value: "summer-2026", label: "Summer 2026" },
-    { value: "autumn-2026", label: "Autumn 2026", current: true },
-    { value: "winter-2026", label: "Winter 2026" },
-    { value: "spring-2027", label: "Spring 2027" },
-  ];
+  const { data: seasonsData, isLoading: seasonsLoading } = useAdminSeasons({ limit: 100 });
+
+  const seasons = useMemo(() => {
+    return (seasonsData?.items || []).map((s) => ({
+      value: s.id,
+      label: s.name,
+      current: s.status === "ACTIVE",
+    }));
+  }, [seasonsData]);
+
+  useEffect(() => {
+    if (!data.currentSeason && seasons.length > 0) {
+      const active = seasons.find((s) => s.current) || seasons[0];
+      if (active) {
+        update({ currentSeason: active.value });
+      }
+    }
+  }, [data.currentSeason, seasons, update]);
 
   const terminologyOptions = [
     { value: "Borough", desc: "Used for London and similar administrative areas" },
@@ -2115,6 +2128,12 @@ function StepActivationRules({ data, update }: { data: CitySetupData; update: (u
 // ───────────────────── Step 6: Review & Activate ─────────────────────
 
 function StepReview({ data }: { data: CitySetupData }) {
+  const { data: seasonsData } = useAdminSeasons({ limit: 100 });
+  const seasonName = useMemo(() => {
+    const found = (seasonsData?.items || []).find((s) => s.id === data.currentSeason);
+    return found?.name || data.currentSeason || "—";
+  }, [seasonsData, data.currentSeason]);
+
   const includedAreas = data.localAreas.filter((a) => a.included);
   const confirmedStreets = data.highStreets.filter((hs) => hs.confirmed);
   const mpEnabled = data.makingProgressRules.filter((r) => r.enabled);
@@ -2148,7 +2167,7 @@ function StepReview({ data }: { data: CitySetupData }) {
         <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Current Season</h4>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-sm font-medium text-primary-700">
-            {data.currentSeason || "—"}
+            {seasonName}
           </span>
         </div>
       </div>

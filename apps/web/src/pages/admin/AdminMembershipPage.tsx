@@ -77,7 +77,7 @@ export default function AdminMembershipPage() {
     },
   ];
 
-  const totalSubscribers = businesses.length;
+  const totalSubscribers = businessesData?.total ?? businesses.length;
   const totalFounding = foundingMembers?.length || 0;
 
   if (loadingBiz || loadingFounding) {

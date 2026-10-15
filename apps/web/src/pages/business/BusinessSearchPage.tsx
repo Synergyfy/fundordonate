@@ -7,72 +7,12 @@ import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
+import { adminApi } from "@/services/admin";
 import {
   Store, MapPin, Calendar, Clock,
   Search, ChevronRight, Plus, ArrowRight,
-  CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle, Loader2,
 } from "lucide-react";
-
-const DEMO_BUSINESSES: Record<string, { id: string; name: string; category: string; location: string; status: string;}[]> = {
-  "oldham-street": [
-    { id: "b1", name: "Vinyl Records Ltd", category: "Music & Entertainment", location: "142 Oldham Street", status: "participating" },
-    { id: "b2", name: "Retro Revival", category: "Vintage Clothing", location: "78 Oldham Street", status: "participating" },
-    { id: "b3", name: "The Coffee House", category: "Café & Food", location: "55 Oldham Street", status: "participating" },
-    { id: "b4", name: "Craft Beer Co", category: "Bar & Drinks", location: "23 Oldham Street", status: "available" },
-    { id: "b5", name: "Northern Quarter Books", category: "Books & Stationery", location: "91 Oldham Street", status: "available" },
-  ],
-  "tib-street": [
-    { id: "b6", name: "Tib Street Deli", category: "Food & Groceries", location: "12 Tib Street", status: "participating" },
-    { id: "b7", name: "Urban Cuts", category: "Hair & Beauty", location: "45 Tib Street", status: "available" },
-    { id: "b8", name: "Tech Repair Hub", category: "Electronics", location: "78 Tib Street", status: "participating" },
-  ],
-  "stevenson-square": [
-    { id: "b9", name: "Square Gallery", category: "Art & Culture", location: "4 Stevenson Square", status: "participating" },
-    { id: "b10", name: "Creative Space", category: "Co-working", location: "12 Stevenson Square", status: "available" },
-  ],
-  "anollos-row": [
-    { id: "b11", name: "Ancoats Bakehouse", category: "Bakery & Food", location: "8 Ancoats Row", status: "participating" },
-    { id: "b12", name: "Pizza Express", category: "Restaurant", location: "22 Ancoats Row", status: "participating" },
-    { id: "b13", name: "The Vine", category: "Bar & Drinks", location: "35 Ancoats Row", status: "available" },
-  ],
-  "cutting-room-square": [
-    { id: "b14", name: "Cutting Room Café", category: "Café & Food", location: "2 Cutting Room Square", status: "participating" },
-    { id: "b15", name: "Artisan Coffee", category: "Coffee Shop", location: "15 Cutting Room Square", status: "participating" },
-  ],
-  "deansgate-castlefield": [
-    { id: "b16", name: "Waterside Restaurant", category: "Restaurant", location: "42 Deansgate", status: "participating" },
-    { id: "b17", name: "Castlefield Bar", category: "Bar & Drinks", location: "78 Deansgate", status: "participating" },
-    { id: "b18", name: "Hotel & Spa", category: "Hospitality", location: "100 Deansgate", status: "available" },
-  ],
-  "whitworth-street": [
-    { id: "b19", name: "Whitworth Gym", category: "Health & Fitness", location: "15 Whitworth Street", status: "participating" },
-    { id: "b20", name: "Office Supplies Co", category: "Office & Business", location: "45 Whitworth Street", status: "available" },
-  ],
-  "chapel-street": [
-    { id: "b21", name: "Chapel Street Pharmacy", category: "Health & Pharmacy", location: "12 Chapel Street", status: "participating" },
-    { id: "b22", name: "Salford Electronics", category: "Electronics", location: "56 Chapel Street", status: "available" },
-  ],
-  "pendleton": [
-    { id: "b23", name: "Pendleton Corner Shop", category: "Convenience Store", location: "8 Pendleton Road", status: "participating" },
-    { id: "b24", name: "Pendleton Dental", category: "Health & Dental", location: "22 Pendleton Road", status: "available" },
-  ],
-  "great-underbank": [
-    { id: "b25", name: "Stockport Antiques", category: "Antiques & Collectables", location: "5 Great Underbank", status: "participating" },
-    { id: "b26", name: "The Cheese Shop", category: "Food & Groceries", location: "18 Great Underbank", status: "available" },
-  ],
-  "merseyway": [
-    { id: "b27", name: "Merseyway Fashion", category: "Fashion & Clothing", location: "3 Merseyway", status: "participating" },
-    { id: "b28", name: "Sport & Outdoor", category: "Sports & Leisure", location: "25 Merseyway", status: "available" },
-  ],
-  "le-mans-crescent": [
-    { id: "b29", name: "Bolton Library Café", category: "Café & Food", location: "2 Le Mans Crescent", status: "participating" },
-    { id: "b30", name: "Civic Office Supplies", category: "Office & Business", location: "15 Le Mans Crescent", status: "available" },
-  ],
-  "bradshawgate": [
-    { id: "b31", name: "Bradshawgate Retail", category: "Retail", location: "8 Bradshawgate", status: "participating" },
-    { id: "b32", name: "Bolton Electronics", category: "Electronics", location: "32 Bradshawgate", status: "available" },
-  ],
-};
 
 function useCountdown(targetDate: string) {
   const [timeLeft, setTimeLeft] = React.useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -105,7 +45,25 @@ export default function BusinessSearchPage() {
   }>();
   const [search, setSearch] = useState("");
 
-  const businesses = DEMO_BUSINESSES[highStreetSlug || "oldham-street"] || [];
+  const { data: bizData, isLoading: loadingBusinesses } = useQuery({
+    queryKey: ["businesses", citySlug, search],
+    queryFn: async () => {
+      try {
+        const res = await adminApi.getBusinesses({ city: citySlug, search: search.trim() || undefined, limit: 50 });
+        return res?.items || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const businesses = (bizData || []).map((b: any) => ({
+    id: b.id,
+    name: b.name,
+    category: b.category || "Business",
+    location: b.address || b.highStreet || `${b.city || "UK"}`,
+    status: (b.status || "").toLowerCase() === "active" ? "participating" : "available",
+  }));
 
   const filtered = search.trim()
     ? businesses.filter(b => b.name.toLowerCase().includes(search.toLowerCase()))
@@ -214,7 +172,12 @@ export default function BusinessSearchPage() {
             </h3>
           </div>
 
-          {filtered.length === 0 ? (
+          {loadingBusinesses ? (
+            <div className="p-8 text-center text-gray-500 flex items-center justify-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+              <span>Loading businesses...</span>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="p-8 text-center">
               <Store className="mx-auto h-12 w-12 text-gray-300" />
               <h3 className="mt-2 text-lg font-bold text-gray-900">

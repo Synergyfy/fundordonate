@@ -49,7 +49,6 @@ export class BusinessProfileService {
           select: {
             campaigns: true,
             contributions: true,
-            earnedRewards: true,
           },
         },
       },
@@ -59,7 +58,24 @@ export class BusinessProfileService {
       throw new NotFoundException("Business not found");
     }
 
-    return business;
+    // Rewards issued for this business's campaigns (legacy earnedRewards retired).
+    const campaignIds = (
+      await this.prisma.businessCampaign.findMany({
+        where: { businessId: business.id },
+        select: { id: true },
+      })
+    ).map((c) => c.id);
+    const earnedRewards = campaignIds.length
+      ? await this.prisma.rewardIssuance.count({
+          where: { campaignId: { in: campaignIds } },
+        })
+      : 0;
+
+    const profile = {
+      ...business,
+      _count: { ...business._count, earnedRewards },
+    };
+    return profile;
   }
 
   /**

@@ -1,13 +1,14 @@
 // =============================================================================
 // Business Owner Leaderboards — Admin
-// Ranking of business owners by funds raised (frontend demo data).
+// Ranking of business owners by funds raised (live database data).
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Trophy, TrendingUp, Users, Crown } from "lucide-react";
+import { leaderboardService, type LeaderboardEntry } from "@/services/leaderboard";
 
-interface LeaderboardRow {
+interface FormattedRow {
   id: string;
   owner: string;
   business: string;
@@ -18,17 +19,6 @@ interface LeaderboardRow {
   allTimeCampaigns: number;
   backers: number;
 }
-
-const DEMO_LEADERBOARD: LeaderboardRow[] = [
-  { id: "bo-3", owner: "Michael Okafor", business: "Community Fund London", city: "London", seasonRaised: 65000, allTimeRaised: 148000, seasonCampaigns: 4, allTimeCampaigns: 9, backers: 290 },
-  { id: "bo-1", owner: "James Wilson", business: "TechStart Manchester", city: "Manchester", seasonRaised: 42000, allTimeRaised: 96000, seasonCampaigns: 3, allTimeCampaigns: 7, backers: 180 },
-  { id: "bo-2", owner: "Sarah Chen", business: "Green Initiative Ltd", city: "Birmingham", seasonRaised: 28000, allTimeRaised: 71000, seasonCampaigns: 2, allTimeCampaigns: 6, backers: 120 },
-  { id: "bo-4", owner: "Emma Thompson", business: "Digital Skills Leeds", city: "Leeds", seasonRaised: 15000, allTimeRaised: 38000, seasonCampaigns: 1, allTimeCampaigns: 4, backers: 85 },
-  { id: "bo-6", owner: "Lisa Patel", business: "Liverpool Green Spaces", city: "Liverpool", seasonRaised: 9500, allTimeRaised: 24000, seasonCampaigns: 1, allTimeCampaigns: 3, backers: 45 },
-  { id: "bo-7", owner: "Priya Sharma", business: "Camden Coffee House", city: "London", seasonRaised: 7800, allTimeRaised: 19500, seasonCampaigns: 2, allTimeCampaigns: 3, backers: 38 },
-  { id: "bo-8", owner: "Tom Bradley", business: "Sheffield Steel Works", city: "Sheffield", seasonRaised: 6100, allTimeRaised: 15400, seasonCampaigns: 1, allTimeCampaigns: 2, backers: 27 },
-  { id: "bo-5", owner: "David Brown", business: "Bristol Tech Hub", city: "Bristol", seasonRaised: 4200, allTimeRaised: 12800, seasonCampaigns: 1, allTimeCampaigns: 2, backers: 22 },
-];
 
 const gbp = (v: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(v);
@@ -43,11 +33,52 @@ const PODIUM_STYLES = [
 
 export function BusinessLeaderboardsPage() {
   const [period, setPeriod] = useState<Period>("season");
+  const [rows, setRows] = useState<FormattedRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadLeaderboard() {
+      setLoading(true);
+      try {
+        const res = await leaderboardService.getBusinessLeaderboard({ limit: 50 });
+        if (!mounted) return;
+        const entries: LeaderboardEntry[] = res?.entries || [];
+        const mapped: FormattedRow[] = entries.map((e: any, idx: number) => {
+          const bName = e.name || e.business?.name || e.user?.username || `Partner #${idx + 1}`;
+          const raisedPence = e.totalContributed || 0;
+          const raisedGbp = Math.round(raisedPence / 100);
+          return {
+            id: e.id || e.businessId || String(idx),
+            owner: e.user ? `${e.user.firstName || ""} ${e.user.lastName || ""}`.trim() || bName : bName,
+            business: bName,
+            city: e.location || e.locationName || "UK Hub",
+            seasonRaised: raisedGbp,
+            allTimeRaised: e.allTimeRaised ? Math.round(e.allTimeRaised / 100) : raisedGbp,
+            seasonCampaigns: e.campaignCount || 0,
+            allTimeCampaigns: e.allTimeCampaigns || e.campaignCount || 0,
+            backers: e.backerCount || e.backers || 0,
+          };
+        });
+        setRows(mapped);
+      } catch (err) {
+        console.error("Failed to load business leaderboard:", err);
+        if (mounted) setRows([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadLeaderboard();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const ranked = useMemo(() => {
     const key = period === "season" ? "seasonRaised" : "allTimeRaised";
-    return [...DEMO_LEADERBOARD].sort((a, b) => b[key] - a[key]);
-  }, [period]);
+    return [...rows].sort((a, b) => b[key] - a[key]);
+  }, [rows, period]);
 
   const totalRaised = ranked.reduce((sum, r) => sum + (period === "season" ? r.seasonRaised : r.allTimeRaised), 0);
   const podium = ranked.slice(0, 3);
@@ -83,96 +114,109 @@ export function BusinessLeaderboardsPage() {
               period === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            All Time
+            All-Time
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500"><Trophy className="h-3.5 w-3.5" /> Ranked Owners</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900">{ranked.length}</div>
+      {loading ? (
+        <div className="rounded-xl border bg-white p-12 text-center text-sm text-gray-400">
+          Loading leaderboard rankings from database...
         </div>
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500"><TrendingUp className="h-3.5 w-3.5" /> Total Raised</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900">{gbp(totalRaised)}</div>
+      ) : ranked.length === 0 ? (
+        <div className="rounded-xl border bg-white p-12 text-center text-sm text-gray-500">
+          No leaderboard entries available yet.
         </div>
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-gray-500">Top Earner</div>
-          <div className="mt-1 truncate text-lg font-bold text-gray-900">{ranked[0]?.owner || "—"}</div>
-        </div>
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500"><Users className="h-3.5 w-3.5" /> Total Backers</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900">{ranked.reduce((s, r) => s + r.backers, 0)}</div>
-        </div>
-      </div>
-
-      {/* Podium */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {podium.map((row, i) => {
-          const style = PODIUM_STYLES[i]!;
-          const raised = period === "season" ? row.seasonRaised : row.allTimeRaised;
-          return (
-            <div key={row.id} className={`rounded-xl border bg-white p-4 text-center shadow-sm ring-2 ${style.ring}`}>
-              <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${style.bg}`}>
-                {i === 0 ? <Crown className={`h-6 w-6 ${style.text}`} /> : <Trophy className={`h-6 w-6 ${style.text}`} />}
-              </div>
-              <div className={`mt-2 text-xs font-bold ${style.text}`}>{style.label} Place</div>
-              <div className="mt-1 truncate text-sm font-semibold text-gray-900">{row.owner}</div>
-              <div className="truncate text-xs text-gray-500">{row.business}</div>
-              <div className="mt-2 text-lg font-bold text-gray-900">{gbp(raised)}</div>
-              <div className="text-xs text-gray-400">{row.city}</div>
+      ) : (
+        <>
+          {/* Summary Strip */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-xs text-gray-500"><Trophy className="h-3.5 w-3.5 text-amber-500" /> Ranked Businesses</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">{ranked.length}</div>
             </div>
-          );
-        })}
-      </div>
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-xs text-gray-500"><TrendingUp className="h-3.5 w-3.5 text-green-500" /> Total {period === "season" ? "Season" : "All-Time"} Raised</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">{gbp(totalRaised)}</div>
+            </div>
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-xs text-gray-500"><Crown className="h-3.5 w-3.5 text-amber-500" /> Current Leader</div>
+              <div className="mt-1 truncate text-lg font-bold text-gray-900">{podium[0]?.business || "—"}</div>
+            </div>
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-xs text-gray-500"><Users className="h-3.5 w-3.5" /> Total Backers</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">{ranked.reduce((s, r) => s + r.backers, 0)}</div>
+            </div>
+          </div>
 
-      {/* Full ranking */}
-      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-100 bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 font-medium text-gray-500">Rank</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Business Owner</th>
-              <th className="px-4 py-3 font-medium text-gray-500 hidden md:table-cell">City</th>
-              <th className="px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Campaigns</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Backers</th>
-              <th className="px-4 py-3 font-medium text-gray-500">Raised</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {ranked.map((row, i) => {
-              const raised = period === "season" ? row.seasonRaised : row.allTimeRaised;
-              const campaigns = period === "season" ? row.seasonCampaigns : row.allTimeCampaigns;
-              return (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                      i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-gray-100 text-gray-700" : i === 2 ? "bg-orange-50 text-orange-700" : "text-gray-500"
-                    }`}>
-                      {i + 1}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{row.owner}</p>
-                    <p className="text-xs text-gray-400">{row.business}</p>
-                  </td>
-                  <td className="hidden px-4 py-3 text-sm text-gray-600 md:table-cell">{row.city}</td>
-                  <td className="hidden px-4 py-3 text-sm text-gray-600 lg:table-cell">{campaigns}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{row.backers}</td>
-                  <td className="px-4 py-3 font-semibold text-gray-900">{gbp(raised)}</td>
+          {/* Podium */}
+          {podium.length >= 3 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {[podium[1], podium[0], podium[2]].map((row, idx) => {
+                const actualRank = idx === 1 ? 1 : idx === 0 ? 2 : 3;
+                const style = PODIUM_STYLES[actualRank - 1];
+                const raised = period === "season" ? row.seasonRaised : row.allTimeRaised;
+                const campaigns = period === "season" ? row.seasonCampaigns : row.allTimeCampaigns;
+                return (
+                  <div
+                    key={row.id}
+                    className={`relative rounded-xl border bg-white p-5 shadow-sm ring-2 ${style.ring} ${actualRank === 1 ? "md:-mt-2" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
+                        {style.label}
+                      </span>
+                      <span className="text-xs text-gray-400">{row.city}</span>
+                    </div>
+                    <div className="mt-3">
+                      <div className="font-bold text-gray-900">{row.business}</div>
+                      <div className="text-xs text-gray-500">{row.owner}</div>
+                    </div>
+                    <div className="mt-4 flex items-baseline justify-between border-t border-gray-100 pt-3">
+                      <span className="text-xs text-gray-500">{campaigns} campaigns · {row.backers} backers</span>
+                      <span className="text-lg font-bold text-gray-900">{gbp(raised)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Full Table */}
+          <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-100 bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Rank</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Business</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">Owner</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">City</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-right">Raised ({period === "season" ? "Season" : "All-Time"})</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-right">Campaigns</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-right">Backers</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Bottom 3 excluded note is unnecessary — rest shown above; keep summary */}
-      <p className="text-center text-xs text-gray-400">
-        {rest.length} more owners ranked below the podium · values shown for {period === "season" ? "the current season" : "all time"}
-      </p>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {ranked.map((row, i) => {
+                  const raised = period === "season" ? row.seasonRaised : row.allTimeRaised;
+                  const campaigns = period === "season" ? row.seasonCampaigns : row.allTimeCampaigns;
+                  return (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-bold text-gray-500">#{i + 1}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{row.business}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.owner}</td>
+                      <td className="px-4 py-3 text-gray-500">{row.city}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{gbp(raised)}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">{campaigns}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">{row.backers}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

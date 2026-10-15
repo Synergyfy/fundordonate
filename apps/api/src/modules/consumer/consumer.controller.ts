@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Put,
   Query,
   UseGuards,
@@ -74,5 +75,30 @@ export class ConsumerController {
   @ApiOperation({ summary: "Get consumer notifications" })
   async getNotifications(@CurrentUser("id") userId: string) {
     return this.consumerService.getNotifications(userId);
+  }
+
+  @Get("consumer/rewards")
+  @ApiOperation({
+    summary: "Get the current user's issued rewards",
+    description:
+      "Returns reward issuances earned by the user, including redemption code and lifecycle status.",
+  })
+  @ApiResponse({ status: 200, description: "Paginated reward issuances" })
+  async getRewards(
+    @CurrentUser("id") userId: string,
+    @Query("page") page = 1,
+    @Query("limit") limit = 20,
+  ) {
+    return this.consumerService.getRewards(userId, Number(page), Number(limit));
+  }
+
+  @Get("consumer/rewards/:id")
+  @ApiOperation({ summary: "Get a single issued reward for the current user" })
+  @ApiResponse({ status: 200, description: "Reward issuance detail" })
+  async getReward(
+    @CurrentUser("id") userId: string,
+    @Param("id") id: string,
+  ) {
+    return this.consumerService.getReward(userId, id);
   }
 }

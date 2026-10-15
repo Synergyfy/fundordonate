@@ -2,14 +2,18 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { PayPalRedirectCheckout } from "@/components/payment/PayPalRedirectCheckout";
 import { paymentService } from "@/services/payment";
+import type { ChargePurpose } from "@/services/payment";
 
 interface PayPalSandboxFormProps {
   amount: number;
   campaignId?: string;
-  onSubmit: () => void;
+  /** Payment purpose — backers/donors use DONATION/PLEDGE, owners use SELF_FUNDING. */
+  type?: ChargePurpose;
+  rewardId?: string;
+  onSubmit?: () => void;
 }
 
-export function PayPalSandboxForm({ amount, campaignId }: PayPalSandboxFormProps) {
+export function PayPalSandboxForm({ amount, campaignId, type = "DONATION", rewardId }: PayPalSandboxFormProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paypalData, setPaypalData] = useState<{ approvalUrl: string; chargeId: string } | null>(null);
@@ -21,8 +25,9 @@ export function PayPalSandboxForm({ amount, campaignId }: PayPalSandboxFormProps
       const res = await paymentService.createCharge({
         amountMinor: Math.round(amount * 100),
         method: "paypal",
-        type: campaignId ? "SELF_FUNDING" : "DONATION",
+        type,
         campaignId,
+        rewardId,
       });
 
       if (res.approvalUrl) {
@@ -43,7 +48,7 @@ export function PayPalSandboxForm({ amount, campaignId }: PayPalSandboxFormProps
 
   useEffect(() => {
     initSession();
-  }, [amount, campaignId]);
+  }, [amount, campaignId, type, rewardId]);
 
   if (loading) {
     return (

@@ -21,6 +21,8 @@ const STATUS_OPTIONS: { value: FoundingFilter; label: string }[] = [
 export function ConsumersManagementPage() {
   const [consumers, setConsumers] = useState<AdminConsumer[]>([]);
   const [total, setTotal] = useState(0);
+  const [foundingCount, setFoundingCount] = useState(0);
+  const [activeMembersCount, setActiveMembersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<FoundingFilter>("");
   const [search, setSearch] = useState("");
@@ -32,11 +34,24 @@ export function ConsumersManagementPage() {
       const res = await adminApi.getConsumers({
         search: search || undefined,
       });
-      setConsumers(res.items || res.consumers || []);
-      setTotal(res.total || (res.items || []).length);
+      const list = res.items || res.consumers || [];
+      setConsumers(list);
+      setTotal(res.total || list.length);
+      setFoundingCount(
+        res.foundingCount !== undefined
+          ? res.foundingCount
+          : list.filter((c: any) => (c.membershipTier || "").toUpperCase().includes("FOUNDING")).length
+      );
+      setActiveMembersCount(
+        res.activeMembersCount !== undefined
+          ? res.activeMembersCount
+          : list.filter((c: any) => (c.membershipStatus || "").toUpperCase() === "ACTIVE").length
+      );
     } catch {
       setConsumers([]);
       setTotal(0);
+      setFoundingCount(0);
+      setActiveMembersCount(0);
     } finally {
       setLoading(false);
     }
@@ -56,9 +71,6 @@ export function ConsumersManagementPage() {
     if (statusFilter === "MEMBER") return tier.includes("MEMBER") || tier.includes("ACTIVE");
     return !tier || tier === "NONE" || tier === "STANDARD";
   });
-
-  const foundingCount = consumers.filter((c) => (c.membershipTier || "").toUpperCase().includes("FOUNDING")).length;
-  const activeMembersCount = consumers.filter((c) => (c.membershipStatus || "").toUpperCase() === "ACTIVE").length;
 
   return (
     <div className="space-y-5">

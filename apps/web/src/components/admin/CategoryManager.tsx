@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import api from "@/services/api";
 
 interface Category {
   id: string;
@@ -22,8 +22,8 @@ export function CategoryManager() {
   const fetchCategories = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/categories");
-      setCategories(res.data.data);
+      const res = await api.get<Category[]>("/categories");
+      setCategories(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error(err);
     } finally {

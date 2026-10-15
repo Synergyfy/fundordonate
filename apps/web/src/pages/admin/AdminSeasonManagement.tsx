@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Calendar, Play, CheckCircle, AlertTriangle } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
-import api from "@/lib/api";
+import api from "@/services/api";
 
 interface Season {
   id: string;
@@ -67,54 +67,11 @@ export function AdminSeasonManagement() {
   const loadSeasons = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/taxonomy/seasons");
-      setSeasons(res.data.data || []);
+      const res = await api.get<{ items: Season[] } | Season[]>("/admin/seasons");
+      const list = Array.isArray(res) ? res : res?.items || [];
+      setSeasons(list);
     } catch {
-      // Demo fallback
-      setSeasons([
-        {
-          id: "spring-2026",
-          name: "Spring 2026",
-          slug: "spring-2026",
-          description: "Spring funding season for UK Hub Activation",
-          startDate: "2026-03-01",
-          endDate: "2026-05-31",
-          status: "active",
-          order: 1,
-          campaignCount: 12,
-          totalRaised: 234500,
-          totalGoal: 500000,
-          createdAt: "2026-01-15",
-        },
-        {
-          id: "summer-2026",
-          name: "Summer 2026",
-          slug: "summer-2026",
-          description: "Summer funding season",
-          startDate: "2026-06-01",
-          endDate: "2026-08-31",
-          status: "upcoming",
-          order: 2,
-          campaignCount: 0,
-          totalRaised: 0,
-          totalGoal: 0,
-          createdAt: "2026-01-15",
-        },
-        {
-          id: "christmas-2026",
-          name: "Christmas 2026",
-          slug: "christmas-2026",
-          description: "End-of-year giving season",
-          startDate: "2026-11-01",
-          endDate: "2026-12-31",
-          status: "upcoming",
-          order: 3,
-          campaignCount: 0,
-          totalRaised: 0,
-          totalGoal: 0,
-          createdAt: "2026-01-15",
-        },
-      ]);
+      setSeasons([]);
     } finally {
       setLoading(false);
     }
@@ -126,16 +83,16 @@ export function AdminSeasonManagement() {
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/taxonomy/seasons/${editingId}`, form);
+        await api.put(`/admin/seasons/${editingId}`, form);
       } else {
-        await api.post("/taxonomy/seasons", form);
+        await api.post("/admin/seasons", form);
       }
       setShowForm(false);
       setEditingId(null);
       setForm(DEFAULT_FORM);
       loadSeasons();
-    } catch {
-      // Ignore — demo mode
+    } catch (err) {
+      console.error("Failed to save season:", err);
     } finally {
       setSaving(false);
     }
@@ -157,10 +114,10 @@ export function AdminSeasonManagement() {
 
   const handleStatusChange = async (id: string, status: string) => {
     try {
-      await api.put(`/taxonomy/seasons/${id}`, { status });
+      await api.put(`/admin/seasons/${id}`, { status });
       loadSeasons();
-    } catch {
-      // Ignore — demo mode
+    } catch (err) {
+      console.error("Failed to change season status:", err);
     }
   };
 

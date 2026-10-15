@@ -5,8 +5,10 @@
 // =============================================================================
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useLocationTree } from "@/hooks/useLocationTree";
+import { useAdminSeasons } from "@/services/admin/hook";
+import { adminApi } from "@/services/admin";
 import {
   WIZARD_STEPS,
   createDefaultWizardData,
@@ -99,21 +101,6 @@ function RequiredLabel({ label, name, fieldErrors }: { label: string; name: stri
   );
 }
 
-// ── Demo Cities ──
-
-const DEMO_CITIES = [
-  { id: "city-birmingham", name: "Birmingham", slug: "birmingham" },
-  { id: "city-manchester", name: "Manchester", slug: "manchester" },
-  { id: "city-london", name: "London", slug: "london" },
-  { id: "city-leeds", name: "Leeds", slug: "leeds" },
-  { id: "city-liverpool", name: "Liverpool", slug: "liverpool" },
-  { id: "city-bristol", name: "Bristol", slug: "bristol" },
-  { id: "city-sheffield", name: "Sheffield", slug: "sheffield" },
-  { id: "city-newcastle", name: "Newcastle", slug: "newcastle" },
-  { id: "city-nottingham", name: "Nottingham", slug: "nottingham" },
-  { id: "city-coventry", name: "Coventry", slug: "coventry" },
-];
-
 // ── Campaign Type Options ──
 
 const SCOPE_OPTIONS = [
@@ -159,12 +146,6 @@ const CATEGORIES = [
   { value: "youth", label: "Youth" },
 ];
 
-const SEASONS = [
-  { value: "summer-2026", label: "Summer 2026", startDate: "2026-06-01", endDate: "2026-08-31" },
-  { value: "autumn-2026", label: "Autumn 2026", startDate: "2026-09-01", endDate: "2026-11-30" },
-  { value: "winter-2026", label: "Winter 2026", startDate: "2026-12-01", endDate: "2027-02-28" },
-  { value: "spring-2027", label: "Spring 2027", startDate: "2027-03-01", endDate: "2027-05-31" },
-];
 
 const OBJECTIVE_OPTIONS = [
   { value: "raise_funds", label: "Raise Funds", description: "Collect financial contributions for a project or cause." },
@@ -181,12 +162,14 @@ const OBJECTIVE_OPTIONS = [
 function StepScope({ formData, onUpdate, fieldErrors }: StepProps) {
   const [citySearch, setCitySearch] = useState("");
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const { tree } = useLocationTree();
 
-  const filteredCities = DEMO_CITIES.filter((c) =>
+  const cities = tree?.cities || [];
+  const filteredCities = cities.filter((c) =>
     c.name.toLowerCase().includes(citySearch.toLowerCase()),
   );
 
-  const handleCitySelect = (city: (typeof DEMO_CITIES)[number]) => {
+  const handleCitySelect = (city: { id: string; name: string; slug: string }) => {
     onUpdate({
       cityName: city.name,
       citySlug: city.slug,
@@ -966,6 +949,19 @@ function StepLocations({ formData, onUpdate, fieldErrors }: StepProps) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StepSeason({ formData, onUpdate }: StepProps) {
+  const { data: seasonsData, isLoading: seasonsLoading, error: seasonsError } = useAdminSeasons({ limit: 100 });
+
+  const dbSeasons = useMemo(() => {
+    return (seasonsData?.items || []).map((s) => ({
+      value: s.id,
+      label: s.name,
+      status: s.status,
+      startDate: s.startDate ? new Date(s.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "TBD",
+      endDate: s.endDate ? new Date(s.endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "TBD",
+      description: s.description,
+    }));
+  }, [seasonsData]);
+
   const toggleSeason = (seasonValue: string) => {
     const current = formData.seasonIds || [];
     const updated = current.includes(seasonValue)
@@ -985,51 +981,90 @@ function StepSeason({ formData, onUpdate }: StepProps) {
 
       {/* Seasons Multi-Select */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Campaign Seasons</h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Choose one or more seasons when this campaign will be active.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {SEASONS.map((season) => {
-            const isSelected = (formData.seasonIds || []).includes(season.value);
-            return (
-              <button
-                key={season.value}
-                type="button"
-                onClick={() => toggleSeason(season.value)}
-                className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
-                  isSelected
-                    ? "border-primary-500 bg-primary-50 shadow-sm"
-                    : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <div
-                  className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 ${
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Campaign Seasons</h3>
+            <p className="text-xs text-gray-500">
+              Choose one or more database seasons when this campaign will be active.
+            </p>
+          </div>
+          <Link
+            to="/admin/seasons/new"
+            className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+          >
+            + Create Season
+          </Link>
+        </div>
+
+        {seasonsLoading ? (
+          <div className="py-8 text-center text-xs text-gray-500">
+            Loading seasons from database...
+          </div>
+        ) : seasonsError ? (
+          <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600">
+            Failed to load seasons from database.
+          </div>
+        ) : dbSeasons.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center">
+            <p className="text-xs text-gray-500 mb-2">No activation seasons found in database.</p>
+            <Link
+              to="/admin/seasons/new"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700"
+            >
+              + Create First Season
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {dbSeasons.map((season) => {
+              const isSelected = (formData.seasonIds || []).includes(season.value);
+              return (
+                <button
+                  key={season.value}
+                  type="button"
+                  onClick={() => toggleSeason(season.value)}
+                  className={`flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
                     isSelected
-                      ? "border-primary-600 bg-primary-600"
-                      : "border-gray-300"
+                      ? "border-primary-500 bg-primary-50 shadow-sm"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  {isSelected && (
-                    <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="block text-sm font-semibold text-gray-900">{season.label}</span>
-                  <span className="mt-0.5 block text-xs text-gray-500">
-                    {season.startDate} — {season.endDate}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <div
+                    className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 ${
+                      isSelected
+                        ? "border-primary-600 bg-primary-600"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {isSelected && (
+                      <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="block text-sm font-semibold text-gray-900">{season.label}</span>
+                      <span className={`inline-flex rounded-full px-1.5 py-0.2 text-[9px] font-bold ${
+                        season.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {season.status}
+                      </span>
+                    </div>
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {season.startDate} — {season.endDate}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {(formData.seasonIds || []).length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {(formData.seasonIds || []).map((s) => {
-              const season = SEASONS.find((se) => se.value === s);
+              const season = dbSeasons.find((se) => se.value === s);
               return season ? (
                 <span
                   key={s}
@@ -3080,17 +3115,60 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
   const qualificationMode = formData.qualificationMode || "highest";
   const rewards = formData.rewards || [];
   const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryRewards, setLibraryRewards] = useState<CampaignReward[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [librarySearch, setLibrarySearch] = useState("");
 
-  const DEMO_LIBRARY_REWARDS: CampaignReward[] = [
-    { id: "lib-1", title: "£10 E-Card", description: "Digital £10 e-card sent via email", order: 0, audience: "both", triggerType: "contribution", triggerConfig: { mode: "min", min: 10 }, quantityType: "unlimited", quantityLimit: null, claimDeadlineDays: 30, fulfilmentType: "external_link", fulfilmentConfig: {}, qualificationPeriod: "", expiryDays: 0, items: [{ id: "li-1", title: "£10 E-Card", description: "Digital e-card", physicalType: "digital", value: "10", currency: "GBP", assetType: "url", assetUrl: "", order: 0, fulfilmentType: "external_link", fulfilmentConfig: {} }] },
-    { id: "lib-2", title: "Bronze Supporter Badge", description: "Digital badge recognizing bronze-level support", order: 1, audience: "both", triggerType: "contribution", triggerConfig: { mode: "min", min: 25 }, quantityType: "unlimited", quantityLimit: null, claimDeadlineDays: 60, fulfilmentType: "internal", fulfilmentConfig: {}, qualificationPeriod: "", expiryDays: 0, items: [{ id: "li-2", title: "Bronze Badge", description: "Digital badge", physicalType: "digital", value: "", currency: "GBP", assetType: "", assetUrl: "", order: 0, fulfilmentType: "internal", fulfilmentConfig: {} }] },
-    { id: "lib-3", title: "Free Haircut Voucher", description: "One free haircut at participating barbers", order: 2, audience: "consumer", triggerType: "contribution", triggerConfig: { mode: "min", min: 50 }, quantityType: "limited", quantityLimit: 100, claimDeadlineDays: 30, fulfilmentType: "manual", fulfilmentConfig: {}, qualificationPeriod: "", expiryDays: 0, items: [{ id: "li-3", title: "Haircut Voucher", description: "Free haircut at Toby Barbers", physicalType: "physical", value: "30", currency: "GBP", assetType: "", assetUrl: "", order: 0, fulfilmentType: "manual", fulfilmentConfig: {} }] },
-    { id: "lib-4", title: "MCOM Training Course", description: "Access to MCOM online training course", order: 3, audience: "business", triggerType: "contribution", triggerConfig: { mode: "min", min: 100 }, quantityType: "unlimited", quantityLimit: null, claimDeadlineDays: 90, fulfilmentType: "external_link", fulfilmentConfig: {}, qualificationPeriod: "", expiryDays: 0, items: [{ id: "li-4", title: "Training Access", description: "Online course access", physicalType: "digital", value: "", currency: "GBP", assetType: "url", assetUrl: "", order: 0, fulfilmentType: "external_link", fulfilmentConfig: {} }] },
-    { id: "lib-5", title: "Silver Supporter Pack", description: "Silver-level recognition with exclusive content", order: 4, audience: "both", triggerType: "contribution", triggerConfig: { mode: "min", min: 75 }, quantityType: "limited", quantityLimit: 200, claimDeadlineDays: 60, fulfilmentType: "internal", fulfilmentConfig: {}, qualificationPeriod: "", expiryDays: 0, items: [{ id: "li-5", title: "Silver Badge", description: "Digital badge", physicalType: "digital", value: "", currency: "GBP", assetType: "", assetUrl: "", order: 0, fulfilmentType: "internal", fulfilmentConfig: {} }, { id: "li-6", title: "Exclusive Content", description: "Behind-the-scenes content", physicalType: "digital", value: "", currency: "GBP", assetType: "url", assetUrl: "", order: 1, fulfilmentType: "external_link", fulfilmentConfig: {} }] },
-  ];
+  useEffect(() => {
+    let mounted = true;
+    async function loadRewards() {
+      setLoadingLibrary(true);
+      try {
+        const res = await adminApi.getRewards();
+        if (!mounted) return;
+        const mapped: CampaignReward[] = (res || []).map((r: any, idx: number) => ({
+          id: r.id || `lib-${idx}`,
+          title: r.title || r.name || "Community Reward",
+          description: r.description || "",
+          order: idx,
+          audience: (r.audience === "consumer" || r.audience === "business") ? r.audience : "both",
+          triggerType: "contribution",
+          triggerConfig: { mode: "min", min: Number(r.thresholdAmount) || 10 },
+          quantityType: r.quantityLimit ? "limited" : "unlimited",
+          quantityLimit: r.quantityLimit || null,
+          claimDeadlineDays: 30,
+          fulfilmentType: r.fulfilmentType || "external_link",
+          fulfilmentConfig: {},
+          qualificationPeriod: "",
+          expiryDays: 0,
+          items: (r.items || []).map((it: any, iIdx: number) => ({
+            id: it.id || `li-${iIdx}`,
+            title: it.title || r.title || "Reward Item",
+            description: it.description || "",
+            physicalType: it.physicalType || "digital",
+            value: String(it.value || ""),
+            currency: "GBP",
+            assetType: it.assetType || "url",
+            assetUrl: it.assetUrl || "",
+            order: iIdx,
+            fulfilmentType: it.fulfilmentType || "external_link",
+            fulfilmentConfig: {},
+          })),
+        }));
+        setLibraryRewards(mapped);
+      } catch (err) {
+        console.error("Failed to load rewards library", err);
+      } finally {
+        if (mounted) setLoadingLibrary(false);
+      }
+    }
+    loadRewards();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const filteredLibrary = DEMO_LIBRARY_REWARDS.filter((r) =>
+  const filteredLibrary = libraryRewards.filter((r) =>
     r.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
     r.description.toLowerCase().includes(librarySearch.toLowerCase())
   );
@@ -3761,11 +3839,14 @@ function StepTerms({ formData, onUpdate }: StepProps) {
 
 function StepPreview({ formData, published }: StepProps) {
   const [viewMode, setViewMode] = useState<"consumer" | "business">("consumer");
+  const { data: seasonsData } = useAdminSeasons({ limit: 100 });
 
-  const seasonLabels = (formData.seasonIds || []).map((s) => {
-    const season = SEASONS.find((se) => se.value === s);
-    return season?.label || s;
-  });
+  const seasonLabels = useMemo(() => {
+    return (formData.seasonIds || []).map((s) => {
+      const season = (seasonsData?.items || []).find((se) => se.id === s);
+      return season?.name || s;
+    });
+  }, [formData.seasonIds, seasonsData]);
 
   return (
     <div className="space-y-6">
@@ -4005,26 +4086,58 @@ export function AdminCampaignWizard() {
   const handleSaveDraft = useCallback(async () => {
     setSaving(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const primarySeasonId = formData.seasonIds?.[0] || undefined;
+      const targetInPence = formData.targetAmount ? Math.round(Number(formData.targetAmount) * 100) : 0;
+      await adminApi.createTemplate({
+        name: formData.title?.trim() || "Untitled Campaign Draft",
+        tagline: formData.shortDescription?.trim() || formData.title?.trim() || "Draft Template",
+        seasonId: primarySeasonId,
+        status: "DRAFT",
+        audience: (formData.audience || "both").toUpperCase(),
+        category: formData.categoryId || "fund",
+        config: {
+          ...formData,
+          targetAmountInPence: targetInPence,
+        },
+      });
       navigate("/admin/campaigns");
+    } catch (err: any) {
+      console.error("Failed to save draft:", err);
+      alert(err?.response?.data?.message || err?.message || "Failed to save campaign draft to database");
     } finally {
       setSaving(false);
     }
-  }, [navigate]);
+  }, [formData, navigate]);
 
   const handleSubmitPublish = useCallback(async () => {
     if (!validateCurrentStep()) return;
     setPublishing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const primarySeasonId = formData.seasonIds?.[0] || undefined;
+      const targetInPence = formData.targetAmount ? Math.round(Number(formData.targetAmount) * 100) : 0;
+      await adminApi.createTemplate({
+        name: formData.title?.trim() || "Untitled Campaign",
+        tagline: formData.shortDescription?.trim() || formData.title?.trim() || "New Campaign",
+        seasonId: primarySeasonId,
+        status: "ACTIVE",
+        audience: (formData.audience || "both").toUpperCase(),
+        category: formData.categoryId || "fund",
+        config: {
+          ...formData,
+          targetAmountInPence: targetInPence,
+        },
+      });
       setPublished(true);
       setTimeout(() => {
         navigate("/admin/campaigns");
       }, 1500);
+    } catch (err: any) {
+      console.error("Failed to publish campaign:", err);
+      alert(err?.response?.data?.message || err?.message || "Failed to publish campaign to database");
     } finally {
       setPublishing(false);
     }
-  }, [validateCurrentStep, navigate]);
+  }, [validateCurrentStep, formData, navigate]);
 
   const StepComponent = stepComponents[currentStep];
 

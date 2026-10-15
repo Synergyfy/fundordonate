@@ -200,24 +200,24 @@ export class AdminSystemService {
   async updateSettings(dto: UpdateSettingsDto) {
     const entries = Object.entries(dto.settings);
 
-    for (const [key, value] of entries) {
-      await this.prisma.platformSetting.upsert({
-        where: { key },
-        update: { value },
-        create: {
-          key,
-          value,
-          category: key.includes("payment") || key.includes("fee") ? "payment" : "general",
-        },
-      });
-    }
+    await this.prisma.$transaction(
+      entries.map(([key, value]) =>
+        this.prisma.platformSetting.upsert({
+          where: { key },
+          update: { value },
+          create: {
+            key,
+            value,
+            category: key.includes("payment") || key.includes("fee") ? "payment" : "general",
+          },
+        }),
+      ),
+    );
 
-    // Invalidate settings caches
+    // Invalidate settings caches deterministically without blocking keys(*)
     try {
-      const keys = await this.redis.keys("admin:settings:*");
-      if (keys.length > 0) {
-        await this.redis.del(...keys);
-      }
+      const knownKeys = ["admin:settings:all", "admin:settings:payment", "admin:settings:general"];
+      await this.redis.del(...knownKeys);
     } catch (err: any) {
       this.logger.warn(`Failed to clear settings cache: ${err.message}`);
     }

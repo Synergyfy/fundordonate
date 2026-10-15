@@ -4,6 +4,7 @@ import {
   MembershipTier,
   TemplateApprovalMode,
   TemplateOrigin,
+  TemplateStatus,
 } from "@prisma/client";
 import {
   ArrayMinSize,
@@ -11,6 +12,7 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -138,6 +140,21 @@ export class CreateCampaignTemplateDto {
   @IsEnum(TemplateApprovalMode)
   approvalMode?: TemplateApprovalMode = TemplateApprovalMode.ADMIN_REVIEW;
 
+  @ApiPropertyOptional({ enum: TemplateStatus, default: TemplateStatus.DRAFT })
+  @IsOptional()
+  @IsEnum(TemplateStatus)
+  status?: TemplateStatus = TemplateStatus.DRAFT;
+
+  @ApiPropertyOptional({ example: "fund", description: "donation | crowdfunding | fund" })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: ["BUSINESS", "CONSUMER", "BOTH"], default: "BOTH" })
+  @IsOptional()
+  @IsString()
+  audience?: string = "BOTH";
+
   @ApiPropertyOptional({ enum: MembershipTier, default: MembershipTier.BRONZE })
   @IsOptional()
   @IsEnum(MembershipTier)
@@ -179,23 +196,35 @@ export class CreateCampaignTemplateDto {
 
   @ApiPropertyOptional({ description: "Array of fields schema" })
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   fieldsConfig?: any[];
 
   @ApiPropertyOptional({ description: "Array of rewards configuration" })
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   rewardsConfig?: any[];
 
   @ApiPropertyOptional({ description: "Array of assets configuration" })
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   mcomAssetsConfig?: any[];
 
   @ApiPropertyOptional({ description: "Array of requirements configuration" })
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   requirementsConfig?: any[];
+
+  @ApiPropertyOptional({
+    description:
+      "Full wizard configuration (sections, funding, location, visibility, access, contribution rules)",
+  })
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, any>;
 }
 
 export class UpdateCampaignTemplateDto {
@@ -230,6 +259,21 @@ export class UpdateCampaignTemplateDto {
   @IsOptional()
   @IsEnum(TemplateApprovalMode)
   approvalMode?: TemplateApprovalMode;
+
+  @ApiPropertyOptional({ enum: TemplateStatus })
+  @IsOptional()
+  @IsEnum(TemplateStatus)
+  status?: TemplateStatus;
+
+  @ApiPropertyOptional({ description: "donation | crowdfunding | fund" })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: ["BUSINESS", "CONSUMER", "BOTH"] })
+  @IsOptional()
+  @IsString()
+  audience?: string;
 
   @ApiPropertyOptional({ enum: MembershipTier })
   @IsOptional()
@@ -272,21 +316,25 @@ export class UpdateCampaignTemplateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   fieldsConfig?: any[];
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   rewardsConfig?: any[];
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   mcomAssetsConfig?: any[];
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Object)
   @IsArray()
   requirementsConfig?: any[];
 
@@ -294,4 +342,59 @@ export class UpdateCampaignTemplateDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Full wizard configuration (sections, funding, location, visibility, access, contribution rules)",
+  })
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, any>;
+}
+
+export class UpdateCampaignTemplateStatusDto {
+  @ApiProperty({ enum: TemplateStatus })
+  @IsEnum(TemplateStatus)
+  status!: TemplateStatus;
+}
+
+export class DuplicateCampaignTemplateDto {
+  @ApiPropertyOptional({ description: "Name for the duplicated template" })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  name?: string;
+}
+
+export class InstantiateCampaignTemplateDto {
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Target business IDs to instantiate the template for",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  businessIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "Instantiate for every business in this hub location",
+  })
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
+  @ApiPropertyOptional({ description: "Target amount for each instance in pence" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  targetAmount?: number;
+
+  @ApiPropertyOptional({ description: "Campaign duration in days" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  deadlineDays?: number;
 }

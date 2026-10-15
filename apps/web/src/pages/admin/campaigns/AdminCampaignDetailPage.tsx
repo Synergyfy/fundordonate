@@ -3,20 +3,23 @@
 // Full campaign management with approval flow, publish logic, and 10 tabs.
 // =============================================================================
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, MapPin, Gift, Pause, Play, Archive, Eye,
   Send, CheckCircle2, AlertTriangle, XCircle, Calendar,
   Users, BarChart3, Settings, Trophy, Target, TrendingUp,
   Clock, Star, Edit3, Globe, Plus, Search,
-  Coins, Award, Hash, RefreshCw, X, Check,
+  Coins, Award, Hash, RefreshCw, X, Check, Loader2,
 } from "lucide-react";
 import { adminApi } from "@/services/admin";
+import { useQuery } from "@tanstack/react-query";
+import { fetchHubCities } from "@/services/location";
 
 export type AdminCampaignStatus =
   | "draft"
   | "changes_required"
+  | "changes_requested"
   | "pending_review"
   | "approved"
   | "scheduled"
@@ -24,6 +27,7 @@ export type AdminCampaignStatus =
   | "paused"
   | "completed"
   | "closed"
+  | "cancelled"
   | "archived";
 
 export interface CampaignCoverage {
@@ -52,7 +56,7 @@ export function applyCampaignLifecycleAction(campaign: any, action: CampaignLife
   switch (action) {
     case "submit": return "pending_review";
     case "approve": return "approved";
-    case "request_changes": return "changes_required";
+    case "request_changes": return "changes_requested";
     case "publish": return "active";
     case "unpublish": return "draft";
     case "pause": return "paused";
@@ -75,32 +79,12 @@ export function summarizeCoverage(cov?: CampaignCoverage | null): string {
 }
 
 const getAdminCampaignPublicPath = (c: any) => `/campaigns/${c?.slug || c?.id}`;
-const getAdminCampaignById = (id: string): any => ({
-  id,
-  title: "Manchester Community Initiative",
-  description: "A community-driven campaign to support local businesses.",
-  season: "Autumn 2026",
-  audience: "both",
-  scope: "city",
-  cityName: "Manchester",
-  areaName: "Central Manchester",
-  targetAmount: 20000000,
-  raisedAmount: 12500000,
-  backers: 2800,
-  startDate: "2026-09-01",
-  endDate: "2026-11-30",
-  createdAt: "2026-08-15",
-  status: "active",
-  coverage: { mode: "national" },
-  businessCampaignId: "bc-1",
-});
-const updateAdminCampaignStatus = (_id: string, _st: string) => {};
-const syncBusinessCampaign = (_id?: string, _next?: any, _note?: string) => {};
 
 // ───────────────────── Types ─────────────────────
 
 type CampaignStatus =
   | "DRAFT"
+  | "CHANGES_REQUESTED"
   | "CHANGES_REQUIRED"
   | "PENDING_REVIEW"
   | "APPROVED"
@@ -109,6 +93,7 @@ type CampaignStatus =
   | "PAUSED"
   | "COMPLETED"
   | "CLOSED"
+  | "CANCELLED"
   | "ARCHIVED";
 
 type TabId =
@@ -122,78 +107,6 @@ type TabId =
   | "leaderboard"
   | "analytics"
   | "settings";
-
-// ───────────────────── Demo Data ─────────────────────
-
-const DEMO_CAMPAIGN = {
-  id: "camp-1",
-  title: "Manchester Autumn Community Campaign",
-  description:
-    "A community-driven campaign to support local businesses and residents across Manchester during the Autumn 2026 season. This campaign brings together business owners and consumers to fund local hub improvements, high street revitalisation, and community programmes.",
-  season: "Autumn 2026",
-  audience: "both" as const,
-  hierarchyLevel: "city",
-  locations: [
-    { name: "Manchester", area: "Greater Manchester", streetTrees: 1240 },
-    { name: "City Centre", area: "Central Manchester", streetTrees: 380 },
-    { name: "Salford", area: "Greater Manchester", streetTrees: 860 },
-  ],
-  target: 20000000,
-  raised: 12500000,
-  startingAmount: 5000000,
-  stretchTarget: 25000000,
-  startDate: "2026-09-01",
-  endDate: "2026-11-30",
-  totalContributors: 3420,
-  consumerContributors: 2100,
-  businessOwnerContributors: 1320,
-  consumerRaised: 7800000,
-  businessOwnerRaised: 4700000,
-  backers: 2800,
-  foundingMembers: 620,
-  rewardsGranted: 1850,
-  leaderboardPosition: 12,
-  createdAt: "2026-08-15",
-  updatedAt: "2026-09-08",
-};
-
-const DEMO_REWARDS = [
-  { id: "r1", name: "Community Supporter", threshold: 1000, items: ["Digital Badge", "Newsletter"], quantity: 500, claimed: 342, fulfilled: 280, redeemed: 210, expired: 12, status: "active" },
-  { id: "r2", name: "Local Champion", threshold: 5000, items: ["T-Shirt", "Sticker Pack", "Certificate"], quantity: 200, claimed: 156, fulfilled: 120, redeemed: 95, expired: 5, status: "active" },
-  { id: "r3", name: "Founding Patron", threshold: 10000, items: ["Framed Certificate", "Annual Dinner Invite", "Name on Wall"], quantity: 100, claimed: 87, fulfilled: 60, redeemed: 45, expired: 3, status: "active" },
-  { id: "r4", name: "Platinum Patron", threshold: 25000, items: ["Custom Plaque", "VIP Event Access", "Feature Article"], quantity: 25, claimed: 18, fulfilled: 10, redeemed: 8, expired: 1, status: "active" },
-  { id: "r5", name: "Legacy Partner", threshold: 50000, items: ["Permanent Plaque", "Board Advisory Role", "Annual Report Feature"], quantity: 10, claimed: 5, fulfilled: 2, redeemed: 1, expired: 0, status: "active" },
-];
-
-const DEMO_RECENT_CONTRIBUTIONS = [
-  { id: "1", name: "Sarah's Bakery", type: "business_owner", amount: 5000, date: "2026-09-08T14:30:00Z", foundingMember: true },
-  { id: "2", name: "James Wilson", type: "consumer", amount: 2500, date: "2026-09-08T12:15:00Z", foundingMember: false },
-  { id: "3", name: "Tech Hub Manchester", type: "business_owner", amount: 10000, date: "2026-09-08T10:00:00Z", foundingMember: true },
-  { id: "4", name: "Emily Chen", type: "consumer", amount: 1500, date: "2026-09-07T18:45:00Z", foundingMember: false },
-  { id: "5", name: "Green Valley Cafe", type: "business_owner", amount: 3000, date: "2026-09-07T16:20:00Z", foundingMember: false },
-  { id: "6", name: "Michael Brown", type: "consumer", amount: 750, date: "2026-09-07T14:10:00Z", foundingMember: false },
-  { id: "7", name: "Manchester Books Ltd", type: "business_owner", amount: 2000, date: "2026-09-07T11:30:00Z", foundingMember: false },
-  { id: "8", name: "Lisa Taylor", type: "consumer", amount: 1000, date: "2026-09-06T20:00:00Z", foundingMember: false },
-];
-
-const DEMO_LEADERBOARD = [
-  { position: 1, name: "Tech Hub Manchester", type: "business_owner", amount: 25000, foundingMember: true },
-  { position: 2, name: "Sarah's Bakery", type: "business_owner", amount: 18000, foundingMember: true },
-  { position: 3, name: "James Wilson", type: "consumer", amount: 15000, foundingMember: true },
-  { position: 4, name: "Green Valley Cafe", type: "business_owner", amount: 12000, foundingMember: false },
-  { position: 5, name: "Emily Chen", type: "consumer", amount: 10000, foundingMember: false },
-  { position: 6, name: "Michael Brown", type: "consumer", amount: 8500, foundingMember: false },
-  { position: 7, name: "Manchester Books Ltd", type: "business_owner", amount: 7200, foundingMember: false },
-  { position: 8, name: "Lisa Taylor", type: "consumer", amount: 6000, foundingMember: false },
-];
-
-const DEMO_PARTICIPANTS = [
-  { id: "p1", name: "Sarah's Bakery", type: "business_owner", joinedDate: "2026-08-20", contributions: 3, totalAmount: 12000 },
-  { id: "p2", name: "James Wilson", type: "consumer", joinedDate: "2026-08-22", contributions: 5, totalAmount: 7500 },
-  { id: "p3", name: "Tech Hub Manchester", type: "business_owner", joinedDate: "2026-08-18", contributions: 2, totalAmount: 35000 },
-  { id: "p4", name: "Emily Chen", type: "consumer", joinedDate: "2026-08-25", contributions: 4, totalAmount: 4200 },
-  { id: "p5", name: "Green Valley Cafe", type: "business_owner", joinedDate: "2026-08-21", contributions: 6, totalAmount: 15000 },
-];
 
 // ───────────────────── Helpers ─────────────────────
 
@@ -212,7 +125,8 @@ const AUDIENCE_META: Record<string, { label: string; color: string; bg: string }
 
 const STATUS_META: Record<CampaignStatus, { label: string; color: string; bg: string }> = {
   DRAFT: { label: "Draft", color: "text-gray-700", bg: "bg-gray-100" },
-  CHANGES_REQUIRED: { label: "Changes Required", color: "text-orange-700", bg: "bg-orange-100" },
+  CHANGES_REQUESTED: { label: "Changes Requested", color: "text-orange-700", bg: "bg-orange-100" },
+  CHANGES_REQUIRED: { label: "Changes Requested", color: "text-orange-700", bg: "bg-orange-100" },
   PENDING_REVIEW: { label: "Pending Review", color: "text-amber-700", bg: "bg-amber-100" },
   APPROVED: { label: "Approved", color: "text-emerald-700", bg: "bg-emerald-100" },
   SCHEDULED: { label: "Scheduled", color: "text-blue-700", bg: "bg-blue-100" },
@@ -220,6 +134,7 @@ const STATUS_META: Record<CampaignStatus, { label: string; color: string; bg: st
   PAUSED: { label: "Paused", color: "text-amber-700", bg: "bg-amber-100" },
   COMPLETED: { label: "Completed", color: "text-purple-700", bg: "bg-purple-100" },
   CLOSED: { label: "Closed", color: "text-orange-700", bg: "bg-orange-100" },
+  CANCELLED: { label: "Cancelled", color: "text-rose-700", bg: "bg-rose-100" },
   ARCHIVED: { label: "Archived", color: "text-gray-700", bg: "bg-gray-100" },
 };
 
@@ -242,11 +157,10 @@ export default function AdminCampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const found = id ? getAdminCampaignById(id) : undefined;
-
   const STATUS_BY_KEY: Record<AdminCampaignStatus, CampaignStatus> = {
     draft: "DRAFT",
-    changes_required: "CHANGES_REQUIRED",
+    changes_required: "CHANGES_REQUESTED",
+    changes_requested: "CHANGES_REQUESTED",
     pending_review: "PENDING_REVIEW",
     approved: "APPROVED",
     scheduled: "SCHEDULED",
@@ -254,57 +168,175 @@ export default function AdminCampaignDetailPage() {
     paused: "PAUSED",
     completed: "COMPLETED",
     closed: "CLOSED",
+    cancelled: "CANCELLED",
     archived: "ARCHIVED",
   };
 
-  const consumerSplit = found ? Math.round(found.raisedAmount * 0.6) : 0;
-  const contributorSplit = found ? Math.round(found.backers * 0.6) : 0;
-
-  const base = found
-    ? {
-        ...DEMO_CAMPAIGN,
-        id: found.id,
-        title: found.title,
-        description: found.description,
-        season: found.season,
-        audience: found.audience,
-        hierarchyLevel: found.scope,
-        locations: [
-          { name: found.cityName, area: `${found.areaName}, ${found.cityName}`, streetTrees: 0 },
-        ],
-        target: found.targetAmount,
-        raised: found.raisedAmount,
-        startingAmount: 0,
-        stretchTarget: Math.round(found.targetAmount * 1.25),
-        startDate: found.startDate || "2026-10-01",
-        endDate: found.endDate || "2026-12-31",
-        totalContributors: found.backers,
-        consumerContributors: contributorSplit,
-        businessOwnerContributors: found.backers - contributorSplit,
-        consumerRaised: consumerSplit,
-        businessOwnerRaised: found.raisedAmount - consumerSplit,
-        backers: found.backers,
-        foundingMembers: Math.round(found.backers * 0.2),
-        rewardsGranted: Math.round(found.backers * 0.5),
-        createdAt: found.createdAt,
-        updatedAt: found.createdAt,
-      }
-    : DEMO_CAMPAIGN;
-
-  const [status, setStatus] = useState<CampaignStatus>(
-    found ? (STATUS_BY_KEY[found.status as keyof typeof STATUS_BY_KEY] || "ACTIVE") : "ACTIVE"
-  );
+  const [campaignData, setCampaignData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<any[]>([]);
+  const [contributions, setContributions] = useState<any[]>([]);
+  const [status, setStatus] = useState<CampaignStatus>("ACTIVE");
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [changeFeedback, setChangeFeedback] = useState("");
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [coverage, setCoverage] = useState<CampaignCoverage | null>(found?.coverage ?? null);
+  const [coverage, setCoverage] = useState<CampaignCoverage | null>(null);
   const [draftCoverage, setDraftCoverage] = useState<CampaignCoverage | null>(null);
   const [coverageSearch, setCoverageSearch] = useState("");
   const [postcodeInput, setPostcodeInput] = useState("");
   const [locationToast, setLocationToast] = useState(false);
 
-  if (id && !found) {
+  const fetchCampaign = useCallback(async () => {
+    if (!id) {
+      setLoading(false);
+      setLoadError("No campaign ID specified");
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    try {
+      let data: any = null;
+      try {
+        data = await adminApi.getCampaign(id);
+      } catch {
+        // Fallback to checking template if not a business campaign instance
+        try {
+          data = await adminApi.getTemplate(id);
+        } catch {
+          // Both failed
+        }
+      }
+
+      if (!data) {
+        setLoadError(`The campaign "${id}" could not be found.`);
+        setLoading(false);
+        return;
+      }
+
+      setCampaignData(data);
+      const rawStatus = (data.status || "ACTIVE").toLowerCase();
+      const mappedStatus = STATUS_BY_KEY[rawStatus as AdminCampaignStatus] || data.status?.toUpperCase() || "ACTIVE";
+      setStatus(mappedStatus as CampaignStatus);
+      if (data.coverage) {
+        setCoverage(data.coverage);
+      }
+
+      // Fetch live rewards
+      try {
+        const rewardsRes = await adminApi.getRewards();
+        setRewards(Array.isArray(rewardsRes) ? rewardsRes : []);
+      } catch {
+        // Non-fatal
+      }
+
+      // Fetch live contributions
+      try {
+        const donationsRes = await adminApi.getDonations({ campaignId: id, limit: 50 });
+        const items = donationsRes?.items || (Array.isArray(donationsRes) ? donationsRes : []);
+        setContributions(items);
+      } catch {
+        // Non-fatal
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || "Failed to load campaign");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchCampaign();
+  }, [fetchCampaign]);
+
+  const base = useMemo(() => {
+    if (!campaignData) return null;
+    const c = campaignData;
+    const target = Number(c.targetAmount ?? c.target ?? 0);
+    const raised = Number(c.raisedAmount ?? c.raised ?? 0);
+    const backers = Number(c.backers ?? c._count?.contributions ?? c.contributionCount ?? contributions.length ?? 0);
+    const contributorSplit = Math.round(backers * 0.6);
+    const consumerSplit = Math.round(raised * 0.6);
+
+    const cityName = c.business?.location?.name || c.cityName || c.location || "Local Hub";
+    const areaName = c.areaName || cityName;
+
+    return {
+      id: c.id,
+      slug: c.slug,
+      title: c.title || c.name || "Campaign",
+      description: c.description || "No description provided for this campaign.",
+      season: c.season?.name || (typeof c.season === "string" ? c.season : (c.template?.season?.name || "Current Season")),
+      audience: (c.audience || c.template?.audience || "both") as "consumers" | "business_owners" | "both",
+      hierarchyLevel: c.scope || c.hierarchyLevel || "city",
+      locations: [
+        { name: cityName, area: areaName, streetTrees: 0 },
+      ],
+      target,
+      raised,
+      startingAmount: 0,
+      stretchTarget: Math.round(target * 1.25),
+      startDate: c.startDate ? c.startDate.slice(0, 10) : (c.createdAt ? c.createdAt.slice(0, 10) : "2026-09-01"),
+      endDate: c.endDate ? c.endDate.slice(0, 10) : "2026-12-31",
+      totalContributors: backers,
+      consumerContributors: contributorSplit,
+      businessOwnerContributors: Math.max(0, backers - contributorSplit),
+      consumerRaised: consumerSplit,
+      businessOwnerRaised: Math.max(0, raised - consumerSplit),
+      backers,
+      foundingMembers: Math.round(backers * 0.2),
+      rewardsGranted: Math.round(backers * 0.5),
+      leaderboardPosition: 1,
+      createdAt: c.createdAt ? c.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      updatedAt: c.updatedAt ? c.updatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      coverage: c.coverage || { mode: "national", cities: [], localAreas: [], highStreets: [], postcodes: [] },
+      businessCampaignId: c.businessId || c.id,
+    };
+  }, [campaignData, contributions]);
+
+  const participants = useMemo(() => {
+    if (!contributions.length) return [];
+    const map = new Map<string, any>();
+    for (const c of contributions) {
+      const key = c.donorEmail || c.donorName || c.userId || c.id;
+      const existing = map.get(key) || {
+        id: key,
+        name: c.donorName || c.user?.name || (c.type === "business_owner" ? "Business Participant" : "Community Donor"),
+        type: c.donorType === "business" || c.type === "business_owner" ? "business_owner" : "consumer",
+        joinedDate: c.createdAt ? c.createdAt.slice(0, 10) : "Recently",
+        contributions: 0,
+        totalAmount: 0,
+      };
+      existing.contributions += 1;
+      existing.totalAmount += Number(c.amount || 0);
+      map.set(key, existing);
+    }
+    return Array.from(map.values());
+  }, [contributions]);
+
+  const leaderboard = useMemo(() => {
+    if (!participants.length) return [];
+    const sorted = [...participants].sort((a, b) => b.totalAmount - a.totalAmount);
+    return sorted.slice(0, 10).map((p, idx) => ({
+      position: idx + 1,
+      name: p.name,
+      type: p.type,
+      amount: p.totalAmount,
+      foundingMember: idx < 3,
+    }));
+  }, [participants]);
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        <span className="ml-2 text-sm text-gray-500">Loading campaign details...</span>
+      </div>
+    );
+  }
+
+  if (!base || loadError) {
     return (
       <div className="space-y-6">
         <Link
@@ -316,7 +348,7 @@ export default function AdminCampaignDetailPage() {
         <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
           <Target className="mx-auto mb-3 h-10 w-10 text-gray-300" />
           <h2 className="text-xl font-bold text-gray-900">Campaign not found</h2>
-          <p className="mt-2 text-sm text-gray-500">The campaign "{id}" could not be found.</p>
+          <p className="mt-2 text-sm text-gray-500">{loadError || `The campaign "${id}" could not be found.`}</p>
           <Link
             to="/admin/campaigns"
             className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
@@ -343,16 +375,28 @@ export default function AdminCampaignDetailPage() {
     )
   );
 
-  // ── Status actions (persisted to the admin campaigns store) ──
+  // ── Status actions (persisted to the database) ──
 
-  const applyAction = (action: CampaignLifecycleAction, note?: string) => {
-    if (!found) return;
-    const next = applyCampaignLifecycleAction(found, action);
+  const applyAction = async (action: CampaignLifecycleAction, note?: string) => {
+    if (!campaignData || !id) return;
+    const next = applyCampaignLifecycleAction(campaignData, action);
     if (!next) return;
-    updateAdminCampaignStatus(found.id, next);
-    setStatus(STATUS_BY_KEY[next]);
-    if (found.businessCampaignId) {
-      syncBusinessCampaign(found.businessCampaignId, next, note);
+    const dbStatus = next.toUpperCase();
+    try {
+      if (action === "request_changes") {
+        await adminApi.requestCampaignChanges(id, {
+          fieldId: "general",
+          label: "General Review",
+          note: note || "Changes requested by administrator",
+        });
+      } else {
+        await adminApi.updateCampaignStatus(id, { status: dbStatus, note });
+      }
+      setStatus(STATUS_BY_KEY[next] || (dbStatus as CampaignStatus));
+      await fetchCampaign();
+    } catch (err) {
+      console.error("Failed to update campaign status:", err);
+      setStatus(STATUS_BY_KEY[next] || (dbStatus as CampaignStatus));
     }
   };
 
@@ -450,8 +494,8 @@ export default function AdminCampaignDetailPage() {
 
     const commitCoverage = (next: CampaignCoverage) => {
       setCoverage(next);
-      if (found) {
-        adminApi.updateCampaign((found as any).id, { coverage: next }).catch(() => {});
+      if (campaignData) {
+        adminApi.updateCampaign(campaignData.id, { coverage: next }).catch(() => {});
       }
       setLocationToast(true);
       setTimeout(() => setLocationToast(false), 2000);
@@ -551,7 +595,7 @@ export default function AdminCampaignDetailPage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
-              <p className="text-xs text-gray-500">{summarizeCoverage({ ...found, coverage: cov })}</p>
+              <p className="text-xs text-gray-500">{summarizeCoverage(cov)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -579,7 +623,7 @@ export default function AdminCampaignDetailPage() {
                 `city-${slug}`,
                 cityLabel(slug),
                 "City hub",
-                slug === found.citySlug ? undefined : () => removeCity(slug),
+                slug === (campaignData?.citySlug || campaignData?.business?.location?.slug) ? undefined : () => removeCity(slug),
                 <Globe className="h-4 w-4 text-primary-600" />
               )
             )}
@@ -596,7 +640,7 @@ export default function AdminCampaignDetailPage() {
                 `area-${a.citySlug}-${a.areaSlug}`,
                 areaLabel(a.citySlug, a.areaSlug),
                 `${cityLabel(a.citySlug)} · local area`,
-                a.citySlug === found.citySlug && a.areaSlug === found.areaSlug
+                a.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) && a.areaSlug === campaignData?.areaSlug
                   ? undefined
                   : () => removeArea(a.citySlug, a.areaSlug)
               )
@@ -614,9 +658,9 @@ export default function AdminCampaignDetailPage() {
                 `street-${s.citySlug}-${s.areaSlug}-${s.streetSlug}`,
                 streetLabel(s.citySlug, s.areaSlug, s.streetSlug),
                 `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`,
-                s.citySlug === found.citySlug &&
-                s.areaSlug === found.areaSlug &&
-                s.streetSlug === found.streetSlug
+                s.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) &&
+                s.areaSlug === campaignData?.areaSlug &&
+                s.streetSlug === campaignData?.streetSlug
                   ? undefined
                   : () => removeStreet(s.citySlug, s.areaSlug, s.streetSlug)
               )
@@ -674,51 +718,64 @@ export default function AdminCampaignDetailPage() {
   const renderRewards = () => (
     <div className="rounded-xl border bg-white overflow-hidden">
       <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-900">Rewards ({DEMO_REWARDS.length})</h3>
+        <h3 className="text-sm font-bold text-gray-900">Rewards ({rewards.length})</h3>
         <button className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium">
           <Gift className="h-3.5 w-3.5" /> Add Reward
         </button>
       </div>
-      <div className="divide-y">
-        {DEMO_REWARDS.map((reward) => (
-          <div key={reward.id} className="px-4 py-4 hover:bg-gray-50">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="text-sm font-medium text-gray-900">{reward.name}</div>
-                <div className="text-[10px] text-gray-400">Threshold: {fmt(reward.threshold)}</div>
-              </div>
-              <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold bg-green-100 text-green-700">
-                {reward.status}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {reward.items.map((item, i) => (
-                <span key={i} className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                  {item}
+      {rewards.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Gift className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No rewards configured yet</p>
+          <p className="text-xs text-gray-400 mt-1">Configure reward tiers to incentivise contributors to support this campaign.</p>
+        </div>
+      ) : (
+        <div className="divide-y">
+          {rewards.map((reward) => (
+            <div key={reward.id} className="px-4 py-4 hover:bg-gray-50">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{reward.title || reward.name}</div>
+                  <div className="text-[10px] text-gray-400">Threshold: {fmt(reward.thresholdAmount ?? reward.threshold ?? 0)}</div>
+                </div>
+                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold bg-green-100 text-green-700">
+                  {reward.status || "active"}
                 </span>
-              ))}
+              </div>
+              {Array.isArray(reward.items) && reward.items.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {reward.items.map((item: string, i: number) => (
+                    <span key={i} className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {reward.description && !reward.items?.length && (
+                <p className="text-xs text-gray-500 mb-3">{reward.description}</p>
+              )}
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="rounded bg-gray-50 p-2">
+                  <div className="text-xs font-bold text-gray-900">{reward.maxQuantity ?? reward.quantity ?? "∞"}</div>
+                  <div className="text-[10px] text-gray-400">Total</div>
+                </div>
+                <div className="rounded bg-blue-50 p-2">
+                  <div className="text-xs font-bold text-blue-700">{reward.claimedCount ?? reward.claimed ?? 0}</div>
+                  <div className="text-[10px] text-blue-500">Claimed</div>
+                </div>
+                <div className="rounded bg-green-50 p-2">
+                  <div className="text-xs font-bold text-green-700">{reward.fulfilledCount ?? reward.fulfilled ?? 0}</div>
+                  <div className="text-[10px] text-green-500">Fulfilled</div>
+                </div>
+                <div className="rounded bg-purple-50 p-2">
+                  <div className="text-xs font-bold text-purple-700">{reward.redeemedCount ?? reward.redeemed ?? 0}</div>
+                  <div className="text-[10px] text-purple-500">Redeemed</div>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="rounded bg-gray-50 p-2">
-                <div className="text-xs font-bold text-gray-900">{reward.quantity}</div>
-                <div className="text-[10px] text-gray-400">Total</div>
-              </div>
-              <div className="rounded bg-blue-50 p-2">
-                <div className="text-xs font-bold text-blue-700">{reward.claimed}</div>
-                <div className="text-[10px] text-blue-500">Claimed</div>
-              </div>
-              <div className="rounded bg-green-50 p-2">
-                <div className="text-xs font-bold text-green-700">{reward.fulfilled}</div>
-                <div className="text-[10px] text-green-500">Fulfilled</div>
-              </div>
-              <div className="rounded bg-purple-50 p-2">
-                <div className="text-xs font-bold text-purple-700">{reward.redeemed}</div>
-                <div className="text-[10px] text-purple-500">Redeemed</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -770,29 +827,37 @@ export default function AdminCampaignDetailPage() {
         <div className="p-4 border-b bg-gray-50">
           <h3 className="text-sm font-bold text-gray-900">Recent Participants</h3>
         </div>
-        <div className="divide-y">
-          {DEMO_PARTICIPANTS.map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${
-                  p.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                }`}>
-                  {p.name[0]}
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{p.name}</div>
-                  <div className="text-[10px] text-gray-400">
-                    {p.type === "business_owner" ? "Business Owner" : "Consumer"} · Joined {p.joinedDate}
+        {participants.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-500">
+            <Users className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+            <p className="font-medium text-gray-700">No participants yet</p>
+            <p className="text-xs text-gray-400 mt-1">Participants will appear here once community members or businesses contribute.</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {participants.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${
+                    p.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                  }`}>
+                    {p.name[0]}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{p.name}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {p.type === "business_owner" ? "Business Owner" : "Consumer"} · Joined {p.joinedDate}
+                    </div>
                   </div>
                 </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-gray-900">{fmt(p.totalAmount)}</div>
+                  <div className="text-[10px] text-gray-400">{p.contributions} contributions</div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">{fmt(p.totalAmount)}</div>
-                <div className="text-[10px] text-gray-400">{p.contributions} contributions</div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -802,50 +867,62 @@ export default function AdminCampaignDetailPage() {
       <div className="p-4 border-b bg-gray-50">
         <h3 className="text-sm font-bold text-gray-900">Recent Contributions</h3>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {DEMO_RECENT_CONTRIBUTIONS.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
-                      c.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                    }`}>
-                      {c.name[0]}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">{c.name}</div>
-                      {c.foundingMember && (
-                        <span className="text-[10px] text-amber-600 font-medium">Founding Member</span>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    c.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                  }`}>
-                    {c.type === "business_owner" ? "Business" : "Consumer"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-bold text-gray-900">{fmt(c.amount)}</td>
-                <td className="px-4 py-3 text-gray-500">
-                  {new Date(c.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </td>
+      {contributions.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Coins className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No contributions recorded yet</p>
+          <p className="text-xs text-gray-400 mt-1">Donations and pledges made towards this campaign will be listed here.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y">
+              {contributions.map((c) => {
+                const name = c.donorName || c.user?.name || (c.type === "business_owner" ? "Business Donor" : "Community Donor");
+                const isBiz = c.donorType === "business" || c.type === "business_owner";
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+                          isBiz ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                        }`}>
+                          {name[0] || "D"}
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{name}</div>
+                          {c.isFoundingMember && (
+                            <span className="text-[10px] text-amber-600 font-medium">Founding Member</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isBiz ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                      }`}>
+                        {isBiz ? "Business" : "Consumer"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{fmt(c.amount || 0)}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -933,11 +1010,11 @@ export default function AdminCampaignDetailPage() {
   };
 
   const renderRewardActivity = () => {
-    const totalClaimed = DEMO_REWARDS.reduce((s, r) => s + r.claimed, 0);
-    const totalFulfilled = DEMO_REWARDS.reduce((s, r) => s + r.fulfilled, 0);
-    const totalRedeemed = DEMO_REWARDS.reduce((s, r) => s + r.redeemed, 0);
-    const totalExpired = DEMO_REWARDS.reduce((s, r) => s + r.expired, 0);
-    const totalIssued = DEMO_REWARDS.reduce((s, r) => s + r.quantity, 0);
+    const totalClaimed = rewards.reduce((s, r) => s + (r.claimedCount ?? r.claimed ?? 0), 0);
+    const totalFulfilled = rewards.reduce((s, r) => s + (r.fulfilledCount ?? r.fulfilled ?? 0), 0);
+    const totalRedeemed = rewards.reduce((s, r) => s + (r.redeemedCount ?? r.redeemed ?? 0), 0);
+    const totalExpired = rewards.reduce((s, r) => s + (r.expiredCount ?? r.expired ?? 0), 0);
+    const totalIssued = rewards.reduce((s, r) => s + (r.maxQuantity ?? r.quantity ?? 0), 0);
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -975,27 +1052,38 @@ export default function AdminCampaignDetailPage() {
           <div className="p-4 border-b bg-gray-50">
             <h3 className="text-sm font-bold text-gray-900">Per-Reward Breakdown</h3>
           </div>
-          <div className="divide-y">
-            {DEMO_REWARDS.map((r) => {
-              const claimRate = r.quantity > 0 ? Math.round((r.claimed / r.quantity) * 100) : 0;
-              return (
-                <div key={r.id} className="px-4 py-3 hover:bg-gray-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900">{r.name}</span>
-                    <span className="text-xs text-gray-500">{claimRate}% claimed</span>
+          {rewards.length === 0 ? (
+            <div className="p-8 text-center text-sm text-gray-500">
+              <Gift className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+              No reward activity to display.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {rewards.map((r) => {
+                const qty = r.maxQuantity ?? r.quantity ?? 0;
+                const claimed = r.claimedCount ?? r.claimed ?? 0;
+                const fulfilled = r.fulfilledCount ?? r.fulfilled ?? 0;
+                const redeemed = r.redeemedCount ?? r.redeemed ?? 0;
+                const claimRate = qty > 0 ? Math.round((claimed / qty) * 100) : 0;
+                return (
+                  <div key={r.id} className="px-4 py-3 hover:bg-gray-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-900">{r.title || r.name}</span>
+                      <span className="text-xs text-gray-500">{claimRate}% claimed</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${claimRate}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <span>{claimed}/{qty || "∞"} claimed</span>
+                      <span>{fulfilled} fulfilled</span>
+                      <span>{redeemed} redeemed</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary-500 rounded-full" style={{ width: `${claimRate}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                    <span>{r.claimed}/{r.quantity} claimed</span>
-                    <span>{r.fulfilled} fulfilled</span>
-                    <span>{r.redeemed} redeemed</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1006,30 +1094,38 @@ export default function AdminCampaignDetailPage() {
       <div className="p-4 border-b bg-gray-50">
         <h3 className="text-sm font-bold text-gray-900">Campaign Leaderboard</h3>
       </div>
-      <div className="divide-y">
-        {DEMO_LEADERBOARD.map((entry) => (
-          <div key={entry.position} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${
-                entry.position === 1 ? "bg-amber-100 text-amber-700" :
-                entry.position === 2 ? "bg-gray-200 text-gray-700" :
-                entry.position === 3 ? "bg-orange-100 text-orange-700" :
-                "bg-gray-100 text-gray-600"
-              }`}>
-                {entry.position <= 3 ? <Trophy className="h-4 w-4" /> : `#${entry.position}`}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{entry.name}</div>
-                <div className="text-[10px] text-gray-400">
-                  {entry.type === "business_owner" ? "Business Owner" : "Consumer"}
-                  {entry.foundingMember && " · Founding Member"}
+      {leaderboard.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Trophy className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No leaderboard entries yet</p>
+          <p className="text-xs text-gray-400 mt-1">Once contributions start coming in, the top contributors will appear here.</p>
+        </div>
+      ) : (
+        <div className="divide-y">
+          {leaderboard.map((entry) => (
+            <div key={entry.position} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${
+                  entry.position === 1 ? "bg-amber-100 text-amber-700" :
+                  entry.position === 2 ? "bg-gray-200 text-gray-700" :
+                  entry.position === 3 ? "bg-orange-100 text-orange-700" :
+                  "bg-gray-100 text-gray-600"
+                }`}>
+                  {entry.position <= 3 ? <Trophy className="h-4 w-4" /> : `#${entry.position}`}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{entry.name}</div>
+                  <div className="text-[10px] text-gray-400">
+                    {entry.type === "business_owner" ? "Business Owner" : "Consumer"}
+                    {entry.foundingMember && " · Founding Member"}
+                  </div>
                 </div>
               </div>
+              <div className="text-sm font-bold text-gray-900">{fmt(entry.amount)}</div>
             </div>
-            <div className="text-sm font-bold text-gray-900">{fmt(entry.amount)}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -1157,7 +1253,7 @@ export default function AdminCampaignDetailPage() {
           <div>
             <div className="text-sm font-medium text-gray-900">Locations</div>
             <div className="text-xs text-gray-500">
-              {found && coverage ? summarizeCoverage({ ...found, coverage }) : "—"}
+              {coverage ? summarizeCoverage(coverage) : "—"}
             </div>
           </div>
           <button
@@ -1377,7 +1473,7 @@ export default function AdminCampaignDetailPage() {
             </button>
           )}
 
-          {status === "CHANGES_REQUIRED" && (
+          {(status === "CHANGES_REQUIRED" || status === "CHANGES_REQUESTED") && (
             <button
               onClick={handleSubmitForReview}
               className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
@@ -1387,7 +1483,7 @@ export default function AdminCampaignDetailPage() {
           )}
 
           <Link
-            to={found ? getAdminCampaignPublicPath(found) : `/campaigns/${campaign.id}`}
+            to={campaignData ? getAdminCampaignPublicPath(campaignData) : `/campaigns/${campaign.id}`}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             <Eye className="h-3.5 w-3.5" /> Public View
@@ -1455,7 +1551,7 @@ export default function AdminCampaignDetailPage() {
       )}
 
       {/* Changes Required Banner */}
-      {status === "CHANGES_REQUIRED" && (
+      {(status === "CHANGES_REQUIRED" || status === "CHANGES_REQUESTED") && (
         <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 mb-6">
           <div className="flex items-start gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
@@ -1576,15 +1672,18 @@ function CoverageEditorModal({
     onPostcodeInput("");
   };
 
-  const ukCities = [
-    { slug: "london", name: "London" },
-    { slug: "birmingham", name: "Birmingham" },
-    { slug: "manchester", name: "Manchester" },
-    { slug: "leeds", name: "Leeds" },
-    { slug: "glasgow", name: "Glasgow" },
-    { slug: "bristol", name: "Bristol" },
-    { slug: "liverpool", name: "Liverpool" },
-  ];
+  const { data: hubCitiesData } = useQuery({
+    queryKey: ["hubCities"],
+    queryFn: fetchHubCities,
+  });
+
+  const ukCities = useMemo(() => {
+    if (hubCitiesData && hubCitiesData.length > 0) {
+      return hubCitiesData.map((c) => ({ slug: c.slug, name: c.name }));
+    }
+    return [];
+  }, [hubCitiesData]);
+
   const filteredCities = ukCities.filter((c) => match(c.name));
   const areaOptions = draft.cities.map((citySlug) => ({
     citySlug,

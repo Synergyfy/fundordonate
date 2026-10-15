@@ -301,8 +301,12 @@ export class AdminSeasonsService {
       data: updateData,
     });
 
-    // Recalculate season rollup
+    // Recalculate season rollup and cascade lifecycle to linked campaigns
     await this.adminQueue.add("season-target-rollup", { seasonId: id });
+    await this.adminQueue.add("season-transition", {
+      seasonId: id,
+      action: actionDto.action,
+    });
 
     return {
       success: true,
@@ -369,10 +373,22 @@ export class AdminSeasonsService {
     const completedCampaigns = campaigns.filter((c) => c.status === BusinessCampaignStatus.COMPLETED).length;
     const activeCampaigns = campaigns.filter((c) => c.status === BusinessCampaignStatus.ACTIVE).length;
 
+    const mappedSeason = {
+      ...season,
+      overallTarget: Number(season.overallTarget),
+      nationalTarget: Number(season.nationalTarget),
+      cityTargetDefault: Number(season.cityTargetDefault),
+      localAreaTargetDefault: Number(season.localAreaTargetDefault),
+      highStreetTargetDefault: Number(season.highStreetTargetDefault),
+      businessCampaignTargetDefault: Number(season.businessCampaignTargetDefault),
+      totalRaised: Number(season.totalRaised),
+    };
+
     return {
       seasonId: id,
       seasonName: season.name,
       status: season.status,
+      season: mappedSeason,
       metrics: {
         overallTarget: target,
         totalRaised,

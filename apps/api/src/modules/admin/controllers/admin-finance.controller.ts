@@ -6,7 +6,6 @@ import {
   Post,
   Put,
   Query,
-  Req,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -16,6 +15,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
+import { CurrentUser } from "@/auth/decorators/current-user.decorator";
 import { AdminGuard } from "../guards/admin.guard";
 import { AdminFinanceService } from "../services/admin-finance.service";
 import {
@@ -24,7 +24,6 @@ import {
   RefundDonationDto,
   UpdatePayoutStatusDto,
 } from "../dto/finance-admin.dto";
-import { Request } from "express";
 
 @ApiTags("Admin Finance")
 @ApiBearerAuth()
@@ -57,10 +56,20 @@ export class AdminFinanceController {
   async refundDonation(
     @Param("id") id: string,
     @Body() dto: RefundDonationDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.financeService.refundDonation(id, dto, adminUserId);
+  }
+
+  @Put("donations/:id/status")
+  @ApiOperation({ summary: "Update a contribution/donation lifecycle status" })
+  @ApiResponse({ status: 200, description: "Contribution status updated" })
+  async updateDonationStatus(
+    @Param("id") id: string,
+    @Body("status") status: string,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.financeService.updateContributionStatus(id, status, adminUserId);
   }
 
   @Get("pledges")
@@ -68,6 +77,17 @@ export class AdminFinanceController {
   @ApiResponse({ status: 200, description: "Successfully retrieved pledges" })
   async getPledges(@Query() query: DonationsQueryDto) {
     return this.financeService.getDonations(query);
+  }
+
+  @Put("pledges/:id/status")
+  @ApiOperation({ summary: "Update a pledge lifecycle status" })
+  @ApiResponse({ status: 200, description: "Pledge status updated" })
+  async updatePledgeStatus(
+    @Param("id") id: string,
+    @Body("status") status: string,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.financeService.updateContributionStatus(id, status, adminUserId);
   }
 
   // ---------------------------------------------------------------------------
@@ -94,9 +114,8 @@ export class AdminFinanceController {
   async updatePayoutStatus(
     @Param("id") id: string,
     @Body() dto: UpdatePayoutStatusDto,
-    @Req() req: Request,
+    @CurrentUser("id") adminUserId: string,
   ) {
-    const adminUserId = (req.user as any)?.id;
     return this.financeService.updatePayoutStatus(id, dto, adminUserId);
   }
 }

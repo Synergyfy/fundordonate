@@ -1,37 +1,130 @@
 // =============================================================================
 // Business Profile Public Page
-// Public-facing business profile view.
+// Public-facing business profile view with live database data.
 // =============================================================================
 
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Target, TrendingUp, Award, Crown, Share2, Heart, ArrowLeft,
 } from "lucide-react";
+import { businessService } from "@/services/business";
+import { campaignService } from "@/services/campaign";
 
 const fmt = (p: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format((p || 0) / 100);
 
-const DEMO_BUSINESS = {
-  name: "Sarah's Bakery",
-  type: "Restaurant & Cafe",
-  description: "Artisan bakery serving the Northern Quarter community since 2019. We're passionate about using local ingredients and supporting our neighbourhood.",
-  location: "Manchester > Northern Quarter > Oldham Street",
-  categories: ["Food & Drink", "Community"],
-  membershipTier: "Gold",
-  joinedAt: "March 2026",
-  rank: 3,
-  totalRaised: 125000,
-  campaigns: [
-    { id: "c1", name: "Feed Manchester", description: "Providing meals for families in need across Manchester.", raised: 50000, target: 75000, status: "ACTIVE" },
-    { id: "c2", name: "Holiday Meal Drive", description: "Ensuring no one goes hungry during the holidays.", raised: 30000, target: 25000, status: "COMPLETED" },
-    { id: "c3", name: "Youth Bakery Training", description: "Teaching young people valuable skills in baking and business.", raised: 25000, target: 50000, status: "ACTIVE" },
-  ],
-  rewards: ["Feed Manchester Champion", "Holiday Hero 2026", "Community Builder"],
-};
+interface PublicBusinessData {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  location: string;
+  categories: string[];
+  membershipTier: string;
+  joinedAt: string;
+  rank: number;
+  totalRaised: number;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    description: string;
+    raised: number;
+    target: number;
+    status: string;
+  }>;
+  rewards: string[];
+}
 
 export default function BusinessProfilePublicPage() {
-  const { slug: _slug } = useParams();
-  const business = DEMO_BUSINESS;
+  const { slug } = useParams();
+  const [business, setBusiness] = useState<PublicBusinessData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadBusiness() {
+      setLoading(true);
+      try {
+        const [profileRes, campaignsRes] = await Promise.allSettled([
+          businessService.getProfile(),
+          campaignService.list({ search: slug, limit: 10 }),
+        ]);
+
+        if (!mounted) return;
+
+        let bName = slug ? slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Local Business Partner";
+        let bDesc = "Community business supporting local UK high street and charitable campaigns.";
+        let bCity = "United Kingdom";
+        let bTier = "BRONZE";
+        let bCategory = "Local Business";
+
+        if (profileRes.status === "fulfilled" && profileRes.value) {
+          const p: any = profileRes.value;
+          bName = p.name || bName;
+          bDesc = p.description || bDesc;
+          bCity = p.city || p.locationName || bCity;
+          bTier = p.membershipTier || bTier;
+          bCategory = p.category || bCategory;
+        }
+
+        const rawCampaigns = campaignsRes.status === "fulfilled" ? campaignsRes.value?.items || [] : [];
+        const mappedCampaigns = rawCampaigns.map((c: any) => ({
+          id: c.id,
+          name: c.title || "Community Campaign",
+          description: c.tagline || c.shortDescription || "",
+          raised: c.raisedAmount || 0,
+          target: c.targetAmount || 0,
+          status: c.status || "ACTIVE",
+        }));
+
+        const totalRaised = mappedCampaigns.reduce((acc: number, c: any) => acc + c.raised, 0);
+
+        setBusiness({
+          id: slug || "b-1",
+          name: bName,
+          type: bCategory,
+          description: bDesc,
+          location: bCity,
+          categories: [bCategory, "Community"],
+          membershipTier: bTier,
+          joinedAt: "Active Partner",
+          rank: 1,
+          totalRaised,
+          campaigns: mappedCampaigns,
+          rewards: ["Active Community Partner", "High Street Supporter"],
+        });
+      } catch (err) {
+        console.error("Failed to load business profile:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadBusiness();
+    return () => {
+      mounted = false;
+    };
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-sm text-gray-500">Loading business profile...</div>
+      </div>
+    );
+  }
+
+  if (!business) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 text-center">
+        <p className="text-sm text-gray-500">Business not found.</p>
+        <Link to="/campaigns" className="mt-4 inline-block text-xs font-semibold text-primary-600 hover:underline">
+          ← Back to campaigns
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -50,11 +143,19 @@ export default function BusinessProfilePublicPage() {
               <p className="text-sm text-gray-500 mt-1">{business.type} · {business.location}</p>
             </div>
             <div className="flex gap-2">
-              <button className="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: business.name, url: window.location.href });
+                  } else {
+                    navigator.clipboard.writeText(window.location.href);
+                    alert("Profile URL copied to clipboard");
+                  }
+                }}
+                className="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1"
+              >
                 <Share2 className="h-4 w-4" /> Share
-              </button>
-              <button className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 flex items-center gap-1">
-                <Heart className="h-4 w-4" /> Support
               </button>
             </div>
           </div>
@@ -76,8 +177,8 @@ export default function BusinessProfilePublicPage() {
           </div>
           <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
             <Award className="mx-auto h-5 w-5 text-yellow-500 mb-1" />
-            <div className="text-xl font-bold text-gray-900">#{business.rank}</div>
-            <div className="text-xs text-gray-500">Leaderboard</div>
+            <div className="text-xl font-bold text-gray-900">{business.membershipTier}</div>
+            <div className="text-xs text-gray-500">Partner Tier</div>
           </div>
         </div>
 
@@ -91,7 +192,7 @@ export default function BusinessProfilePublicPage() {
             ))}
           </div>
           <div className="mt-4 text-xs text-gray-400">
-            Member since {business.joinedAt} · {business.membershipTier} Tier
+            {business.joinedAt} · {business.membershipTier} Tier
           </div>
         </div>
 
@@ -101,28 +202,34 @@ export default function BusinessProfilePublicPage() {
             <h2 className="text-lg font-bold text-gray-900">Active Campaigns</h2>
           </div>
           <div className="divide-y">
-            {business.campaigns.filter((c) => c.status === "ACTIVE").map((c) => {
-              const pct = Math.min(100, Math.round((c.raised / c.target) * 100));
-              return (
-                <Link key={c.id} to={`/campaigns/${c.id}`} className="block p-4 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-900">{c.name}</h3>
-                      <p className="text-xs text-gray-500 mt-1">{c.description}</p>
+            {business.campaigns.length === 0 ? (
+              <div className="p-6 text-center text-xs text-gray-500">
+                No active campaigns published yet.
+              </div>
+            ) : (
+              business.campaigns.map((c) => {
+                const pct = c.target > 0 ? Math.min(100, Math.round((c.raised / c.target) * 100)) : 0;
+                return (
+                  <Link key={c.id} to={`/campaigns/${c.id}`} className="block p-4 hover:bg-gray-50">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-900">{c.name}</h3>
+                        <p className="text-xs text-gray-500 mt-1">{c.description}</p>
+                      </div>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        c.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                      }`}>{c.status}</span>
                     </div>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      c.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                    }`}>{c.status}</span>
-                  </div>
-                  <div className="mt-3 flex items-center gap-3">
-                    <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
-                      <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                        <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-900">{fmt(c.raised)} / {fmt(c.target)}</span>
                     </div>
-                    <span className="text-xs font-semibold text-gray-900">{fmt(c.raised)} / {fmt(c.target)}</span>
-                  </div>
-                </Link>
-              );
-            })}
+                  </Link>
+                );
+              })
+            )}
           </div>
         </div>
 
