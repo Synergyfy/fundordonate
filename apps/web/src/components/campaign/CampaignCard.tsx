@@ -46,11 +46,9 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
     ? `${campaign.author.firstName || ""} ${campaign.author.lastName || ""}`.trim() || campaign.author.username
     : "Anonymous";
 
-  const modeLabel = campaign.mode === "fund" ? "Fund" : campaign.mode === "sponsor" ? "Sponsor" : "Donate";
+  const modeLabel = campaign.mode === "fund" ? "Fund" : "Donate";
   const modeColor = campaign.mode === "fund"
     ? "bg-primary-500/90 text-white"
-    : campaign.mode === "sponsor"
-    ? "bg-amber-500/90 text-white"
     : "bg-secondary-500/90 text-white";
 
   const ariaLabel = getCampaignCardAriaLabel(campaign);
@@ -78,32 +76,30 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
           </div>
         )}
 
-        {/* Mode Badge */}
-        <div className="absolute left-3 top-3 flex items-center gap-1.5">
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur ${modeColor}`}>
-            {modeLabel}
-          </span>
-          {campaign.hierarchyLevel && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-gray-700 backdrop-blur">
-              <span>{campaign.hierarchyLevel === "national" ? "🇬🇧" : campaign.hierarchyLevel === "city" ? "🏙️" : campaign.hierarchyLevel === "borough" ? "🏘️" : campaign.hierarchyLevel === "high_street" ? "🛒" : "🏢"}</span>
-              <span className="capitalize">{campaign.hierarchyLevel.replace("_", " ")}</span>
+        {/* Top bar — badges + days left (single row so they never overlap) */}
+        <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur ${modeColor}`}>
+              {modeLabel}
             </span>
-          )}
-          {campaign.creatorType === "business" && (
-            <span className="inline-flex items-center rounded-full bg-blue-100/90 px-2 py-0.5 text-[10px] font-bold text-blue-700 backdrop-blur">
-              Business
+            {campaign.hierarchyLevel && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-gray-700 backdrop-blur">
+                <span>{campaign.hierarchyLevel === "national" ? "🇬🇧" : campaign.hierarchyLevel === "city" ? "🏙️" : campaign.hierarchyLevel === "borough" ? "🏘️" : campaign.hierarchyLevel === "high_street" ? "🛒" : "🏢"}</span>
+                <span className="capitalize">{campaign.hierarchyLevel.replace("_", " ")}</span>
+              </span>
+            )}
+            {campaign.creatorType === "business" && (
+              <span className="inline-flex items-center rounded-full bg-blue-100/90 px-2 py-0.5 text-[10px] font-bold text-blue-700 backdrop-blur">
+                Business
+              </span>
+            )}
+          </div>
+          {daysLeft > 0 && (
+            <span className="flex-shrink-0 whitespace-nowrap rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
+              {daysLeft}d left
             </span>
           )}
         </div>
-
-        {/* Days Left */}
-        {daysLeft > 0 && (
-          <div className="absolute right-3 top-3">
-            <span className="inline-flex items-center rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur">
-              {daysLeft}d left
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Content */}

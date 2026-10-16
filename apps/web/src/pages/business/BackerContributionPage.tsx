@@ -6,15 +6,14 @@
 import { useParams, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import {
   ArrowLeft, ArrowRight, CheckCircle, Target,
   Clock, CreditCard, Calendar, CreditCard as PaypalIcon,
   Building2, MonitorSmartphone, Shield,
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
-import type { DemoCampaign } from "@/data/demo";
-import { getDemoCampaignsForLocation, HUB_LOCATIONS } from "@/data/hubActivation";
+import { campaignApi } from "@/services/campaign";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
@@ -87,22 +86,18 @@ export default function BackerContributionPage() {
   const ctx = isConsumerContext ? "consumer" : "business";
   const [searchParams] = useSearchParams();
   const campaignSlugFromUrl = searchParams.get("campaign");
-  const campaignFromState = (location.state as { campaign?: DemoCampaign })?.campaign ?? null;
+  const campaignFromState = (location.state as { campaign?: any })?.campaign ?? null;
 
-  const mapLoc = useMemo(
-    () => HUB_LOCATIONS.find(l => l.slug === citySlug) ?? null,
-    [citySlug],
-  );
-
-  const campaigns = useMemo(() => {
-    if (!mapLoc) return [];
-    return getDemoCampaignsForLocation(mapLoc);
-  }, [mapLoc]);
+  const { data: campaignsResponse } = useQuery({
+    queryKey: ["campaigns", highStreetSlug || localAreaSlug || citySlug],
+    queryFn: () => (campaignApi.list as any)({ location: highStreetSlug || localAreaSlug || citySlug, limit: 10 }),
+  });
+  const campaigns = (campaignsResponse?.items ?? (campaignsResponse as any)?.data ?? []) as any[];
 
   const campaign = useMemo(() => {
     if (campaignFromState) return campaignFromState;
-    if (campaignSlugFromUrl) return campaigns.find(c => c.slug === campaignSlugFromUrl) ?? null;
-    return null;
+    if (campaignSlugFromUrl) return campaigns.find((c) => c.slug === campaignSlugFromUrl) ?? null;
+    return campaigns[0] ?? null;
   }, [campaignFromState, campaignSlugFromUrl, campaigns]);
 
   const [step, setStep] = useState<Step>("amount");

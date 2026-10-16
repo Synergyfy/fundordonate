@@ -14,11 +14,11 @@ packages/*/src/*.js.map
 packages/*/src/*.d.ts.map
 
 # Environment files
+# Ignore every real env file (.env, .env.local, .env.production, .env.staging, …)
+# but keep the committed templates.
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # Database
 *.db

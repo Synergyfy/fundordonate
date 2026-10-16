@@ -3,7 +3,7 @@ import { PostList } from "./PostList";
 import { PostComposer } from "./PostComposer";
 import { Leaderboard } from "./Leaderboard";
 import { Gift, Clock, CheckCircle } from "lucide-react";
-import type { DemoReward } from "@/data/demoRewards";
+import type { DemoReward } from "@/types/rewards";
 
 interface Faq {
   question: string;
@@ -17,7 +17,6 @@ interface Props {
   faqs: Faq[];
   campaignId: string;
   isAuthor?: boolean;
-  mode?: string;
   goalAmount?: number;
   raisedAmount?: number;
   deadline?: string;
@@ -49,7 +48,6 @@ export function CampaignTabs({
   faqs,
   campaignId,
   isAuthor,
-  mode,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("story");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -119,11 +117,15 @@ export function CampaignTabs({
               <p className="text-gray-500 italic">No rewards available for this campaign.</p>
             ) : (
               rewards
-                .sort((a, b) => a.order - b.order)
+                .slice()
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                 .map((reward) => {
+                  const claimed = reward.quantityClaimed ?? 0;
+                  const limit = reward.quantityLimit ?? 0;
                   const isSoldOut = reward.quantityType === "limited" &&
                     reward.quantityLimit !== null &&
-                    reward.quantityClaimed >= reward.quantityLimit;
+                    reward.quantityLimit !== undefined &&
+                    claimed >= limit;
 
                   return (
                     <div key={reward.id} className={`rounded-xl border p-5 ${isSoldOut ? "border-gray-200 bg-gray-50 opacity-60" : "border-gray-200"}`}>
@@ -143,9 +145,9 @@ export function CampaignTabs({
                             {getTriggerLabel(reward)}
                           </p>
                         </div>
-                        {reward.quantityType === "limited" && reward.quantityLimit !== null && (
+                        {reward.quantityType === "limited" && reward.quantityLimit !== null && reward.quantityLimit !== undefined && (
                           <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700">
-                            {reward.quantityClaimed}/{reward.quantityLimit} claimed
+                            {claimed}/{limit} claimed
                           </span>
                         )}
                       </div>
@@ -170,7 +172,7 @@ export function CampaignTabs({
                       )}
 
                       <div className="mt-3 flex items-center gap-3 text-[11px] text-gray-400">
-                        {reward.claimDeadlineDays > 0 && (
+                        {Boolean(reward.claimDeadlineDays && reward.claimDeadlineDays > 0) && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             Claim within {reward.claimDeadlineDays} days
@@ -185,7 +187,7 @@ export function CampaignTabs({
 
                       {!isSoldOut && (
                         <button className="btn-primary mt-4 w-full">
-                          {mode === "fund" ? "Select This Reward" : mode === "sponsor" ? "Become a Partner" : "Select This Reward"}
+                          Select This Reward
                         </button>
                       )}
                     </div>

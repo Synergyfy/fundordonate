@@ -1,6 +1,5 @@
 export { default as LoginPage } from "./LoginPage";
+export { default as AdminLoginPage } from "./AdminLoginPage";
 export { default as RegisterPage } from "./RegisterPage";
-export { default as ForgotPasswordPage } from "./ForgotPasswordPage";
-export { default as ResetPasswordPage } from "./ResetPasswordPage";
-export { default as VerifyEmailPage } from "./VerifyEmailPage";
 export { default as CentralHubCallbackPage } from "./CentralHubCallbackPage";
+export { default as UpgradePage } from "./UpgradePage";

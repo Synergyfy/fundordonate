@@ -1,783 +1,1075 @@
-import { PrismaClient } from "@prisma/client";
+import {
+  BusinessCampaignStatus,
+  ContributionStatus,
+  ContributionType,
+  HubLocationType,
+  MembershipTier,
+  PreferredAudience,
+  PrismaClient,
+  TemplateApprovalMode,
+  TemplateOrigin,
+} from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-// =============================================================================
-// Seed Data — FundOrDonate Development/Demo Data
-// This data is for development, presentation, and authorization testing.
-// It must NOT be treated as production business rules.
-// =============================================================================
+async function main() {
+  console.log("Starting database seed with live nationwide data...");
 
-const SALT_ROUNDS = 12;
+  // 1. Seed Platform Admins
+  const centralHubEmail = "admin@centralhubsolution.com";
+  const centralHubPassword = "AdminPass2026!";
+  const hashedChPassword = await bcrypt.hash(centralHubPassword, 10);
 
-async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
-
-// =============================================================================
-// Users
-// =============================================================================
-
-async function seedUsers() {
-  console.log("Seeding users...");
-
-  const password = await hashPassword("password123");
-
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@growfund.io" },
-    update: {},
-    create: {
-      email: "admin@growfund.io",
-      username: "admin",
-      password,
-      firstName: "Sarah",
-      lastName: "Mitchell",
+  const centralHubAdmin = await prisma.user.upsert({
+    where: { email: centralHubEmail },
+    update: {
+      password: hashedChPassword,
       role: "admin",
       userType: "admin",
-      emailVerified: true,
     },
-  });
-
-  const fundraiser = await prisma.user.upsert({
-    where: { email: "fundraiser@growfund.io" },
-    update: {},
     create: {
-      email: "fundraiser@growfund.io",
-      username: "fundraiser",
-      password,
-      firstName: "James",
-      lastName: "Rodriguez",
-      role: "fundraiser",
-      userType: "business",
-      businessId: "B-1001",
-      emailVerified: true,
+      email: centralHubEmail,
+      username: "admin_centralhub",
+      password: hashedChPassword,
+      firstName: "CentralHub",
+      lastName: "Admin",
+      role: "admin",
+      userType: "admin",
     },
   });
+  console.log(`Seeded admin user: ${centralHubAdmin.email}`);
 
-  const fundraiser2 = await prisma.user.upsert({
-    where: { email: "fundraiser2@growfund.io" },
-    update: {},
-    create: {
-      email: "fundraiser2@growfund.io",
-      username: "fundraiser2",
-      password,
-      firstName: "Priya",
-      lastName: "Sharma",
-      role: "fundraiser",
-      userType: "business",
-      businessId: "B-1002",
-      emailVerified: true,
-    },
-  });
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@fundordonate.com";
+  if (adminEmail !== centralHubEmail) {
+    const adminUsername = process.env.SEED_ADMIN_USERNAME ?? "admin";
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "Admin123!";
+    const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
 
-  const consumer = await prisma.user.upsert({
-    where: { email: "user@growfund.io" },
-    update: {},
-    create: {
-      email: "user@growfund.io",
-      username: "user",
-      password,
-      firstName: "Emily",
-      lastName: "Watson",
-      role: "donor",
-      userType: "consumer",
-      emailVerified: true,
-    },
-  });
-
-  const collaborator = await prisma.user.upsert({
-    where: { email: "collaborator@growfund.io" },
-    update: {},
-    create: {
-      email: "collaborator@growfund.io",
-      username: "collaborator",
-      password,
-      firstName: "David",
-      lastName: "Chen",
-      role: "collaborator",
-      userType: "consumer",
-      emailVerified: true,
-    },
-  });
-
-  const backer = await prisma.user.upsert({
-    where: { email: "backer@growfund.io" },
-    update: {},
-    create: {
-      email: "backer@growfund.io",
-      username: "backer",
-      password,
-      firstName: "Olivia",
-      lastName: "Brown",
-      role: "backer",
-      userType: "consumer",
-      emailVerified: true,
-    },
-  });
-
-  return { admin, fundraiser, fundraiser2, consumer, collaborator, backer };
-}
-
-// =============================================================================
-// Categories
-// =============================================================================
-
-async function seedCategories() {
-  console.log("Seeding categories...");
-
-  const categories = [
-    { name: "Community", slug: "community", description: "Local community projects and initiatives", order: 1 },
-    { name: "Local Hub", slug: "local-hub", description: "Neighbourhood hub development and support", order: 2 },
-    { name: "Business", slug: "business", description: "Business funding and growth campaigns", order: 3 },
-    { name: "High Street", slug: "high-street", description: "High street regeneration and support", order: 4 },
-    { name: "Education", slug: "education", description: "Educational programmes and resources", order: 5 },
-    { name: "Health", slug: "health", description: "Health and wellbeing initiatives", order: 6 },
-    { name: "Founding Membership", slug: "founding-membership", description: "Founding membership campaigns", order: 7 },
-    { name: "MCOM Rewards", slug: "mcom-rewards", description: "MCOM reward and loyalty campaigns", order: 8 },
-  ];
-
-  const results = [];
-  for (const cat of categories) {
-    const existing = await prisma.category.findUnique({ where: { slug: cat.slug } });
-    if (!existing) {
-      results.push(await prisma.category.create({ data: cat }));
-    } else {
-      results.push(existing);
-    }
+    const admin = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        password: hashedAdminPassword,
+        role: "admin",
+        userType: "admin",
+      },
+      create: {
+        email: adminEmail,
+        username: adminUsername,
+        password: hashedAdminPassword,
+        firstName: "Platform",
+        lastName: "Admin",
+        role: "admin",
+        userType: "admin",
+      },
+    });
+    console.log(`Seeded fallback admin user: ${admin.email}`);
   }
-  return results;
-}
 
-// =============================================================================
-// Tags
-// =============================================================================
-
-async function seedTags() {
-  console.log("Seeding tags...");
-
-  const tagNames = [
-    "Local Hub", "High Street", "Business", "Community", "MCOM",
-    "Rewards", "Loyalty", "Backer Status", "Founding Membership",
-    "Partner Hub", "76 City Hubs", "Cost-Neutral",
-  ];
-
-  const results = [];
-  for (const name of tagNames) {
-    const slug = name.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-");
-    const existing = await prisma.tag.findUnique({ where: { slug } });
-    if (!existing) {
-      results.push(await prisma.tag.create({ data: { name, slug } }));
-    } else {
-      results.push(existing);
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaign Types
-// =============================================================================
-
-async function seedCampaignTypes() {
-  console.log("Seeding campaign types...");
-
-  const types = [
-    { name: "Local Hub", slug: "local-hub", description: "Neighbourhood hub campaigns", status: "active" as const },
-    { name: "Business", slug: "business", description: "Business funding campaigns", status: "active" as const },
-    { name: "Community", slug: "community", description: "Community initiative campaigns", status: "active" as const },
-    { name: "High Street", slug: "high-street", description: "High street regeneration campaigns", status: "active" as const },
-    { name: "Membership", slug: "membership", description: "Membership-based campaigns", status: "active" as const },
-    // Campaign Architecture: Opportunity Types
-    { name: "Founding Membership", slug: "founding-membership", description: "Consumer founding membership drives", status: "active" as const, isOpportunity: true, eligibleTiers: '["silver","gold","platinum"]', eligibleLevels: '["standard","pro","pro+"]', parentInitiative: "MCOM Programme" },
-    { name: "Self-Funding", slug: "self-funding", description: "Business owner self-funding campaigns", status: "active" as const, isOpportunity: true, eligibleTiers: '["bronze","silver","gold","platinum"]', eligibleLevels: '["standard","pro","pro+"]', parentInitiative: "Self-Funding" },
-    { name: "Sponsorship", slug: "sponsorship", description: "Sponsor-level partnership campaigns", status: "active" as const, isOpportunity: true, eligibleTiers: '["gold","platinum"]', eligibleLevels: '["pro","pro+"]', parentInitiative: "Sponsor Network" },
-    { name: "MCOM Programme", slug: "mcom-programme", description: "National MCOM Community Cost-Neutral Funding", status: "active" as const, isOpportunity: true, eligibleTiers: '["bronze","silver","gold","platinum"]', eligibleLevels: '["standard","pro","pro+"]', parentInitiative: "MCOM Programme" },
-    { name: "247GBS Programme", slug: "247gbs", description: "247GBS 76 UK City Hubs initiative", status: "active" as const, isOpportunity: true, eligibleTiers: '["silver","gold","platinum"]', eligibleLevels: '["pro","pro+"]', parentInitiative: "247GBS" },
-  ];
-
-  const results = [];
-  for (const type of types) {
-    const existing = await prisma.campaignType.findUnique({ where: { slug: type.slug } });
-    if (!existing) {
-      results.push(await prisma.campaignType.create({ data: type }));
-    } else {
-      // Update with new fields if missing
-      if (existing.isOpportunity === false && (type as any).isOpportunity) {
-        const updated = await prisma.campaignType.update({
-          where: { id: existing.id },
-          data: {
-            isOpportunity: (type as any).isOpportunity || false,
-            eligibleTiers: (type as any).eligibleTiers || '[]',
-            eligibleLevels: (type as any).eligibleLevels || '[]',
-            parentInitiative: (type as any).parentInitiative || null,
-          },
-        });
-        results.push(updated);
-      } else {
-        results.push(existing);
-      }
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaign Seasons
-// =============================================================================
-
-async function seedSeasons() {
-  console.log("Seeding campaign seasons...");
-
-  const seasons = [
+  // 2. Seed Nationwide Hub Locations (Cities, Local Areas, High Streets)
+  const citiesData = [
     {
-      name: "Spring 2026",
-      slug: "spring-2026",
-      description: "Spring 2026 campaign season",
-      startDate: new Date("2026-03-20"),
-      endDate: new Date("2026-06-20"),
-      status: "active" as const,
+      name: "Manchester",
+      slug: "manchester",
+      status: "ACTIVATED",
+      progress: 81,
+      target: 25000000,
+      lat: 53.4808,
+      lon: -2.2426,
+      mapX: 37,
+      mapY: 38,
+      region: "North West",
+      shortDesc: "Growing city-wide Local Hub connecting Manchester High Streets to the National Hub Community.",
+      areas: [
+        { name: "Northern Quarter", slug: "northern-quarter", streets: ["Oldham Street", "Tib Street"] },
+        { name: "Ancoats", slug: "ancoats", streets: ["Cutting Room Square"] },
+      ],
     },
     {
-      name: "Summer 2026",
-      slug: "summer-2026",
-      description: "Summer 2026 campaign season",
-      startDate: new Date("2026-06-21"),
-      endDate: new Date("2026-09-22"),
-      status: "upcoming" as const,
+      name: "Camden",
+      slug: "camden",
+      status: "ACTIVATED",
+      progress: 92,
+      target: 20000000,
+      lat: 51.5455,
+      lon: -0.1416,
+      mapX: 52,
+      mapY: 86,
+      region: "London",
+      shortDesc: "Hyper Local Fund or Donate Hub active on Camden High Street, connecting local businesses and residents.",
+      areas: [
+        { name: "Camden Town", slug: "camden-town", streets: ["Camden High Street", "Chalk Farm Road"] },
+      ],
     },
     {
-      name: "Christmas 2026",
-      slug: "christmas-2026",
-      description: "Christmas 2026 campaign season",
-      startDate: new Date("2026-11-01"),
-      endDate: new Date("2026-12-31"),
-      status: "upcoming" as const,
-    },
-  ];
-
-  const results = [];
-  for (const season of seasons) {
-    const existing = await prisma.campaignSeason.findUnique({ where: { slug: season.slug } });
-    if (!existing) {
-      results.push(await prisma.campaignSeason.create({ data: season }));
-    } else {
-      results.push(existing);
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaign Groups
-// =============================================================================
-
-async function seedGroups() {
-  console.log("Seeding campaign groups...");
-
-  const groups = [
-    { name: "Christmas Campaigns", slug: "christmas-campaigns", description: "Seasonal Christmas campaigns" },
-    { name: "Back-to-School", slug: "back-to-school", description: "Back-to-school fundraising campaigns" },
-    { name: "Local Business Spotlight", slug: "local-business-spotlight", description: "Featured local business campaigns" },
-    { name: "Community Champions", slug: "community-champions", description: "Outstanding community initiative campaigns" },
-  ];
-
-  const results = [];
-  for (const group of groups) {
-    const existing = await prisma.campaignGroup.findUnique({ where: { slug: group.slug } });
-    if (!existing) {
-      results.push(await prisma.campaignGroup.create({ data: group }));
-    } else {
-      results.push(existing);
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaign Collections
-// =============================================================================
-
-async function seedCollections() {
-  console.log("Seeding campaign collections...");
-
-  const collections = [
-    { name: "Featured UK Business Funding", slug: "featured-uk-business-funding", description: "Curated selection of top UK business funding opportunities" },
-    { name: "Community Champions", slug: "community-champions-collection", description: "Outstanding community-driven campaigns" },
-    { name: "Editor's Pick", slug: "editors-pick", description: "Hand-picked campaigns by the FundorDonate team" },
-  ];
-
-  const results = [];
-  for (const collection of collections) {
-    const existing = await prisma.campaignCollection.findUnique({ where: { slug: collection.slug } });
-    if (!existing) {
-      results.push(await prisma.campaignCollection.create({ data: collection }));
-    } else {
-      results.push(existing);
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaign Events
-// =============================================================================
-
-async function seedEvents() {
-  console.log("Seeding campaign events...");
-
-  const events = [
-    {
-      name: "FundOrDonate Launch Event",
-      slug: "fundordonate-launch",
-      description: "Official launch of the FundorDonate platform",
-      startDate: new Date("2026-09-01"),
-      endDate: new Date("2026-09-30"),
+      name: "Birmingham",
+      slug: "birmingham",
+      status: "ACTIVATED",
+      progress: 74,
+      target: 22000000,
+      lat: 52.4862,
+      lon: -1.8904,
+      mapX: 43,
+      mapY: 58,
+      region: "West Midlands",
+      shortDesc: "Established community hub driving Business Contributor participation across the city.",
+      areas: [
+        { name: "Digbeth", slug: "digbeth", streets: ["Digbeth High Street", "Custard Factory"] },
+      ],
     },
     {
-      name: "Small Business Week 2026",
-      slug: "small-business-week-2026",
-      description: "Celebrating small businesses across the UK",
-      startDate: new Date("2026-10-06"),
-      endDate: new Date("2026-10-12"),
-    },
-  ];
-
-  const results = [];
-  for (const event of events) {
-    const existing = await prisma.campaignEvent.findUnique({ where: { slug: event.slug } });
-    if (!existing) {
-      results.push(await prisma.campaignEvent.create({ data: event }));
-    } else {
-      results.push(existing);
-    }
-  }
-  return results;
-}
-
-// =============================================================================
-// Campaigns
-// =============================================================================
-
-async function seedCampaigns(
-  users: Awaited<ReturnType<typeof seedUsers>>,
-  categories: Awaited<ReturnType<typeof seedCategories>>,
-  tags: Awaited<ReturnType<typeof seedTags>>,
-  campaignTypes: Awaited<ReturnType<typeof seedCampaignTypes>>,
-  seasons: Awaited<ReturnType<typeof seedSeasons>>,
-  groups: Awaited<ReturnType<typeof seedGroups>>,
-  collections: Awaited<ReturnType<typeof seedCollections>>,
-  events: Awaited<ReturnType<typeof seedEvents>>,
-) {
-  console.log("Seeding campaigns...");
-
-  const { admin, fundraiser, fundraiser2, collaborator } = users;
-  const [communityCat, localHubCat, businessCat, highStreetCat, , , foundingMembershipCat] = categories;
-  const [localHubType, businessType, communityType, highStreetType] = campaignTypes;
-  const [springSeason] = seasons;
-  const [christmasGroup] = groups;
-  const [featuredCollection] = collections;
-  const [launchEvent] = events;
-
-  const now = new Date();
-  const oneMonthFromNow = new Date(now);
-  oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
-  const threeMonthsFromNow = new Date(now);
-  threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
-  const oneMonthAgo = new Date(now);
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  const threeMonthsAgo = new Date(now);
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-  const campaignsData = [
-    // === ADMIN CAMPAIGNS ===
-    {
-      title: "FundorDonate Platform Launch",
-      slug: "fundordonate-platform-launch",
-      shortDescription: "Official launch campaign for the FundorDonate crowdfunding platform",
-      description: "Help us launch FundorDonate, the UK's newest crowdfunding and donation platform designed to bring communities together.",
-      goalAmount: 5000000, // £50,000
-      raisedAmount: 3750000,
-      deadline: threeMonthsFromNow,
-      status: "active",
-      mode: "fund",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: communityCat.id,
-      campaignTypeId: communityType.id,
-      seasonId: springSeason.id,
-      featuredImage: "/images/campaigns/fundordonate-launch.jpg",
-      ownerContribution: 1000000,
+      name: "Leeds",
+      slug: "leeds",
+      status: "IN_PROGRESS",
+      progress: 62,
+      target: 18000000,
+      lat: 53.8008,
+      lon: -1.5491,
+      mapX: 40,
+      mapY: 32,
+      region: "Yorkshire",
+      shortDesc: "Local Hub activation progressing across Leeds High Streets.",
+      areas: [
+        { name: "City Centre", slug: "leeds-city-centre", streets: ["Briggate", "Call Lane"] },
+      ],
     },
     {
-      title: "London Community Christmas Appeal",
-      slug: "london-community-christmas-appeal",
-      shortDescription: "Annual Christmas appeal supporting London communities",
-      description: "Our annual Christmas appeal brings together local businesses and community members to support those in need during the festive season.",
-      goalAmount: 10000000,
-      raisedAmount: 0,
-      deadline: new Date("2026-12-31"),
-      status: "draft",
-      mode: "donation",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: communityCat.id,
+      name: "Bristol",
+      slug: "bristol",
+      status: "IN_PROGRESS",
+      progress: 59,
+      target: 17500000,
+      lat: 51.4545,
+      lon: -2.5879,
+      mapX: 37,
+      mapY: 77,
+      region: "South West",
+      shortDesc: "Growing Local Hub with active community participation.",
+      areas: [
+        { name: "Bishopston", slug: "bishopston", streets: ["Gloucester Road"] },
+        { name: "Clifton", slug: "clifton", streets: ["Clifton Village"] },
+      ],
     },
     {
-      title: "Platform Safety Review",
-      slug: "platform-safety-review",
-      shortDescription: "Internal platform safety and compliance review campaign",
-      description: "This campaign is under internal review for compliance and safety checks before public launch.",
-      goalAmount: 200000,
-      raisedAmount: 0,
-      deadline: oneMonthFromNow,
-      status: "pending_review",
-      mode: "donation",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: businessCat.id,
+      name: "Glasgow",
+      slug: "glasgow",
+      status: "IN_PROGRESS",
+      progress: 53,
+      target: 20000000,
+      lat: 55.8642,
+      lon: -4.2518,
+      mapX: 24,
+      mapY: 24,
+      region: "Scotland",
+      shortDesc: "Developing Scottish Local Hub presence connecting the National Hub Community.",
+      areas: [
+        { name: "West End", slug: "glasgow-west-end", streets: ["Byres Road"] },
+      ],
     },
     {
-      title: "MCOM Integration Beta",
-      slug: "mcom-integration-beta",
-      shortDescription: "Beta testing campaign for MCOM integration features",
-      description: "This campaign has been approved for beta testing of the MCOM integration features including VCard and Terminal support.",
-      goalAmount: 500000,
-      raisedAmount: 125000,
-      deadline: threeMonthsFromNow,
-      status: "approved",
-      mode: "sponsor",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: businessCat.id,
+      name: "Liverpool",
+      slug: "liverpool",
+      status: "IN_PROGRESS",
+      progress: 57,
+      target: 19000000,
+      lat: 53.4084,
+      lon: -2.9916,
+      mapX: 35,
+      mapY: 40,
+      region: "North West",
+      shortDesc: "Building participation with local businesses and residents.",
+      areas: [
+        { name: "Baltic Triangle", slug: "baltic-triangle", streets: ["Jamaica Street"] },
+      ],
     },
     {
-      title: "Pilot Hub Campaign",
-      slug: "pilot-hub-campaign",
-      shortDescription: "Completed pilot hub campaign for testing lifecycle",
-      description: "This campaign completed its funding goal and is now in the completed state for lifecycle testing.",
-      goalAmount: 1000000,
-      raisedAmount: 1000000,
-      deadline: threeMonthsAgo,
-      status: "completed",
-      mode: "fund",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: localHubCat.id,
-      campaignTypeId: localHubType.id,
+      name: "Sheffield",
+      slug: "sheffield",
+      status: "IN_PROGRESS",
+      progress: 51,
+      target: 16000000,
+      lat: 53.3811,
+      lon: -1.4701,
+      mapX: 41,
+      mapY: 38,
+      region: "Yorkshire",
+      shortDesc: "Local Hub building momentum across local High Streets.",
+      areas: [
+        { name: "Ecclesall", slug: "ecclesall", streets: ["Ecclesall Road"] },
+      ],
     },
     {
-      title: "Archived Test Campaign",
-      slug: "archived-test-campaign",
-      shortDescription: "Test campaign in archived state",
-      description: "This campaign was archived for testing the trash and restore functionality.",
-      goalAmount: 300000,
-      raisedAmount: 0,
-      deadline: threeMonthsAgo,
-      status: "archived",
-      mode: "donation",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: communityCat.id,
+      name: "Edinburgh",
+      slug: "edinburgh",
+      status: "PENDING",
+      progress: 47,
+      target: 22000000,
+      lat: 55.9533,
+      lon: -3.1883,
+      mapX: 28,
+      mapY: 18,
+      region: "Scotland",
+      shortDesc: "Developing Scottish capital Hub with growing interest.",
+      areas: [
+        { name: "Old Town", slug: "edinburgh-old-town", streets: ["Royal Mile"] },
+      ],
     },
     {
-      title: "Rejected Campaign Example",
-      slug: "rejected-campaign-example",
-      shortDescription: "Campaign rejected for policy violation",
-      description: "This campaign was rejected during the review process for failing to meet platform guidelines.",
-      goalAmount: 500000,
-      raisedAmount: 0,
-      deadline: oneMonthFromNow,
-      status: "rejected",
-      mode: "donation",
-      authorId: admin.id,
-      creatorType: "admin",
-      categoryId: communityCat.id,
-      rejectionReason: "Campaign description does not meet community guidelines. Please revise and resubmit.",
-    },
-    // === FUNDRAISER (BUSINESS) CAMPAIGNS ===
-    {
-      title: "Camden High Street Revival",
-      slug: "camden-high-street-revival",
-      shortDescription: "Revitalising Camden's high street through community investment",
-      description: "Join us in bringing new life to Camden's iconic high street with independent shops, community spaces, and cultural events.",
-      goalAmount: 8000000,
-      raisedAmount: 5600000,
-      deadline: threeMonthsFromNow,
-      status: "active",
-      mode: "fund",
-      authorId: fundraiser.id,
-      creatorType: "business",
-      categoryId: highStreetCat.id,
-      campaignTypeId: highStreetType?.id,
-      seasonId: springSeason.id,
-      featuredImage: "/images/campaigns/camden-high-street.jpg",
-      ownerContribution: 2000000,
+      name: "Cardiff",
+      slug: "cardiff",
+      status: "PENDING",
+      progress: 44,
+      target: 15000000,
+      lat: 51.4816,
+      lon: -3.1791,
+      mapX: 31,
+      mapY: 72,
+      region: "Wales",
+      shortDesc: "Welsh city Hub needs business and resident participation to activate.",
+      areas: [
+        { name: "Cathays", slug: "cathays", streets: ["St Mary Street"] },
+      ],
     },
     {
-      title: "Islington Community Hub",
-      slug: "islington-community-hub",
-      shortDescription: "Creating a new community hub in Islington",
-      description: "A brand new community hub for Islington residents featuring co-working spaces, youth programmes, and health services.",
-      goalAmount: 6000000,
-      raisedAmount: 4200000,
-      deadline: threeMonthsFromNow,
-      status: "published",
-      mode: "fund",
-      authorId: fundraiser.id,
-      creatorType: "business",
-      categoryId: localHubCat.id,
-      campaignTypeId: localHubType?.id,
-      featuredImage: "/images/campaigns/islington-hub.jpg",
+      name: "Newcastle",
+      slug: "newcastle",
+      status: "PENDING",
+      progress: 36,
+      target: 16000000,
+      lat: 54.9783,
+      lon: -1.6178,
+      mapX: 37,
+      mapY: 20,
+      region: "North East",
+      shortDesc: "Requires participation to develop the north-east Local Hub.",
+      areas: [
+        { name: "Grainger Town", slug: "grainger-town", streets: ["Grey Street"] },
+      ],
     },
     {
-      title: "Southwark Youth Programme",
-      slug: "southwark-youth-programme",
-      shortDescription: "Youth development programme in Southwark",
-      description: "Supporting young people in Southwark through mentorship, skills training, and employment opportunities.",
-      goalAmount: 3000000,
-      raisedAmount: 900000,
-      deadline: threeMonthsFromNow,
-      status: "submitted",
-      mode: "donation",
-      authorId: fundraiser.id,
-      creatorType: "business",
-      categoryId: communityCat.id,
-    },
-    {
-      title: "Sponsor a Local Business",
-      slug: "sponsor-local-business",
-      shortDescription: "Sponsorship campaign for local business growth",
-      description: "Become a sponsor for local businesses and help them grow while gaining visibility in your community.",
-      goalAmount: 2000000,
-      raisedAmount: 400000,
-      deadline: threeMonthsFromNow,
-      status: "paused",
-      mode: "sponsor",
-      authorId: fundraiser.id,
-      creatorType: "business",
-      categoryId: businessCat.id,
-    },
-    // === CAMPAIGN WITH COLLABORATOR ===
-    {
-      title: "Hackney Community Garden",
-      slug: "hackney-community-garden",
-      shortDescription: "Building a community garden in Hackney",
-      description: "Creating a shared green space for Hackney residents to grow food, learn about sustainability, and build community connections.",
-      goalAmount: 1500000,
-      raisedAmount: 750000,
-      deadline: threeMonthsFromNow,
-      status: "active",
-      mode: "fund",
-      authorId: fundraiser.id,
-      creatorType: "business",
-      categoryId: communityCat.id,
-      featuredImage: "/images/campaigns/hackney-garden.jpg",
-    },
-    // === FUNDRAISER 2 CAMPAIGNS ===
-    {
-      title: "Westminster Business Incubator",
-      slug: "westminster-business-incubator",
-      shortDescription: "Business incubator for Westminster startups",
-      description: "Supporting the next generation of Westminster startups with workspace, mentoring, and access to networks.",
-      goalAmount: 12000000,
-      raisedAmount: 3600000,
-      deadline: threeMonthsFromNow,
-      status: "active",
-      mode: "fund",
-      authorId: fundraiser2.id,
-      creatorType: "business",
-      categoryId: businessCat.id,
-      campaignTypeId: businessType?.id,
-      featuredImage: "/images/campaigns/westminster-incubator.jpg",
-      ownerContribution: 3000000,
-    },
-    {
-      title: "Greenwich Digital Skills",
-      slug: "greenwich-digital-skills",
-      shortDescription: "Digital skills training for Greenwich residents",
-      description: "Bridging the digital divide in Greenwich through free coding workshops, device lending, and digital literacy programmes.",
-      goalAmount: 2000000,
-      raisedAmount: 1800000,
-      deadline: threeMonthsFromNow,
-      status: "active",
-      mode: "donation",
-      authorId: fundraiser2.id,
-      creatorType: "business",
-      categoryId: communityCat.id,
+      name: "Belfast",
+      slug: "belfast",
+      status: "PENDING",
+      progress: 30,
+      target: 15000000,
+      lat: 54.5973,
+      lon: -5.9301,
+      mapX: 18,
+      mapY: 60,
+      region: "Northern Ireland",
+      shortDesc: "Needs local participation to begin Hub activation.",
+      areas: [
+        { name: "Cathedral Quarter", slug: "cathedral-quarter", streets: ["Donegall Street"] },
+      ],
     },
   ];
 
-  const results = [];
-  for (const data of campaignsData) {
-    const existing = await prisma.campaign.findUnique({ where: { slug: data.slug } });
-    if (!existing) {
-      const campaign = await prisma.campaign.create({
-        data: {
-          ...data,
-          deadline: data.deadline,
-          settings: "{}",
+  const streetLocationsMap = new Map<string, string>(); // streetName -> locationId
+
+  for (const c of citiesData) {
+    const city = await prisma.hubLocation.upsert({
+      where: { slug: c.slug },
+      update: {
+        activationStatus: c.status,
+        targetAmount: BigInt(c.target),
+        latitude: c.lat,
+        longitude: c.lon,
+        shortDescription: c.shortDesc,
+        metadata: {
+          activationProgress: c.progress,
+          region: c.region,
+          mapX: c.mapX,
+          mapY: c.mapY,
+        },
+      },
+      create: {
+        name: c.name,
+        slug: c.slug,
+        type: HubLocationType.CITY,
+        activationStatus: c.status,
+        targetAmount: BigInt(c.target),
+        latitude: c.lat,
+        longitude: c.lon,
+        shortDescription: c.shortDesc,
+        heroHeadline: `Fund & Donate ${c.name}`,
+        heroSupportingText: `Connect with local high street initiatives and independent businesses across ${c.name}.`,
+        metadata: {
+          activationProgress: c.progress,
+          region: c.region,
+          mapX: c.mapX,
+          mapY: c.mapY,
+        },
+      },
+    });
+
+    for (const a of c.areas) {
+      const area = await prisma.hubLocation.upsert({
+        where: { slug: a.slug },
+        update: { parentId: city.id },
+        create: {
+          name: a.name,
+          slug: a.slug,
+          type: HubLocationType.LOCAL_AREA,
+          parentId: city.id,
+          shortDescription: `${a.name} Local Area in ${c.name}`,
         },
       });
-      results.push(campaign);
-    } else {
-      results.push(existing);
+
+      for (const st of a.streets) {
+        const streetSlug = `${a.slug}-${st.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+        const street = await prisma.hubLocation.upsert({
+          where: { slug: streetSlug },
+          update: { parentId: area.id },
+          create: {
+            name: st,
+            slug: streetSlug,
+            type: HubLocationType.HIGH_STREET,
+            parentId: area.id,
+            shortDescription: `${st} High Street, ${a.name}`,
+          },
+        });
+        streetLocationsMap.set(st, street.id);
+      }
     }
   }
+  console.log(`Seeded ${citiesData.length} UK Cities with complete hierarchy.`);
 
-  // === TAG ASSOCIATIONS ===
-  const tagAssociations = [
-    { campaignSlug: "fundordonate-platform-launch", tagSlugs: ["community", "local-hub", "mcom"] },
-    { campaignSlug: "camden-high-street-revival", tagSlugs: ["high-street", "business", "local-hub"] },
-    { campaignSlug: "islington-community-hub", tagSlugs: ["local-hub", "community", "76-city-hubs"] },
-    { campaignSlug: "hackney-community-garden", tagSlugs: ["community", "cost-neutral"] },
-    { campaignSlug: "westminster-business-incubator", tagSlugs: ["business", "partner-hub"] },
-    { campaignSlug: "greenwich-digital-skills", tagSlugs: ["community", "loyalty"] },
+  // 3. Reward definitions retired — campaign rewards are now authored on the
+  //    CampaignTemplate and issued into RewardIssuance (MCOM Rewards / local).
+
+  // 3.5. Seed Seasons
+  await prisma.season.upsert({
+    where: { id: "winter-2026" },
+    update: {
+      name: "Winter 2026 Season",
+      status: "ACTIVE",
+    },
+    create: {
+      id: "winter-2026",
+      referenceCode: "WINTER-2026",
+      name: "Winter 2026 Season",
+      status: "ACTIVE",
+      startDate: new Date("2026-10-01T00:00:00Z"),
+      endDate: new Date("2026-12-31T23:59:59Z"),
+      durationDays: 92,
+      overallTarget: BigInt(152000000),
+    },
+  });
+
+  await prisma.season.upsert({
+    where: { id: "autumn-2026" },
+    update: {
+      name: "Autumn 2026 Season",
+      status: "COMPLETED",
+    },
+    create: {
+      id: "autumn-2026",
+      referenceCode: "AUTUMN-2026",
+      name: "Autumn 2026 Season",
+      status: "COMPLETED",
+      startDate: new Date("2026-07-01T00:00:00Z"),
+      endDate: new Date("2026-09-30T23:59:59Z"),
+      durationDays: 92,
+      overallTarget: BigInt(120000000),
+    },
+  });
+  console.log("Seeded Seasons: Winter 2026 & Autumn 2026.");
+
+  // 4. Seed Campaign Master Templates
+  const template1 = await prisma.campaignTemplate.upsert({
+    where: { slug: "winter-high-street-funding-campaign" },
+    update: {
+      minEligibilityTier: MembershipTier.GOLD,
+      seasonId: "winter-2026",
+    },
+    create: {
+      name: "Winter High Street Funding Campaign",
+      slug: "winter-high-street-funding-campaign",
+      tagline: "Unite local traders to drive footfall and support local community initiatives.",
+      seasonId: "winter-2026",
+      origin: TemplateOrigin.DIRECT,
+      approvalMode: TemplateApprovalMode.ADMIN_REVIEW,
+      minEligibilityTier: MembershipTier.GOLD,
+      minContributionRequired: true,
+      minContributionAmount: 10000,
+      selfFundingEnabled: true,
+      selfFundingMode: "optional",
+      selfFundingAmount: 10000,
+      selfFundingRewardName: "E-Gift Card Pack",
+      fieldsConfig: [
+        {
+          id: "community_goal",
+          label: "Community Funding Goal",
+          question: "What is your main funding objective for your local community?",
+          value: "Provide warm meals and support during winter",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [
+        {
+          id: "rw-1",
+          name: "10% High Street Discount Card",
+          description: "Unlocked for backers contributing £25 or more",
+          rule: "Unlocked for backers contributing £25 or more",
+          category: "Discount",
+          rewardCategory: "voucher",
+          source: "fundordonate",
+          mcomRewardId: null,
+          valueGbp: null,
+          audience: "both",
+          delivery: "voucher_code",
+          qualificationMode: "highest",
+          quantityType: "unlimited",
+          quantityLimit: null,
+          conditions: [
+            { id: "cond-rw-1", mode: "minimum", minPence: 2500, maxPence: null, exactPence: null },
+          ],
+        },
+      ],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  const template2 = await prisma.campaignTemplate.upsert({
+    where: { slug: "youth-bakery-training-initiative" },
+    update: {
+      minEligibilityTier: MembershipTier.SILVER,
+      seasonId: "autumn-2026",
+    },
+    create: {
+      name: "Youth Bakery & Culinary Training",
+      slug: "youth-bakery-training-initiative",
+      tagline: "Provide apprenticeships and vocational training in artisan culinary skills.",
+      seasonId: "autumn-2026",
+      origin: TemplateOrigin.AUDIT,
+      approvalMode: TemplateApprovalMode.AUTOMATIC,
+      minEligibilityTier: MembershipTier.SILVER,
+      minContributionRequired: false,
+      selfFundingEnabled: true,
+      selfFundingMode: "optional",
+      selfFundingAmount: 5000,
+      selfFundingRewardName: "Certificate of Sponsorship",
+      fieldsConfig: [
+        {
+          id: "trainee_capacity",
+          label: "Number of Trainees Supported",
+          value: "5",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  const templateB2B = await prisma.campaignTemplate.upsert({
+    where: { slug: "b2b-independent-retail-alliance" },
+    update: {
+      minEligibilityTier: MembershipTier.BRONZE,
+      seasonId: "winter-2026",
+    },
+    create: {
+      name: "Independent High Street Retail Alliance",
+      slug: "b2b-independent-retail-alliance",
+      tagline: "Cross-merchant cooperative logistics, marketing, and shared footfall incentives.",
+      seasonId: "winter-2026",
+      origin: TemplateOrigin.AUDIT,
+      approvalMode: TemplateApprovalMode.AUTOMATIC,
+      minEligibilityTier: MembershipTier.BRONZE,
+      minContributionRequired: true,
+      minContributionAmount: 20000,
+      selfFundingEnabled: true,
+      selfFundingMode: "required",
+      selfFundingAmount: 20000,
+      selfFundingRewardName: "Alliance Gold Partner Badge",
+      fieldsConfig: [
+        {
+          id: "collaboration_scope",
+          label: "Shared Logistics Scope",
+          question: "How will your business participate in the local merchant alliance?",
+          value: "Joint freight deliveries and high street loyalty pass",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  // Additional Bronze templates for immediate claim by all businesses
+  const templateFootfall = await prisma.campaignTemplate.upsert({
+    where: { slug: "high-street-footfall-growth-initiative" },
+    update: {
+      minEligibilityTier: MembershipTier.BRONZE,
+      seasonId: "winter-2026",
+    },
+    create: {
+      name: "High Street Local Footfall & Promotion Drive",
+      slug: "high-street-footfall-growth-initiative",
+      tagline: "Attract nearby customers and high-street footfall with cooperative seasonal shopping vouchers.",
+      seasonId: "winter-2026",
+      origin: TemplateOrigin.DIRECT,
+      approvalMode: TemplateApprovalMode.AUTOMATIC,
+      minEligibilityTier: MembershipTier.BRONZE,
+      minContributionRequired: false,
+      selfFundingEnabled: true,
+      selfFundingMode: "optional",
+      selfFundingAmount: 5000,
+      selfFundingRewardName: "High Street Supporter Badge",
+      fieldsConfig: [
+        {
+          id: "footfall_target",
+          label: "Campaign Target Footfall",
+          question: "What is your weekly customer footfall goal?",
+          value: "500 shoppers weekly",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [
+        {
+          id: "rw-footfall",
+          name: "High Street Welcome Voucher",
+          description: "Unlocked for backers contributing £10 or more",
+          rule: "Unlocked for backers contributing £10 or more",
+          category: "Voucher",
+          rewardCategory: "voucher",
+          source: "fundordonate",
+          mcomRewardId: null,
+          valueGbp: null,
+          audience: "both",
+          delivery: "voucher_code",
+          qualificationMode: "highest",
+          quantityType: "unlimited",
+          quantityLimit: null,
+          conditions: [
+            { id: "cond-rw-footfall", mode: "minimum", minPence: 1000, maxPence: null, exactPence: null },
+          ],
+        },
+      ],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  const templateEco = await prisma.campaignTemplate.upsert({
+    where: { slug: "high-street-green-sustainability-drive" },
+    update: {
+      minEligibilityTier: MembershipTier.BRONZE,
+      seasonId: "winter-2026",
+    },
+    create: {
+      name: "High Street Eco & Energy Sustainability Grant",
+      slug: "high-street-green-sustainability-drive",
+      tagline: "Upgrade store energy efficiency, install zero-waste dispensers, and transition to eco-packaging.",
+      seasonId: "winter-2026",
+      origin: TemplateOrigin.DIRECT,
+      approvalMode: TemplateApprovalMode.AUTOMATIC,
+      minEligibilityTier: MembershipTier.BRONZE,
+      minContributionRequired: false,
+      selfFundingEnabled: true,
+      selfFundingMode: "optional",
+      selfFundingAmount: 7500,
+      selfFundingRewardName: "Green High Street Partner Plaque",
+      fieldsConfig: [
+        {
+          id: "sustainability_focus",
+          label: "Green Focus Area",
+          question: "Which sustainability enhancement is your store implementing?",
+          value: "Zero-waste refill stations & biodegradable packaging",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  const templateArtisan = await prisma.campaignTemplate.upsert({
+    where: { slug: "local-artisan-skills-hub" },
+    update: {
+      minEligibilityTier: MembershipTier.SILVER,
+      seasonId: "autumn-2026",
+    },
+    create: {
+      name: "Local Artisan & Apprentice Workshop Hub",
+      slug: "local-artisan-skills-hub",
+      tagline: "Host weekend workshops and mentor young apprentices in specialized high-street trades.",
+      seasonId: "autumn-2026",
+      origin: TemplateOrigin.DIRECT,
+      approvalMode: TemplateApprovalMode.AUTOMATIC,
+      minEligibilityTier: MembershipTier.SILVER,
+      minContributionRequired: false,
+      selfFundingEnabled: true,
+      selfFundingMode: "optional",
+      selfFundingAmount: 10000,
+      selfFundingRewardName: "Master Mentor Guild Badge",
+      fieldsConfig: [
+        {
+          id: "workshop_type",
+          label: "Workshop Focus",
+          question: "What trade skill will you offer to apprentices?",
+          value: "Traditional craftsmanship & digital tools",
+          source: "business_input",
+          locked: false,
+          editable: true,
+          required: true,
+        },
+      ],
+      rewardsConfig: [],
+      mcomAssetsConfig: [],
+    },
+  });
+
+  console.log("Seeded Campaign Master Templates.");
+
+  // Seeded templates are intended to be live; align the new lifecycle status
+  // with the legacy isActive flag so admin lists show them as Active.
+  await prisma.campaignTemplate.updateMany({
+    where: { isActive: true, status: "DRAFT" },
+    data: { status: "ACTIVE" },
+  });
+
+  // 5. Seed Diverse Business Owners & Businesses
+  const businessSeedData = [
+    {
+      email: "sarah@sarahsbakery.com",
+      username: "sarah_baker",
+      firstName: "Sarah",
+      lastName: "Jenkins",
+      name: "Sarah's Bakery",
+      slug: "sarahs-bakery",
+      city: "Manchester",
+      localArea: "Northern Quarter",
+      highStreet: "Oldham Street",
+      postcode: "M4 1LN",
+      businessType: "Restaurant & Cafe",
+      category: "Food & Drink",
+      preferredAudience: PreferredAudience.CONSUMER,
+      tier: MembershipTier.GOLD,
+      coverImageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Feed Manchester Holiday Meal Drive",
+          description: "Providing 1,000 warm meals and care parcels for families across Manchester Northern Quarter.",
+          templateId: template1.id,
+          targetAmount: 7500000,
+          raisedAmount: 5200000,
+          backers: 89,
+        },
+        {
+          title: "Northern Quarter Youth Bakery Apprenticeships",
+          description: "Teaching young people from Manchester valuable artisan baking and hospitality skills.",
+          templateId: template2.id,
+          targetAmount: 5000000,
+          raisedAmount: 3100000,
+          backers: 45,
+        },
+      ],
+    },
+    {
+      email: "trade@nqmerchants.co.uk",
+      username: "nq_merchants",
+      firstName: "David",
+      lastName: "Morrison",
+      name: "Manchester Northern Quarter Merchants Alliance",
+      slug: "nq-merchants-alliance",
+      city: "Manchester",
+      localArea: "Northern Quarter",
+      highStreet: "Oldham Street",
+      postcode: "M4 1LJ",
+      businessType: "Retail Trade Cooperative",
+      category: "Commerce & Logistics",
+      preferredAudience: PreferredAudience.BUSINESS,
+      tier: MembershipTier.PLATINUM,
+      coverImageUrl: "https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Northern Quarter B2B Logistics & Shared Footfall Alliance",
+          description: "Cooperative consolidated zero-emission electric freight deliveries and joint high street merchant incentives for 45 independent Northern Quarter shops.",
+          templateId: templateB2B.id,
+          targetAmount: 8000000,
+          raisedAmount: 5600000,
+          backers: 42,
+        },
+      ],
+    },
+    {
+      email: "marcus@digbethcraft.co.uk",
+      username: "marcus_digbeth",
+      firstName: "Marcus",
+      lastName: "Vance",
+      name: "Digbeth Creative Workshop Co",
+      slug: "digbeth-creative-workshop",
+      city: "Birmingham",
+      localArea: "Digbeth",
+      highStreet: "Digbeth High Street",
+      postcode: "B5 6DY",
+      businessType: "Creative & Artisan Studio",
+      category: "Arts & Culture",
+      preferredAudience: PreferredAudience.BUSINESS,
+      tier: MembershipTier.PLATINUM,
+      coverImageUrl: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Digbeth B2B Creative Equipment & Shared Co-Op",
+          description: "Funding shared industrial laser cutters and print presses for 30 independent Birmingham artisans.",
+          templateId: templateB2B.id,
+          targetAmount: 6000000,
+          raisedAmount: 4200000,
+          backers: 52,
+        },
+      ],
+    },
+    {
+      email: "elena@camdencoffee.com",
+      username: "elena_camden",
+      firstName: "Elena",
+      lastName: "Rostova",
+      name: "Camden Coffee Roasters",
+      slug: "camden-coffee-roasters",
+      city: "Camden",
+      localArea: "Camden Town",
+      highStreet: "Camden High Street",
+      postcode: "NW1 7JE",
+      businessType: "Speciality Cafe & Roastery",
+      category: "Food & Drink",
+      preferredAudience: PreferredAudience.CONSUMER,
+      tier: MembershipTier.GOLD,
+      coverImageUrl: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Camden High Street Community Garden & Green Space",
+          description: "Transforming the vacant market lot into a public community pocket garden with free outdoor seating.",
+          templateId: template1.id,
+          targetAmount: 2500000,
+          raisedAmount: 1875000,
+          backers: 64,
+        },
+      ],
+    },
+    {
+      email: "oliver@gloucesterorganics.co.uk",
+      username: "oliver_bristol",
+      firstName: "Oliver",
+      lastName: "Thorne",
+      name: "Gloucester Road Organics",
+      slug: "gloucester-road-organics",
+      city: "Bristol",
+      localArea: "Bishopston",
+      highStreet: "Gloucester Road",
+      postcode: "BS7 8AA",
+      businessType: "Independent Grocer",
+      category: "Retail & Sustainability",
+      preferredAudience: PreferredAudience.CONSUMER,
+      tier: MembershipTier.SILVER,
+      coverImageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1472851290388-39f4d448d5d3?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Gloucester Road Zero-Waste Refill Project",
+          description: "Expanding zero-waste bulk refill dispensers for pantry staples to reduce single-use plastic across Bristol.",
+          templateId: template1.id,
+          targetAmount: 3000000,
+          raisedAmount: 2250000,
+          backers: 78,
+        },
+      ],
+    },
+    {
+      email: "claire@leedstradeguild.com",
+      username: "claire_leeds",
+      firstName: "Claire",
+      lastName: "Davenport",
+      name: "Briggate Independent Trade Guild",
+      slug: "briggate-trade-guild",
+      city: "Leeds",
+      localArea: "City Centre",
+      highStreet: "Briggate",
+      postcode: "LS1 6LX",
+      businessType: "Merchant Cooperative",
+      category: "Retail & Commerce",
+      preferredAudience: PreferredAudience.BUSINESS,
+      tier: MembershipTier.PLATINUM,
+      coverImageUrl: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Northern Independent Retail Network Logistics",
+          description: "Joint electric delivery cargo van pool serving 40 high street boutiques in Leeds city centre.",
+          templateId: templateB2B.id,
+          targetAmount: 4500000,
+          raisedAmount: 2850000,
+          backers: 39,
+        },
+      ],
+    },
+    {
+      email: "fiona@clydebooks.scot",
+      username: "fiona_glasgow",
+      firstName: "Fiona",
+      lastName: "MacLeod",
+      name: "Clyde Artisan Books & Press",
+      slug: "clyde-artisan-books",
+      city: "Glasgow",
+      localArea: "West End",
+      highStreet: "Byres Road",
+      postcode: "G12 8TT",
+      businessType: "Independent Bookshop",
+      category: "Arts & Culture",
+      preferredAudience: PreferredAudience.CONSUMER,
+      tier: MembershipTier.SILVER,
+      coverImageUrl: "https://images.unsplash.com/photo-1507842229451-79b1be886a20?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Glasgow West End Community Literacy Hub",
+          description: "Hosting free children's weekend reading hours and providing book grants to local primary schools.",
+          templateId: template1.id,
+          targetAmount: 2000000,
+          raisedAmount: 1450000,
+          backers: 56,
+        },
+      ],
+    },
+    {
+      email: "ian@royalmileheritage.scot",
+      username: "ian_edinburgh",
+      firstName: "Ian",
+      lastName: "Fraser",
+      name: "Royal Mile Heritage Crafts",
+      slug: "royal-mile-heritage-crafts",
+      city: "Edinburgh",
+      localArea: "Old Town",
+      highStreet: "Royal Mile",
+      postcode: "EH1 2PB",
+      businessType: "Traditional Craft & Textiles",
+      category: "Heritage & Retail",
+      preferredAudience: PreferredAudience.CONSUMER,
+      tier: MembershipTier.GOLD,
+      coverImageUrl: "https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1544816155-12df9643f363?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Historic Old Town High Street Greening & Floral Displays",
+          description: "Installing sustainable Scottish heritage floral planters along the Royal Mile to enhance civic beauty.",
+          templateId: template1.id,
+          targetAmount: 3500000,
+          raisedAmount: 2100000,
+          backers: 81,
+        },
+      ],
+    },
+    {
+      email: "guild@royalmiletraders.scot",
+      username: "royal_mile_guild",
+      firstName: "Angus",
+      lastName: "Campbell",
+      name: "Edinburgh Old Town Merchants Guild",
+      slug: "edinburgh-old-town-guild",
+      city: "Edinburgh",
+      localArea: "Old Town",
+      highStreet: "Royal Mile",
+      postcode: "EH1 1RE",
+      businessType: "Commercial Trade Union",
+      category: "Trade & Commerce",
+      preferredAudience: PreferredAudience.BUSINESS,
+      tier: MembershipTier.PLATINUM,
+      coverImageUrl: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Royal Mile B2B Footfall Analytics & Security Network",
+          description: "Shared smart footfall sensors and coordinated merchant loss prevention network for 35 independent shops on the Royal Mile.",
+          templateId: templateB2B.id,
+          targetAmount: 5500000,
+          raisedAmount: 3900000,
+          backers: 36,
+        },
+      ],
+    },
+    {
+      email: "liam@balticworkshop.co.uk",
+      username: "liam_liverpool",
+      firstName: "Liam",
+      lastName: "Gallagher",
+      name: "Baltic Creative Collaborative",
+      slug: "baltic-creative-collaborative",
+      city: "Liverpool",
+      localArea: "Baltic Triangle",
+      highStreet: "Jamaica Street",
+      postcode: "L1 0AF",
+      businessType: "Digital Fabrication Studio",
+      category: "Creative Technology",
+      preferredAudience: PreferredAudience.BUSINESS,
+      tier: MembershipTier.PLATINUM,
+      coverImageUrl: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&h=450&fit=crop",
+      logoUrl: "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=160&h=160&fit=crop",
+      campaigns: [
+        {
+          title: "Baltic Triangle High-Speed Local Fibre & Mesh Co-Op",
+          description: "Installing shared high-bandwidth community broadband for 25 start-ups on Jamaica Street.",
+          templateId: templateB2B.id,
+          targetAmount: 5000000,
+          raisedAmount: 3800000,
+          backers: 31,
+        },
+      ],
+    },
   ];
 
-  for (const assoc of tagAssociations) {
-    const campaign = results.find((c) => c.slug === assoc.campaignSlug);
-    if (!campaign) continue;
+  const genericHashedPassword = await bcrypt.hash("Password123!", 10);
 
-    for (const tagSlug of assoc.tagSlugs) {
-      const tag = tags.find((t) => t.slug === tagSlug);
-      if (!tag) continue;
+  for (const bData of businessSeedData) {
+    const owner = await prisma.user.upsert({
+      where: { email: bData.email },
+      update: {},
+      create: {
+        email: bData.email,
+        username: bData.username,
+        password: genericHashedPassword,
+        firstName: bData.firstName,
+        lastName: bData.lastName,
+        role: "fundraiser",
+        userType: "business",
+        membershipTier: bData.tier,
+      },
+    });
 
-      const existing = await prisma.campaignTag.findUnique({
-        where: { campaignId_tagId: { campaignId: campaign.id, tagId: tag.id } },
+    const locationId = streetLocationsMap.get(bData.highStreet);
+
+    const business = await prisma.business.upsert({
+      where: { slug: bData.slug },
+      update: {
+        locationId,
+        preferredAudience: bData.preferredAudience,
+        coverImageUrl: bData.coverImageUrl,
+        logoUrl: bData.logoUrl,
+        membershipTier: bData.tier,
+        auditReference: `AUD-${bData.slug.toUpperCase().slice(0, 10)}-2026`,
+        preAuditAnswers: {
+          community_goal: `Support high street development and growth in ${bData.city}`,
+          trainee_capacity: "8",
+          business_name: bData.name,
+          city: bData.city,
+          high_street: bData.highStreet,
+          category: bData.category,
+        },
+      },
+      create: {
+        ownerId: owner.id,
+        name: bData.name,
+        slug: bData.slug,
+        businessType: bData.businessType,
+        category: bData.category,
+        subcategories: [bData.category],
+        description: `Independent local merchant on ${bData.highStreet}, ${bData.city}.`,
+        email: bData.email,
+        city: bData.city,
+        localArea: bData.localArea,
+        highStreet: bData.highStreet,
+        postcode: bData.postcode,
+        membershipTier: bData.tier,
+        status: "ACTIVE",
+        preferredAudience: bData.preferredAudience,
+        locationId,
+        coverImageUrl: bData.coverImageUrl,
+        logoUrl: bData.logoUrl,
+        auditReference: `AUD-${bData.slug.toUpperCase().slice(0, 10)}-2026`,
+        preAuditAnswers: {
+          community_goal: `Support high street development and growth in ${bData.city}`,
+          trainee_capacity: "8",
+          business_name: bData.name,
+          city: bData.city,
+          high_street: bData.highStreet,
+          category: bData.category,
+        },
+        settings: {
+          create: {
+            emailAlerts: true,
+            campaignUpdates: true,
+            leaderboardChanges: true,
+            rewardsEarned: true,
+            weeklyDigest: true,
+          },
+        },
+      },
+    });
+
+    for (const cData of bData.campaigns) {
+      const existingCampaign = await prisma.businessCampaign.findFirst({
+        where: { businessId: business.id, title: cData.title },
       });
-      if (!existing) {
-        await prisma.campaignTag.create({
-          data: { campaignId: campaign.id, tagId: tag.id },
+
+      if (!existingCampaign) {
+        const camp = await prisma.businessCampaign.create({
+          data: {
+            businessId: business.id,
+            templateId: cData.templateId,
+            title: cData.title,
+            description: cData.description,
+            status: BusinessCampaignStatus.ACTIVE,
+            targetAmount: cData.targetAmount,
+            raisedAmount: cData.raisedAmount,
+            backerCount: cData.backers,
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+          },
+        });
+
+        // Seed sample contribution to back the campaign
+        await prisma.contribution.create({
+          data: {
+            businessId: business.id,
+            campaignId: camp.id,
+            type: ContributionType.ONLINE,
+            status: ContributionStatus.COMPLETED,
+            amount: 50000,
+            reference: `WEB-${Math.floor(10000 + Math.random() * 90000)}`,
+            gateway: "stripe",
+          },
         });
       }
     }
   }
 
-  // === COLLABORATOR ASSOCIATION ===
-  const hackneyCampaign = results.find((c) => c.slug === "hackney-community-garden");
-  if (hackneyCampaign) {
-    const existingCollab = await prisma.campaignCollaborator.findUnique({
-      where: { campaignId_collaboratorId: { campaignId: hackneyCampaign.id, collaboratorId: collaborator.id } },
-    });
-    if (!existingCollab) {
-      await prisma.campaignCollaborator.create({
-        data: { campaignId: hackneyCampaign.id, collaboratorId: collaborator.id },
-      });
-      console.log(`  Added collaborator ${collaborator.firstName} to "${hackneyCampaign.title}"`);
-    }
-  }
-
-  // === GROUP MEMBERSHIP ===
-  const christmasGroupData = groups.find((g) => g.slug === "christmas-campaigns");
-  const christmasCampaign = results.find((c) => c.slug === "london-community-christmas-appeal");
-  if (christmasGroupData && christmasCampaign) {
-    const existingMembership = await prisma.campaignGroupMembership.findUnique({
-      where: { campaignId_groupId: { campaignId: christmasCampaign.id, groupId: christmasGroupData.id } },
-    });
-    if (!existingMembership) {
-      await prisma.campaignGroupMembership.create({
-        data: { campaignId: christmasCampaign.id, groupId: christmasGroupData.id },
-      });
-    }
-  }
-
-  // === COLLECTION MEMBERSHIP ===
-  const featuredCollectionData = collections.find((c) => c.slug === "featured-uk-business-funding");
-  const westminsterCampaign = results.find((c) => c.slug === "westminster-business-incubator");
-  if (featuredCollectionData && westminsterCampaign) {
-    const existingMembership = await prisma.campaignCollectionMembership.findUnique({
-      where: { campaignId_collectionId: { campaignId: westminsterCampaign.id, collectionId: featuredCollectionData.id } },
-    });
-    if (!existingMembership) {
-      await prisma.campaignCollectionMembership.create({
-        data: { campaignId: westminsterCampaign.id, collectionId: featuredCollectionData.id },
-      });
-    }
-  }
-
-  // === EVENT MEMBERSHIP ===
-  const launchEventData = events.find((e) => e.slug === "fundordonate-launch");
-  const launchCampaign = results.find((c) => c.slug === "fundordonate-platform-launch");
-  if (launchEventData && launchCampaign) {
-    const existingMembership = await prisma.campaignEventMembership.findUnique({
-      where: { campaignId_eventId: { campaignId: launchCampaign.id, eventId: launchEventData.id } },
-    });
-    if (!existingMembership) {
-      await prisma.campaignEventMembership.create({
-        data: { campaignId: launchCampaign.id, eventId: launchEventData.id },
-      });
-    }
-  }
-
-  return results;
-}
-
-// =============================================================================
-// Main Seed Function
-// =============================================================================
-
-async function main() {
-  console.log("FundOrDonate — Seeding database...\n");
-
-  const users = await seedUsers();
-  console.log(`  Created ${Object.keys(users).length} users\n`);
-
-  const categories = await seedCategories();
-  console.log(`  Created ${categories.length} categories\n`);
-
-  const tags = await seedTags();
-  console.log(`  Created ${tags.length} tags\n`);
-
-  const campaignTypes = await seedCampaignTypes();
-  console.log(`  Created ${campaignTypes.length} campaign types\n`);
-
-  const seasons = await seedSeasons();
-  console.log(`  Created ${seasons.length} campaign seasons\n`);
-
-  const groups = await seedGroups();
-  console.log(`  Created ${groups.length} campaign groups\n`);
-
-  const collections = await seedCollections();
-  console.log(`  Created ${collections.length} campaign collections\n`);
-
-  const events = await seedEvents();
-  console.log(`  Created ${events.length} campaign events\n`);
-
-  const campaigns = await seedCampaigns(users, categories, tags, campaignTypes, seasons, groups, collections, events);
-  console.log(`  Created ${campaigns.length} campaigns\n`);
-
-  console.log("Seed complete.\n");
-
-  // Print summary
-  console.log("=== SEED SUMMARY ===");
-  console.log("\nUsers:");
-  Object.entries(users).forEach(([key, user]) => {
-    console.log(`  ${key}: ${user.email} (${user.role}/${user.userType})`);
+  // Ensure ALL businesses in the database have auditReference and preAuditAnswers so templates are immediately available to claim
+  await prisma.business.updateMany({
+    where: { auditReference: null },
+    data: {
+      auditReference: "AUD-VERIFIED-2026",
+      preAuditAnswers: {
+        community_goal: "High Street Footfall and Local Commerce Expansion",
+        trainee_capacity: "5",
+      },
+    },
   });
-  console.log(`\nCampaigns by status:`);
-  const statusCounts = campaigns.reduce((acc, c) => {
-    acc[c.status] = (acc[c.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  Object.entries(statusCounts).forEach(([status, count]) => {
-    console.log(`  ${status}: ${count}`);
-  });
-  console.log(`\nCampaigns by mode:`);
-  const modeCounts = campaigns.reduce((acc, c) => {
-    acc[c.mode] = (acc[c.mode] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  Object.entries(modeCounts).forEach(([mode, count]) => {
-    console.log(`  ${mode}: ${count}`);
-  });
-  console.log(`\nCollaborator relationship: ${users.collaborator.firstName} → "Hackney Community Garden"`);
-  console.log(`\nDemo login credentials: all passwords = "password123"`);
+
+  console.log(`Seeded ${businessSeedData.length} Live Businesses and active campaigns across the UK.`);
+
+  console.log("Database seed completed successfully with rich live data! 🚀");
 }
 
 main()
-  .catch((e) => {
-    console.error("Seed failed:", e);
+  .catch((error) => {
+    console.error("Seed failed:", error);
     process.exit(1);
   })
   .finally(async () => {

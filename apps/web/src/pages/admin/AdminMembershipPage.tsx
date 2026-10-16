@@ -4,196 +4,139 @@
 // =============================================================================
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/services/admin";
 import {
-  Crown, Gem, DollarSign, Users, TrendingUp,
-  Edit3, Plus,
+  Crown, Gem, Users, TrendingUp,
+  Loader2,
 } from "lucide-react";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
-interface MembershipTier {
-  id: string;
-  name: string;
-  slug: string;
-  color: string;
-  icon: string;
-  levels: MembershipLevel[];
-}
-
-interface MembershipLevel {
-  id: string;
-  name: string;
-  slug: string;
-  price: number;
-  duration: string;
-  subscribers: number;
-  revenue: number;
-}
-
-const DEMO_TIERS: MembershipTier[] = [
-  {
-    id: "bronze", name: "Bronze", slug: "bronze", color: "text-amber-600", icon: "🥉",
-    levels: [
-      { id: "bronze-standard", name: "Standard", slug: "standard", price: 5000, duration: "Seasonal (180 days)", subscribers: 245, revenue: 1225000 },
-      { id: "bronze-pro", name: "Pro", slug: "pro", price: 10000, duration: "Seasonal (180 days)", subscribers: 89, revenue: 890000 },
-      { id: "bronze-pro-plus", name: "Pro+", slug: "pro-plus", price: 20000, duration: "Annual (365 days)", subscribers: 32, revenue: 640000 },
-    ],
-  },
-  {
-    id: "silver", name: "Silver", slug: "silver", color: "text-gray-500", icon: "🥈",
-    levels: [
-      { id: "silver-standard", name: "Standard", slug: "standard", price: 10000, duration: "Seasonal (180 days)", subscribers: 178, revenue: 1780000 },
-      { id: "silver-pro", name: "Pro", slug: "pro", price: 20000, duration: "Seasonal (180 days)", subscribers: 65, revenue: 1300000 },
-      { id: "silver-pro-plus", name: "Pro+", slug: "pro-plus", price: 40000, duration: "Annual (365 days)", subscribers: 28, revenue: 1120000 },
-    ],
-  },
-  {
-    id: "gold", name: "Gold", slug: "gold", color: "text-yellow-600", icon: "🥇",
-    levels: [
-      { id: "gold-standard", name: "Standard", slug: "standard", price: 25000, duration: "Seasonal (180 days)", subscribers: 120, revenue: 3000000 },
-      { id: "gold-pro", name: "Pro", slug: "pro", price: 50000, duration: "Seasonal (180 days)", subscribers: 42, revenue: 2100000 },
-      { id: "gold-pro-plus", name: "Pro+", slug: "pro-plus", price: 100000, duration: "Annual (365 days)", subscribers: 15, revenue: 1500000 },
-    ],
-  },
-  {
-    id: "platinum", name: "Platinum", slug: "platinum", color: "text-purple-600", icon: "💎",
-    levels: [
-      { id: "platinum-standard", name: "Standard", slug: "standard", price: 50000, duration: "Seasonal (180 days)", subscribers: 65, revenue: 3250000 },
-      { id: "platinum-pro", name: "Pro", slug: "pro", price: 100000, duration: "Seasonal (180 days)", subscribers: 22, revenue: 2200000 },
-      { id: "platinum-pro-plus", name: "Pro+", slug: "pro-plus", price: 200000, duration: "Annual (365 days)", subscribers: 8, revenue: 1600000 },
-    ],
-  },
-];
-
 export default function AdminMembershipPage() {
-  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const { data: businessesData, isLoading: loadingBiz } = useQuery({
+    queryKey: ["admin-businesses-tiers"],
+    queryFn: () => adminApi.getBusinesses({ limit: 100 }),
+  });
 
-  const totalSubscribers = DEMO_TIERS.flatMap((t) => t.levels).reduce((s, l) => s + l.subscribers, 0);
-  const totalRevenue = DEMO_TIERS.flatMap((t) => t.levels).reduce((s, l) => s + l.revenue, 0);
-  const tierTotals = DEMO_TIERS.map((t) => ({
-    ...t,
-    totalSubscribers: t.levels.reduce((s, l) => s + l.subscribers, 0),
-    totalRevenue: t.levels.reduce((s, l) => s + l.revenue, 0),
-  }));
+  const { data: foundingMembers, isLoading: loadingFounding } = useQuery({
+    queryKey: ["admin-founding-tiers"],
+    queryFn: () => adminApi.getFoundingMembers(),
+  });
+
+  const businesses = businessesData?.items || businessesData?.businesses || [];
+
+  const tierStats = {
+    BRONZE: businesses.filter((b: any) => b.membershipTier === "BRONZE").length,
+    SILVER: businesses.filter((b: any) => b.membershipTier === "SILVER").length,
+    GOLD: businesses.filter((b: any) => b.membershipTier === "GOLD").length,
+    PLATINUM: businesses.filter((b: any) => b.membershipTier === "PLATINUM").length,
+  };
+
+  const tiers = [
+    {
+      id: "bronze",
+      name: "Bronze",
+      badge: "BRONZE",
+      color: "text-amber-600",
+      bg: "bg-amber-50 border-amber-200",
+      icon: "🥉",
+      activeCount: tierStats.BRONZE,
+      standardPrice: 5000,
+    },
+    {
+      id: "silver",
+      name: "Silver",
+      badge: "SILVER",
+      color: "text-gray-500",
+      bg: "bg-gray-50 border-gray-200",
+      icon: "🥈",
+      activeCount: tierStats.SILVER,
+      standardPrice: 10000,
+    },
+    {
+      id: "gold",
+      name: "Gold",
+      badge: "GOLD",
+      color: "text-yellow-600",
+      bg: "bg-yellow-50 border-yellow-200",
+      icon: "🥇",
+      activeCount: tierStats.GOLD,
+      standardPrice: 25000,
+    },
+    {
+      id: "platinum",
+      name: "Platinum",
+      badge: "PLATINUM",
+      color: "text-purple-600",
+      bg: "bg-purple-50 border-purple-200",
+      icon: "💎",
+      activeCount: tierStats.PLATINUM,
+      standardPrice: 50000,
+    },
+  ];
+
+  const totalSubscribers = businessesData?.total ?? businesses.length;
+  const totalFounding = foundingMembers?.length || 0;
+
+  if (loadingBiz || loadingFounding) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Membership Plans</h1>
-          <p className="text-sm text-gray-500">Manage membership tiers, levels, pricing and subscribers.</p>
-        </div>
-        <button className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-          <Plus className="h-4 w-4" /> Add Tier
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Membership Management</h1>
+        <p className="text-sm text-gray-500">Live overview of business membership tiers, subscribers, and pricing.</p>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
-          <Crown className="mx-auto h-5 w-5 text-amber-500 mb-1" />
-          <div className="text-lg font-bold text-gray-900">{DEMO_TIERS.length}</div>
-          <div className="text-xs text-gray-500">Tiers</div>
+      {/* KPI Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+            <Users className="h-4 w-4 text-blue-500" /> Total Active Businesses
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{totalSubscribers}</div>
         </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
-          <Users className="mx-auto h-5 w-5 text-blue-500 mb-1" />
-          <div className="text-lg font-bold text-gray-900">{totalSubscribers.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">Total Subscribers</div>
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+            <Crown className="h-4 w-4 text-amber-500" /> Founding Members
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{totalFounding}</div>
         </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
-          <DollarSign className="mx-auto h-5 w-5 text-green-500 mb-1" />
-          <div className="text-lg font-bold text-gray-900">{fmt(totalRevenue)}</div>
-          <div className="text-xs text-gray-500">Total Revenue</div>
-        </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
-          <TrendingUp className="mx-auto h-5 w-5 text-purple-500 mb-1" />
-          <div className="text-lg font-bold text-gray-900">3</div>
-          <div className="text-xs text-gray-500">Levels per Tier</div>
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+            <TrendingUp className="h-4 w-4 text-green-500" /> Available Tiers
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{tiers.length}</div>
         </div>
       </div>
 
-      {/* Tier Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {tierTotals.map((tier) => {
-          const isSelected = selectedTier === tier.id;
-          return (
-            <div
-              key={tier.id}
-              onClick={() => setSelectedTier(isSelected ? null : tier.id)}
-              className={`rounded-xl border p-5 cursor-pointer transition-all ${
-                isSelected ? "border-primary-300 bg-primary-50 shadow-md" : "border-gray-200 bg-white hover:shadow-sm"
-              }`}
-            >
-              <div className="text-2xl mb-2">{tier.icon}</div>
-              <h3 className="text-lg font-bold text-gray-900">{tier.name}</h3>
-              <div className="mt-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Subscribers</span>
-                  <span className="font-bold text-gray-900">{tier.totalSubscribers}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Revenue</span>
-                  <span className="font-bold text-gray-900">{fmt(tier.totalRevenue)}</span>
-                </div>
+      {/* Tiers Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {tiers.map((t) => (
+          <div key={t.id} className={`rounded-xl border p-5 bg-white shadow-sm flex flex-col justify-between`}>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-2xl">{t.icon}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.bg} ${t.color}`}>
+                  {t.badge}
+                </span>
               </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">{t.name} Tier</h3>
+              <p className="text-xs text-gray-500 mb-4">Base contribution {fmt(t.standardPrice)}</p>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Level Details */}
-      {selectedTier && (
-        <div className="rounded-xl border bg-white overflow-hidden">
-          <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900">
-              {DEMO_TIERS.find((t) => t.id === selectedTier)?.name} Levels
-            </h3>
-            <button className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
-              <Edit3 className="h-3 w-3" /> Edit Tier
-            </button>
+            <div className="pt-4 border-t">
+              <div className="text-xs text-gray-500">Active Subscribers</div>
+              <div className="text-xl font-bold text-gray-900">{t.activeCount} businesses</div>
+            </div>
           </div>
-          <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 font-medium text-gray-500">Level</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Price</th>
-                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Duration</th>
-                <th className="px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Subscribers</th>
-                <th className="px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Revenue</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {DEMO_TIERS.find((t) => t.id === selectedTier)?.levels.map((level) => (
-                <tr key={level.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-900">{level.name}</span>
-                      {level.slug === "pro-plus" && <Gem className="h-3 w-3 text-purple-500" />}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{fmt(level.price)}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell text-xs text-gray-500">{level.duration}</td>
-                  <td className="px-4 py-3 hidden md:table-cell text-sm text-gray-900">{level.subscribers}</td>
-                  <td className="px-4 py-3 hidden md:table-cell text-sm font-semibold text-gray-900">{fmt(level.revenue)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pro+ Annual Note */}
-      <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
-        <div className="flex items-start gap-3">
-          <Gem className="h-5 w-5 text-blue-500 mt-0.5" />
-          <div>
-            <h4 className="text-sm font-bold text-blue-900">Pro+ is Annual Access</h4>
-            <p className="text-xs text-blue-700 mt-1">
-              Pro+ memberships are annual (365 days), not seasonal (180 days). This provides longer access and higher value for committed members.
-            </p>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

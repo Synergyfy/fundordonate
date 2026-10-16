@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect, useRef } from "react";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { Calendar, ChevronDown, Check } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {

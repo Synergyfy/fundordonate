@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 
 interface Props {
   campaignId: string;

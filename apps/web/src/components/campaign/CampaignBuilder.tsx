@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { StepBasicInfo } from "./steps/StepBasicInfo";
 import { StepGoalDuration } from "./steps/StepGoalDuration";
 import { StepRewards } from "./steps/StepRewards";

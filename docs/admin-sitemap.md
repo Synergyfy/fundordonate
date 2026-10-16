@@ -48,7 +48,7 @@ grouped into sections so admins can reach every page:
 ### 2.2 Campaigns — `/admin/campaigns`  ✅ refine
 - **Toolbar buttons**: New Campaign, Filter (status: all / active / ended / draft),
   Sort.
-- **List/table**: thumbnail, title, mode (Fund/Donate/Sponsor), goal/raised, status,
+- **List/table**: thumbnail, title, mode (Fund/Donate), goal/raised, status,
   date; tap → **details drawer** with actions: Edit, Approve/Reject, Archive,
   View public page.
 - **Mobile**: list becomes stacked cards; primary action "Approve" on the card.

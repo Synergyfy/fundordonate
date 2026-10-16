@@ -6,7 +6,8 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
+import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
 import { Heart, Check, ArrowLeft } from "lucide-react";
 
 interface Campaign {
@@ -34,7 +35,6 @@ export default function TerminalDonationPage() {
   const [selectedAmount, setSelectedAmount] = useState<number>(0);
   const [customAmount, setCustomAmount] = useState("");
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [email, setEmail] = useState("");
   const [giftAid, setGiftAid] = useState(false);
 
@@ -50,10 +50,9 @@ export default function TerminalDonationPage() {
           setStep("amount");
         }
       } else if (locationId) {
-        // Multi-campaign mode (terminal shows all campaigns for location)
-        const data = await campaignApi.list({ status: "ACTIVE", limit: 6 });
-        // Filter by location client-side since API doesn't support locationId filter
-        setCampaigns(((data.items || []) as Campaign[]).filter((c: any) => c.locationId === locationId));
+        // Multi-campaign mode (terminal shows campaigns for location)
+        const data = await campaignApi.list({ status: "ACTIVE", locationId, limit: 20 });
+        setCampaigns((data.items || []) as Campaign[]);
       }
       setLoading(false);
     };
@@ -70,26 +69,8 @@ export default function TerminalDonationPage() {
     setSelectedAmount(0);
   };
 
-  const handleDonate = async () => {
-    const amount = selectedAmount || Number(customAmount) * 100;
-    if (!selectedCampaign || amount <= 0) return;
-
-    setProcessing(true);
-    try {
-      await campaignApi.createDonation(selectedCampaign.id, {
-        amount,
-        email: email || undefined,
-        giftAid,
-        channel: "terminal",
-        terminalId,
-      } as any);
-      setStep("success");
-    } catch {
-      // Demo mode - show success anyway
-      setStep("success");
-    } finally {
-      setProcessing(false);
-    }
+  const handleDonate = () => {
+    setStep("success");
   };
 
   const handleNewDonation = () => {
@@ -299,16 +280,25 @@ export default function TerminalDonationPage() {
               </label>
             </div>
 
-            <button
-              onClick={handleDonate}
-              disabled={processing || amount <= 0}
-              className="w-full rounded-2xl bg-primary-600 px-8 py-4 text-xl font-bold text-white shadow-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-            >
-              {processing ? "Processing..." : `Donate £${(amount / 100).toFixed(2)}`}
-            </button>
+            <McomCheckoutPanel
+              amountPence={amount}
+              purpose="DONATION"
+              campaignId={selectedCampaign.id}
+              notes={email ? `Receipt email: ${email}` : undefined}
+              metadata={{
+                email: email || undefined,
+                giftAid,
+                channel: "terminal",
+                terminalId,
+              }}
+              formatGbp={(pence) =>
+                new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100)
+              }
+              onSuccess={handleDonate}
+            />
 
             <p className="mt-4 text-center text-xs text-gray-400">
-              Secure payment processed by Stripe
+              Secure payment processed by MCOM Pay
             </p>
           </div>
         </div>

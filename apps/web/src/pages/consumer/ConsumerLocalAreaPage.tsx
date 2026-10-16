@@ -10,9 +10,9 @@ import {
   Building2, ChevronRight, Users,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
-import { getLocalAreasForCity } from "@/data/highStreetData";
+import { locationService } from "@/services/location";
 
 export default function ConsumerLocalAreaPage() {
   const { citySlug } = useParams<{ citySlug: string }>();
@@ -26,12 +26,15 @@ export default function ConsumerLocalAreaPage() {
   const seasons = seasonResponse?.seasons ?? [];
   const currentSeason = seasons.find((s: Season) => s.status === "ACTIVE") || seasons[0] || null;
 
-  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "City";
 
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
 
-  const localAreas = useMemo(() => getLocalAreasForCity(citySlug || ""), [citySlug]);
+  const { data: localAreas = [] } = useQuery({
+    queryKey: ["local-areas", citySlug],
+    queryFn: () => locationService.getLocalAreasForCity(citySlug || ""),
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -94,7 +97,7 @@ export default function ConsumerLocalAreaPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {localAreas.map((area) => (
+            {localAreas.map((area: any) => (
               <Link
                 key={area.slug}
                 to={`/uk-hub-activation/${citySlug}/consumer/${area.slug}`}
@@ -111,9 +114,9 @@ export default function ConsumerLocalAreaPage() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-gray-500">{area.highStreets} high streets</span>
                     </div>
-                    {area.highStreetsList.length > 0 && (
+                    {area.highStreetsList && area.highStreetsList.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {area.highStreetsList.slice(0, 3).map((hs) => (
+                        {area.highStreetsList.slice(0, 3).map((hs: any) => (
                           <span key={hs.slug} className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                             {hs.name}
                           </span>

@@ -20,6 +20,17 @@ import {
   Gift,
   Eye,
   CheckCircle,
+  Tag,
+  Target,
+  Zap,
+  Clock,
+  Calculator,
+  PieChart,
+  Crown,
+  Trophy,
+  Scroll,
+  AlertTriangle,
+  Send,
 } from "lucide-react";
 import type { StepId, StepDef } from "@/types/campaign-wizard";
 
@@ -35,6 +46,17 @@ const STEP_ICONS: Record<string, ReactNode> = {
   Gift: <Gift className="h-4 w-4" />,
   Eye: <Eye className="h-4 w-4" />,
   CheckCircle: <CheckCircle className="h-4 w-4" />,
+  Tag: <Tag className="h-4 w-4" />,
+  Target: <Target className="h-4 w-4" />,
+  Zap: <Zap className="h-4 w-4" />,
+  Clock: <Clock className="h-4 w-4" />,
+  Calculator: <Calculator className="h-4 w-4" />,
+  PieChart: <PieChart className="h-4 w-4" />,
+  Crown: <Crown className="h-4 w-4" />,
+  Trophy: <Trophy className="h-4 w-4" />,
+  Scroll: <Scroll className="h-4 w-4" />,
+  AlertTriangle: <AlertTriangle className="h-4 w-4" />,
+  Send: <Send className="h-4 w-4" />,
 };
 
 interface Props {
@@ -46,10 +68,12 @@ interface Props {
   onBack: () => void;
   onNext: () => void;
   onSaveDraft: () => void;
+  onSubmitPublish?: () => void;
   isFirstStep: boolean;
   isLastStep: boolean;
   nextDisabled?: boolean;
   saving?: boolean;
+  publishing?: boolean;
   children: ReactNode;
   mode?: "create" | "edit";
 }
@@ -63,10 +87,12 @@ export function WizardShell({
   onBack,
   onNext,
   onSaveDraft,
+  onSubmitPublish,
   isFirstStep,
   isLastStep,
   nextDisabled = false,
   saving = false,
+  publishing = false,
   children,
   mode = "create",
 }: Props) {
@@ -104,61 +130,77 @@ export function WizardShell({
       </header>
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        {/* ── Sidebar: Step Progress ── */}
-        <aside className="hidden w-56 flex-shrink-0 lg:block">
-          <nav className="sticky top-20 space-y-1">
-            {steps.map((step, idx) => {
-              const isActive = step.id === currentStep;
-              const isCompleted = completedSteps.has(step.id);
-              const isAccessible = canNavigateToStep(step.id);
-              const hasError = (stepErrors[step.id]?.length ?? 0) > 0;
+        {/* ── Sidebar: Step Progress (Grouped by Category) ── */}
+        <aside className="hidden w-60 flex-shrink-0 lg:block">
+          <nav className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto space-y-3 pr-1">
+            {(() => {
+              const grouped: { category: string; steps: StepDef[] }[] = [];
+              for (const step of steps) {
+                const last = grouped[grouped.length - 1];
+                if (last && last.category === step.category) {
+                  last.steps.push(step);
+                } else {
+                  grouped.push({ category: step.category, steps: [step] });
+                }
+              }
+              return grouped.map((group) => (
+                <div key={group.category}>
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    {group.category}
+                  </div>
+                  <div className="space-y-0.5">
+                    {group.steps.map((step) => {
+                      const idx = steps.findIndex((s) => s.id === step.id);
+                      const isActive = step.id === currentStep;
+                      const isCompleted = completedSteps.has(step.id);
+                      const isAccessible = canNavigateToStep(step.id);
+                      const hasError = (stepErrors[step.id]?.length ?? 0) > 0;
 
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => isAccessible && onStepClick(step.id)}
-                  disabled={!isAccessible}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                    isActive
-                      ? "bg-primary-50 font-semibold text-primary-700"
-                      : isAccessible
-                        ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                        : "cursor-default text-gray-400"
-                  }`}
-                >
-                  {/* Step Number / Check */}
-                  <span
-                    className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      isActive
-                        ? "bg-primary-600 text-white"
-                        : isCompleted
-                          ? "bg-green-100 text-green-700"
-                          : hasError
-                            ? "bg-red-100 text-red-600"
-                            : "bg-gray-200 text-gray-500"
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle className="h-3.5 w-3.5" />
-                    ) : (
-                      idx + 1
-                    )}
-                  </span>
-
-                  {/* Label + Icon */}
-                  <span className="flex items-center gap-2">
-                    {STEP_ICONS[step.icon]}
-                    <span>{step.shortLabel}</span>
-                  </span>
-
-                  {/* Error indicator */}
-                  {hasError && !isActive && (
-                    <span className="ml-auto h-2 w-2 rounded-full bg-red-400" />
-                  )}
-                </button>
-              );
-            })}
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          onClick={() => isAccessible && onStepClick(step.id)}
+                          disabled={!isAccessible}
+                          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                            isActive
+                              ? "bg-primary-50 font-semibold text-primary-700"
+                              : isAccessible
+                                ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                : "cursor-default text-gray-400"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                              isActive
+                                ? "bg-primary-600 text-white"
+                                : isCompleted
+                                  ? "bg-green-100 text-green-700"
+                                  : hasError
+                                    ? "bg-red-100 text-red-600"
+                                    : "bg-gray-200 text-gray-500"
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle className="h-3 w-3" />
+                            ) : (
+                              idx + 1
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            {STEP_ICONS[step.icon]}
+                            <span>{step.shortLabel}</span>
+                          </span>
+                          {hasError && !isActive && (
+                            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-red-400" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
           </nav>
         </aside>
 
@@ -220,9 +262,27 @@ export function WizardShell({
                 <ChevronRight className="h-4 w-4" />
               </button>
             ) : (
-              <div className="text-sm text-gray-500">
-                Use the buttons above to submit your campaign.
-              </div>
+              <button
+                type="button"
+                onClick={onSubmitPublish}
+                disabled={publishing}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {publishing ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Submit & Publish
+                  </>
+                )}
+              </button>
             )}
           </div>
         </div>

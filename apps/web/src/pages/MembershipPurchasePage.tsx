@@ -6,8 +6,10 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
-import { foundingApi } from "@/services/founding.service";
-import { ArrowLeft, Check, CreditCard, Shield, Heart, Building2, User } from "lucide-react";
+import { foundingApi } from "@/services/founding";
+import { paymentApi, type PaymentMethod } from "@/services/payment";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { ArrowLeft, Check, CreditCard, Shield, Heart, Building2, User, Coins, AlertCircle } from "lucide-react";
 
 interface Programme {
   id: string;
@@ -58,19 +60,48 @@ export default function MembershipPurchasePage() {
   const programme = selectedProgramme || filteredProgrammes[0];
   const amount = selectedAmount || (programme?.contributionAmounts?.[0] ? Number(programme.contributionAmounts[0]) : 0);
 
-  const handleSimulatePayment = async () => {
+  const { data: wallet } = useWalletBalance();
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wallet");
+  const [paymentError, setPaymentError] = useState("");
+
+  const handleProcessPayment = async () => {
     if (!programme) return;
     setProcessing(true);
+    setPaymentError("");
     try {
+      // 1. Process payment via MCOM Pay / Wallet
+      const charge = await paymentApi.createCharge({
+        amountMinor: amount, // in pence
+        method: paymentMethod,
+        type: "MEMBERSHIP",
+        membershipProgrammeId: programme.id,
+        description: `Founding Membership: ${programme.title}`,
+        metadata: {
+          locationId: programme.locationId,
+          audience: programme.audience,
+          isMonthly,
+        },
+      });
+
+      if (paymentMethod === "paypal" && charge.approvalUrl) {
+        window.location.href = charge.approvalUrl;
+        return;
+      }
+
+      // 2. Complete programme enrollment
       await foundingApi.joinProgramme({
         programmeId: programme.id,
         contributionAmount: amount,
         isMonthly,
       });
+
       setStep("success");
-    } catch {
-      // Demo mode - still show success
-      setStep("success");
+    } catch (err: unknown) {
+      setPaymentError(
+        err instanceof Error
+          ? err.message
+          : "Failed to process membership payment through MCOM Central",
+      );
     } finally {
       setProcessing(false);
     }
@@ -268,17 +299,108 @@ export default function MembershipPurchasePage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border-2 border-dashed border-gray-300 p-8 text-center">
-                <CreditCard className="h-12 w-12 text-gray-400 mx-auto" />
-                <p className="mt-3 text-sm text-gray-600">Payment integration (Stripe) will be connected by backend developer.</p>
-                <button
-                  onClick={handleSimulatePayment}
-                  disabled={processing}
-                  className="mt-4 rounded-xl bg-primary-600 px-6 py-3 text-sm font-bold text-white hover:bg-primary-700 disabled:opacity-50"
-                >
-                  {processing ? "Processing..." : "Simulate Payment (Demo)"}
-                </button>
+              {/* Payment Method Selector */}
+              <div className="space-y-3 mb-6">
+                <h3 className="text-sm font-bold text-gray-900">Select Payment Method</h3>
+                <div className="space-y-2">
+                  <label
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition-all ${
+                      paymentMethod === "wallet"
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="mcomPaymentMethod"
+                      value="wallet"
+                      checked={paymentMethod === "wallet"}
+                      onChange={() => setPaymentMethod("wallet")}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500"
+                    />
+                    <Coins className="h-5 w-5 text-amber-600" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-900">MCOM Central Wallet</span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          Instant Settlement
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {wallet
+                          ? `Available balance: ${wallet.availableBalance.toFixed(2)} MCOM`
+                          : "Pay with prepaid credits"}
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition-all ${
+                      paymentMethod === "stripe"
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="mcomPaymentMethod"
+                      value="stripe"
+                      checked={paymentMethod === "stripe"}
+                      onChange={() => setPaymentMethod("stripe")}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500"
+                    />
+                    <CreditCard className="h-5 w-5 text-blue-600" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-bold text-gray-900">Credit / Debit Card</span>
+                      <p className="text-xs text-gray-500">Visa, Mastercard, Amex via MCOM Pay</p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition-all ${
+                      paymentMethod === "paypal"
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="mcomPaymentMethod"
+                      value="paypal"
+                      checked={paymentMethod === "paypal"}
+                      onChange={() => setPaymentMethod("paypal")}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-lg">🅿️</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-bold text-gray-900">PayPal</span>
+                      <p className="text-xs text-gray-500">Pay securely via PayPal account</p>
+                    </div>
+                  </label>
+                </div>
+
+                {paymentError && (
+                  <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700 flex items-center gap-2 border border-red-200">
+                    <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                    <span>{paymentError}</span>
+                  </div>
+                )}
               </div>
+
+              <button
+                onClick={handleProcessPayment}
+                disabled={processing}
+                className="w-full rounded-xl bg-primary-600 px-6 py-3.5 text-sm font-bold text-white hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-xs"
+              >
+                {processing ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Processing with MCOM Pay...
+                  </span>
+                ) : (
+                  `Pay £${(amount / 100).toFixed(2)} and Join Programme`
+                )}
+              </button>
             </div>
 
             <button onClick={() => setStep("benefits")} className="w-full rounded-xl border border-gray-200 px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50">

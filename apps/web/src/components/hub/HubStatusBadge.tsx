@@ -1,5 +1,9 @@
-import { HUB_STATUS_META, type HubStatus } from "@/data/hubActivation";
-import { LOCATION_PUBLIC_STATUS_META, type LocationPublicStatus } from "@/types/uk-hub";
+import {
+  HUB_STATUS_META,
+  type HubStatus,
+  LOCATION_PUBLIC_STATUS_META,
+  type LocationPublicStatus,
+} from "@/types/uk-hub";
 
 type Size = "sm" | "md";
 

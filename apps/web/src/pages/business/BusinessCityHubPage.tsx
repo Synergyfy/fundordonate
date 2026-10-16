@@ -3,80 +3,19 @@
 // Shows city overview before registration - what's available to business owners.
 // =============================================================================
 
-import React from "react";
+import React, { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
+import { fetchCityDetail } from "@/services/location";
 import {
   Store, MapPin, Target, TrendingUp, Calendar, Clock,
   ArrowRight, ChevronRight, Award, BarChart3, Gift, Megaphone,
-  Heart, Briefcase,
+  Heart, Briefcase, Loader2,
 } from "lucide-react";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
-
-const CITY_DATA: Record<string, {
-  name: string;
-  description: string;
-  activationPct: number;
-  businesses: number;
-  highStreets: number;
-  activeCampaigns: number;
-  fundingRaised: number;
-  fundingTarget: number;
-  localAreas: { id: string; name: string; activationPct: number; businesses: number; highStreets: number; campaigns: number; fundingRaised: number; fundingTarget: number }[];
-}> = {
-  manchester: {
-    name: "Manchester",
-    description: "Building a stronger local business and community network across Manchester.",
-    activationPct: 72,
-    businesses: 1248,
-    highStreets: 43,
-    activeCampaigns: 12,
-    fundingRaised: 145000,
-    fundingTarget: 200000,
-    localAreas: [
-      { id: "northern-quarter", name: "Northern Quarter", activationPct: 85, businesses: 156, highStreets: 8, campaigns: 5, fundingRaised: 45000, fundingTarget: 50000 },
-      { id: "ancoats", name: "Ancoats", activationPct: 78, businesses: 134, highStreets: 6, campaigns: 4, fundingRaised: 38000, fundingTarget: 45000 },
-      { id: "castlefield", name: "Castlefield", activationPct: 65, businesses: 98, highStreets: 5, campaigns: 3, fundingRaised: 32000, fundingTarget: 40000 },
-      { id: "salford", name: "Salford", activationPct: 62, businesses: 112, highStreets: 7, campaigns: 3, fundingRaised: 30000, fundingTarget: 35000 },
-      { id: "stockport", name: "Stockport", activationPct: 55, businesses: 89, highStreets: 6, campaigns: 2, fundingRaised: 22000, fundingTarget: 30000 },
-      { id: "bolton", name: "Bolton", activationPct: 48, businesses: 76, highStreets: 5, campaigns: 2, fundingRaised: 18000, fundingTarget: 25000 },
-    ],
-  },
-  london: {
-    name: "London",
-    description: "Building a stronger local business and community network across London.",
-    activationPct: 68,
-    businesses: 2150,
-    highStreets: 78,
-    activeCampaigns: 24,
-    fundingRaised: 380000,
-    fundingTarget: 500000,
-    localAreas: [
-      { id: "camden", name: "Camden", activationPct: 82, businesses: 245, highStreets: 12, campaigns: 6, fundingRaised: 85000, fundingTarget: 100000 },
-      { id: "westminster", name: "Westminster", activationPct: 75, businesses: 198, highStreets: 10, campaigns: 5, fundingRaised: 72000, fundingTarget: 90000 },
-      { id: "islington", name: "Islington", activationPct: 70, businesses: 167, highStreets: 8, campaigns: 4, fundingRaised: 58000, fundingTarget: 75000 },
-      { id: "hackney", name: "Hackney", activationPct: 65, businesses: 145, highStreets: 7, campaigns: 4, fundingRaised: 48000, fundingTarget: 65000 },
-    ],
-  },
-  birmingham: {
-    name: "Birmingham",
-    description: "Building a stronger local business and community network across Birmingham.",
-    activationPct: 65,
-    businesses: 980,
-    highStreets: 35,
-    activeCampaigns: 9,
-    fundingRaised: 112000,
-    fundingTarget: 175000,
-    localAreas: [
-      { id: "city-centre", name: "City Centre", activationPct: 78, businesses: 189, highStreets: 8, campaigns: 4, fundingRaised: 42000, fundingTarget: 55000 },
-      { id: "edgbaston", name: "Edgbaston", activationPct: 68, businesses: 124, highStreets: 6, campaigns: 3, fundingRaised: 35000, fundingTarget: 45000 },
-      { id: "solihull", name: "Solihull", activationPct: 58, businesses: 98, highStreets: 5, campaigns: 2, fundingRaised: 35000, fundingTarget: 40000 },
-    ],
-  },
-};
 
 function useCountdown(targetDate: string) {
   const [timeLeft, setTimeLeft] = React.useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -115,7 +54,75 @@ const WHATS_HAPPENING = [
 
 export default function BusinessCityHubPage() {
   const { citySlug } = useParams<{ citySlug: string }>();
-  const city = CITY_DATA[citySlug || "manchester"] ?? CITY_DATA.manchester!;
+  const activeSlug = citySlug || "manchester";
+
+  const { data: cityDetail, isLoading, isError } = useQuery({
+    queryKey: ["cityDetail", activeSlug],
+    queryFn: () => fetchCityDetail(activeSlug),
+    enabled: Boolean(activeSlug),
+  });
+
+  const city = useMemo(() => {
+    if (!cityDetail) {
+      return {
+        name: activeSlug.charAt(0).toUpperCase() + activeSlug.slice(1),
+        description: `Building a stronger local business and community network across ${activeSlug}.`,
+        activationPct: 0,
+        businesses: 0,
+        highStreets: 0,
+        activeCampaigns: 0,
+        fundingRaised: 0,
+        fundingTarget: 0,
+        localAreas: [] as any[],
+      };
+    }
+
+    const businesses = cityDetail.businesses || [];
+    const children = cityDetail.children || [];
+    let highStreetsCount = 0;
+    let campaignsCount = 0;
+    let raisedPence = 0;
+
+    for (const b of businesses) {
+      for (const camp of (b.campaigns || [])) {
+        raisedPence += camp.raisedAmount || 0;
+        campaignsCount++;
+      }
+    }
+
+    const localAreas = children.map((area: any) => {
+      const areaHighStreets = (area.children || []).length;
+      highStreetsCount += areaHighStreets;
+      const targetPence = Number(area.targetAmount) || 0;
+      return {
+        id: area.slug || area.id,
+        name: area.name,
+        activationPct: 0,
+        businesses: 0,
+        highStreets: areaHighStreets,
+        campaigns: 0,
+        fundingRaised: 0,
+        fundingTarget: targetPence / 100,
+      };
+    });
+
+    const targetPence = Number(cityDetail.targetAmount) || 0;
+    const fundingTarget = targetPence / 100;
+    const fundingRaised = raisedPence / 100;
+    const activationPct = fundingTarget > 0 ? Math.min(100, Math.round((fundingRaised / fundingTarget) * 100)) : 0;
+
+    return {
+      name: cityDetail.name || activeSlug,
+      description: cityDetail.shortDescription || cityDetail.description || `Building a stronger local business and community network across ${cityDetail.name || activeSlug}.`,
+      activationPct,
+      businesses: businesses.length,
+      highStreets: highStreetsCount,
+      activeCampaigns: campaignsCount,
+      fundingRaised,
+      fundingTarget,
+      localAreas,
+    };
+  }, [cityDetail, activeSlug]);
 
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],
@@ -245,10 +252,10 @@ export default function BusinessCityHubPage() {
 
             {/* Local Area Cards */}
             <div className="divide-y">
-              {city.localAreas.map((area) => (
+              {city.localAreas.map((area: any) => (
                 <Link
                   key={area.id}
-                  to={`/business/${citySlug}/local-area/${area.id}`}
+                  to={`/business/${activeSlug}/local-area/${area.id}`}
                   className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex-1">
@@ -277,6 +284,18 @@ export default function BusinessCityHubPage() {
                   <ArrowRight className="h-5 w-5 text-gray-300 ml-4" />
                 </Link>
               ))}
+              {city.localAreas.length === 0 && (
+                <div className="p-8 text-center text-sm text-gray-400">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary-600" />
+                      <span>Loading local areas...</span>
+                    </div>
+                  ) : (
+                    "No local areas configured for this hub yet."
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </section>

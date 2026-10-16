@@ -77,7 +77,7 @@ export function PledgeRewardStep({ rewards, selectedRewardId, onChange }: Props)
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-gray-900">{reward.title}</span>
                 <span className="text-sm font-bold text-primary-600 whitespace-nowrap">
-                  ${reward.amount.toLocaleString()}
+                  £{(reward.amount / 100).toLocaleString()}
                 </span>
               </div>
               {reward.description && (

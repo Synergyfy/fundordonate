@@ -161,14 +161,14 @@ export function DonationDetailsStep({ details, onChange, donationAmount }: Props
         <div>
           <span className="text-sm font-medium text-gray-900">Cover processing fees</span>
           <p className="text-xs text-gray-500">
-            Add ${(processingFee / 100).toFixed(2)} so 100% goes to the cause
+            Add £{(processingFee / 100).toFixed(2)} so 100% goes to the cause
           </p>
         </div>
       </label>
       {details.coverFees && (
         <div className="rounded-lg bg-green-50 px-3.5 py-2.5 pl-10">
           <p className="text-xs text-green-700">
-            Total: <span className="font-semibold">${(totalWithFees / 100).toFixed(2)}</span>
+            Total: <span className="font-semibold">£{(totalWithFees / 100).toFixed(2)}</span>
           </p>
         </div>
       )}

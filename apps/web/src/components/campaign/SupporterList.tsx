@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { Heart, Gift, ChevronDown } from "lucide-react";
 
 interface SupporterItem {
@@ -96,7 +96,7 @@ export function SupporterList({ campaignId, mode }: Props) {
           </h3>
         </div>
         <span className="text-sm text-gray-500">
-          {mode === "fund" ? "Backers" : mode === "sponsor" ? "Partners" : "Donors"}
+          {mode === "fund" ? "Backers" : "Donors"}
         </span>
       </div>
 

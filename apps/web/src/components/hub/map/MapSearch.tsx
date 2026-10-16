@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Search, X } from "lucide-react";
-import type { HubLocation } from "@/data/hubActivation";
+import type { HubLocation } from "@/types/uk-hub";
 
 interface MapSearchProps {
   locations: HubLocation[];

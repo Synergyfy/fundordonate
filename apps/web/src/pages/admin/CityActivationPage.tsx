@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ALL_LOCATIONS } from "@/data/ukHubData";
+import { adminApi, type AdminLocation } from "@/services/admin";
 import type { LocationInternalLifecycle, LocationPublicStatus } from "@/types/uk-hub";
+import { formatCurrency } from "@/utils/formatters";
 
 type LifecycleFilter = "" | LocationInternalLifecycle;
 
@@ -25,9 +26,6 @@ const LIFECYCLE_FILTERS: { value: LifecycleFilter; label: string }[] = [
   ...LIFECYCLE_ORDER.map((l) => ({ value: l, label: l.replace(/_/g, " ") })),
 ];
 
-const formatCurrency = (a: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(a / 100);
-
 interface ActivationRecord {
   id: string;
   name: string;
@@ -43,81 +41,73 @@ interface ActivationRecord {
   foundingConsumerAllocated: number;
   foundingConsumerTotal: number;
   region: string;
-  hasBoroughs: boolean;
-  featured: boolean;
 }
-
-function buildActivationData(): ActivationRecord[] {
-  const cities = ALL_LOCATIONS.filter((l) => l.type === "CITY");
-  return cities.map((loc) => {
-    const seed = loc as unknown as Record<string, unknown>;
-    const region = (seed.region as string) || "";
-    const lifecycle = (seed.lifecycle as LocationInternalLifecycle) || "IDENTIFIED";
-    const publicStatus = loc.publicStatus;
-    const activationProgress = (seed.activationProgress as number) || 0;
-    const fundingTarget = loc.fundingTarget;
-    const fundingRaised = loc.fundingRaised;
-    const foundingBusinessAllocated = loc.foundingBusinessAllocated;
-    const foundingBusinessTotal = loc.foundingBusinessTotal;
-    const foundingConsumerAllocated = loc.foundingConsumerAllocated;
-    const foundingConsumerTotal = loc.foundingConsumerTotal;
-    const hasBoroughs = (seed.hasBoroughs as boolean) || false;
-    const featured = (seed.featured as boolean) || false;
-
-    return {
-      id: loc.id,
-      name: loc.name,
-      slug: loc.slug,
-      lifecycle,
-      publicStatus,
-      activationProgress,
-      activationThreshold: loc.activationThreshold || 0,
-      fundingTarget,
-      fundingRaised,
-      foundingBusinessAllocated,
-      foundingBusinessTotal,
-      foundingConsumerAllocated,
-      foundingConsumerTotal,
-      region,
-      hasBoroughs,
-      featured,
-    };
-  });
-}
-
-const ALL_ACTIVATION = buildActivationData();
 
 export function CityActivationPage() {
+  const [cities, setCities] = useState<ActivationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("");
   const [search, setSearch] = useState("");
 
+  const fetchCities = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminApi.getLocations({ type: "CITY", limit: 100 });
+      const records: ActivationRecord[] = (res.data || []).map((loc: any) => ({
+        id: loc.id,
+        name: loc.name,
+        slug: loc.slug || loc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        lifecycle: (loc.internalLifecycle || (loc.status === "ACTIVE" ? "ACTIVE" : "ACTIVATING")) as LocationInternalLifecycle,
+        publicStatus: (loc.publicStatus || (loc.status === "ACTIVE" ? "ACTIVE" : "MAKING_PROGRESS")) as LocationPublicStatus,
+        activationProgress: loc.activationProgress ?? (loc.fundingTarget > 0 ? Math.min(100, Math.round((loc.fundingRaised / loc.fundingTarget) * 100)) : 0),
+        activationThreshold: loc.activationThreshold || 80,
+        fundingTarget: loc.fundingTarget || 10000000,
+        fundingRaised: loc.fundingRaised || 0,
+        foundingBusinessAllocated: loc.foundingBusinessAllocated || 0,
+        foundingBusinessTotal: loc.foundingBusinessTotal || 100,
+        foundingConsumerAllocated: loc.foundingConsumerAllocated || 0,
+        foundingConsumerTotal: loc.foundingConsumerTotal || 500,
+        region: loc.region || "United Kingdom",
+      }));
+      setCities(records);
+    } catch {
+      setCities([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCities();
+  }, [fetchCities]);
+
   const filtered = useMemo(() => {
-    let list = ALL_ACTIVATION;
+    let list = cities;
     if (lifecycleFilter) list = list.filter((c) => c.lifecycle === lifecycleFilter);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((c) => c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q));
     }
     return list;
-  }, [lifecycleFilter, search]);
+  }, [cities, lifecycleFilter, search]);
 
   const lifecycleCounts = useMemo(() => {
     const c: Record<string, number> = {};
     LIFECYCLE_ORDER.forEach((l) => { c[l] = 0; });
-    ALL_ACTIVATION.forEach((a) => { c[a.lifecycle] = (c[a.lifecycle] || 0) + 1; });
+    cities.forEach((a) => { c[a.lifecycle] = (c[a.lifecycle] || 0) + 1; });
     return c;
-  }, []);
+  }, [cities]);
 
-  const totalFunding = useMemo(() => ALL_ACTIVATION.reduce((s, a) => s + a.fundingRaised, 0), []);
-  const totalTarget = useMemo(() => ALL_ACTIVATION.reduce((s, a) => s + a.fundingTarget, 0), []);
-  const activeCount = ALL_ACTIVATION.filter((a) => a.lifecycle === "ACTIVE").length;
+  const totalFunding = useMemo(() => cities.reduce((s, a) => s + a.fundingRaised, 0), [cities]);
+  const totalTarget = useMemo(() => cities.reduce((s, a) => s + a.fundingTarget, 0), [cities]);
+  const activeCount = cities.filter((a) => a.lifecycle === "ACTIVE").length;
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">City Activation</h1>
-          <p className="text-sm text-gray-500">{ALL_ACTIVATION.length} cities across the UK Hub programme</p>
+          <p className="text-sm text-gray-500">{cities.length} cities across the UK Hub programme</p>
         </div>
       </div>
 
@@ -138,7 +128,7 @@ export function CityActivationPage() {
         <div className="rounded-xl bg-white p-3 shadow-sm border border-gray-100 text-center">
           <span className="text-xs text-gray-500">Avg Progress</span>
           <p className="mt-1 text-lg font-bold text-gray-900">
-            {ALL_ACTIVATION.length > 0 ? Math.round(ALL_ACTIVATION.reduce((s, a) => s + a.activationProgress, 0) / ALL_ACTIVATION.length) : 0}%
+            {cities.length > 0 ? Math.round(cities.reduce((s, a) => s + a.activationProgress, 0) / cities.length) : 0}%
           </p>
         </div>
       </div>
@@ -189,92 +179,76 @@ export function CityActivationPage() {
 
       {/* City Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
-        {filtered.length === 0 && (
+        {loading ? (
+          <div className="col-span-2 py-10 text-center text-gray-400">Loading cities...</div>
+        ) : filtered.length === 0 ? (
           <div className="col-span-2 rounded-xl bg-white p-8 text-center text-gray-400 shadow-sm border border-gray-100">
             No cities match your filters.
           </div>
-        )}
-        {filtered.map((city) => {
-          const fundingPct = city.fundingTarget > 0 ? Math.round((city.fundingRaised / city.fundingTarget) * 100) : 0;
-          const bizPct = city.foundingBusinessTotal > 0 ? Math.round((city.foundingBusinessAllocated / city.foundingBusinessTotal) * 100) : 0;
-          const consPct = city.foundingConsumerTotal > 0 ? Math.round((city.foundingConsumerAllocated / city.foundingConsumerTotal) * 100) : 0;
-          const atThreshold = city.activationProgress >= city.activationThreshold;
+        ) : (
+          filtered.map((city) => {
+            const fundingPct = city.fundingTarget > 0 ? Math.round((city.fundingRaised / city.fundingTarget) * 100) : 0;
+            const bizPct = city.foundingBusinessTotal > 0 ? Math.round((city.foundingBusinessAllocated / city.foundingBusinessTotal) * 100) : 0;
+            const consPct = city.foundingConsumerTotal > 0 ? Math.round((city.foundingConsumerAllocated / city.foundingConsumerTotal) * 100) : 0;
 
-          return (
-            <div key={city.id} className="rounded-xl border bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏙️</span>
-                    <Link to={`/admin/hub-locations/${city.id}`} className="font-bold text-gray-900 hover:text-primary-600">
-                      {city.name}
-                    </Link>
-                    {city.featured && <span className="text-xs text-amber-500">★</span>}
+            return (
+              <div key={city.id} className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-xs text-gray-400">{city.region}</span>
+                    <h3 className="font-bold text-gray-900">{city.name}</h3>
                   </div>
-                  <p className="text-xs text-gray-500">{city.region}</p>
-                </div>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LIFECYCLE_COLORS[city.lifecycle] || "bg-gray-100 text-gray-600"}`}>
-                  {city.lifecycle.replace(/_/g, " ")}
-                </span>
-              </div>
-
-              {/* Activation Progress */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Activation</span>
-                  <span className={atThreshold ? "text-green-600 font-medium" : "text-gray-500"}>
-                    {city.activationProgress}% / {city.activationThreshold}%
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LIFECYCLE_COLORS[city.lifecycle]}`}>
+                    {city.lifecycle}
                   </span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-gray-100">
-                  <div
-                    className={`h-2 rounded-full ${atThreshold ? "bg-green-500" : city.activationProgress > 50 ? "bg-amber-500" : "bg-red-500"}`}
-                    style={{ width: `${Math.min(city.activationProgress, 100)}%` }}
-                  />
-                </div>
-              </div>
 
-              {/* Funding */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Funding</span>
-                  <span className="text-gray-500">{fundingPct}%</span>
+                {/* Activation Progress Bar */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span>Activation Progress</span>
+                    <span className="font-medium text-gray-700">{city.activationProgress}% (target {city.activationThreshold}%)</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-100">
+                    <div
+                      className={`h-2 rounded-full ${city.activationProgress >= city.activationThreshold ? "bg-green-500" : "bg-primary-500"}`}
+                      style={{ width: `${Math.min(city.activationProgress, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-gray-100">
-                  <div className="h-1.5 rounded-full bg-primary-500" style={{ width: `${Math.min(fundingPct, 100)}%` }} />
-                </div>
-                <div className="flex justify-between text-xs text-gray-400 mt-0.5">
-                  <span>{formatCurrency(city.fundingRaised)}</span>
-                  <span>{formatCurrency(city.fundingTarget)}</span>
-                </div>
-              </div>
 
-              {/* Founding Slots */}
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="text-xs">
-                  <span className="text-gray-500">Business: </span>
-                  <span className="font-medium text-gray-700">{bizPct}%</span>
-                  <span className="text-gray-400"> ({city.foundingBusinessAllocated}/{city.foundingBusinessTotal})</span>
+                {/* Progress Details */}
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <span className="text-gray-400">Funding</span>
+                    <p className="font-bold text-gray-900">{fundingPct}%</p>
+                    <span className="text-[10px] text-gray-400">{formatCurrency(city.fundingRaised)}</span>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <span className="text-gray-400">Founding Biz</span>
+                    <p className="font-bold text-gray-900">{bizPct}%</p>
+                    <span className="text-[10px] text-gray-400">{city.foundingBusinessAllocated}/{city.foundingBusinessTotal}</span>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <span className="text-gray-400">Founding Cons</span>
+                    <p className="font-bold text-gray-900">{consPct}%</p>
+                    <span className="text-[10px] text-gray-400">{city.foundingConsumerAllocated}/{city.foundingConsumerTotal}</span>
+                  </div>
                 </div>
-                <div className="text-xs">
-                  <span className="text-gray-500">Consumer: </span>
-                  <span className="font-medium text-gray-700">{consPct}%</span>
-                  <span className="text-gray-400"> ({city.foundingConsumerAllocated}/{city.foundingConsumerTotal})</span>
-                </div>
-              </div>
 
-              {/* Actions */}
-              <div className="mt-3 flex gap-2">
-                <Link to={`/admin/hub-locations/${city.id}`} className="text-xs font-medium text-primary-600 hover:text-primary-700">
-                  Edit →
-                </Link>
-                {!atThreshold && (
-                  <span className="text-xs text-amber-600">Below threshold</span>
-                )}
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Status: {city.publicStatus}</span>
+                  <Link
+                    to={`/admin/locations/${city.id}`}
+                    className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                  >
+                    Manage Hub →
+                  </Link>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

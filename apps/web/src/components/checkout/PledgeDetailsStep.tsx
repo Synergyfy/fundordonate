@@ -37,8 +37,9 @@ interface Props {
 const COUNTRIES = ["United States", "Canada", "United Kingdom", "Australia", "Germany", "France", "Japan", "Other"];
 
 export function PledgeDetailsStep({ details, onChange, selectedReward }: Props) {
-  const minAmount = selectedReward?.amount || 1;
-  const processingFee = Math.round(details.amount * 0.029 + 30);
+  // `selectedReward.amount` is in pence; the pledge amount is in pounds.
+  const minAmount = selectedReward ? selectedReward.amount / 100 : 1;
+  const processingFee = Math.round(details.amount * 100 * 0.029 + 30);
 
   const update = (field: keyof PledgeDetails, value: unknown) => {
     onChange({ ...details, [field]: value });
@@ -56,7 +57,7 @@ export function PledgeDetailsStep({ details, onChange, selectedReward }: Props) 
         <h4 className="text-sm font-medium text-gray-900">Amount</h4>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-600">
-            Pledge amount {selectedReward && <span className="text-gray-400">(min ${minAmount})</span>}
+            Pledge amount {selectedReward && <span className="text-gray-400">(min £{minAmount})</span>}
           </label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">£</span>
@@ -70,7 +71,7 @@ export function PledgeDetailsStep({ details, onChange, selectedReward }: Props) 
             />
           </div>
           {selectedReward && details.amount > 0 && details.amount < minAmount && (
-            <p className="mt-1 text-xs text-red-500">Min for "{selectedReward.title}" is ${minAmount}</p>
+            <p className="mt-1 text-xs text-red-500">Min for "{selectedReward.title}" is £{minAmount}</p>
           )}
         </div>
         <div>
@@ -136,7 +137,7 @@ export function PledgeDetailsStep({ details, onChange, selectedReward }: Props) 
         />
         <div>
           <span className="text-sm font-medium text-gray-900">Cover processing fees</span>
-          <p className="text-xs text-gray-500">Add ${(processingFee / 100).toFixed(2)} to help cover costs</p>
+          <p className="text-xs text-gray-500">Add £{(processingFee / 100).toFixed(2)} to help cover costs</p>
         </div>
       </label>
 

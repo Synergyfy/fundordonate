@@ -5,47 +5,14 @@
 
 import React, { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/services/admin";
 import {
   Store, MapPin, ChevronRight, Clock, CheckCircle, AlertCircle,
-  ArrowRight, ArrowLeft,
+  ArrowRight, ArrowLeft, Loader2,
 } from "lucide-react";
 
 type ClaimStatus = "form" | "pending" | "verified";
-
-const DEMO_BUSINESSES: Record<string, { id: string; name: string; category: string; location: string; status: string }> = {
-  b1: { id: "b1", name: "Vinyl Records Ltd", category: "Music & Entertainment", location: "142 Oldham Street", status: "participating" },
-  b2: { id: "b2", name: "Retro Revival", category: "Vintage Clothing", location: "78 Oldham Street", status: "participating" },
-  b3: { id: "b3", name: "The Coffee House", category: "Café & Food", location: "55 Oldham Street", status: "participating" },
-  b4: { id: "b4", name: "Craft Beer Co", category: "Bar & Drinks", location: "23 Oldham Street", status: "available" },
-  b5: { id: "b5", name: "Northern Quarter Books", category: "Books & Stationery", location: "91 Oldham Street", status: "available" },
-  b6: { id: "b6", name: "Tib Street Deli", category: "Food & Groceries", location: "12 Tib Street", status: "participating" },
-  b7: { id: "b7", name: "Urban Cuts", category: "Hair & Beauty", location: "45 Tib Street", status: "available" },
-  b8: { id: "b8", name: "Tech Repair Hub", category: "Electronics", location: "78 Tib Street", status: "participating" },
-  b9: { id: "b9", name: "Square Gallery", category: "Art & Culture", location: "4 Stevenson Square", status: "participating" },
-  b10: { id: "b10", name: "Creative Space", category: "Co-working", location: "12 Stevenson Square", status: "available" },
-  b11: { id: "b11", name: "Ancoats Bakehouse", category: "Bakery & Food", location: "8 Ancoats Row", status: "participating" },
-  b12: { id: "b12", name: "Pizza Express", category: "Restaurant", location: "22 Ancoats Row", status: "participating" },
-  b13: { id: "b13", name: "The Vine", category: "Bar & Drinks", location: "35 Ancoats Row", status: "available" },
-  b14: { id: "b14", name: "Cutting Room Café", category: "Café & Food", location: "2 Cutting Room Square", status: "participating" },
-  b15: { id: "b15", name: "Artisan Coffee", category: "Coffee Shop", location: "15 Cutting Room Square", status: "participating" },
-  b16: { id: "b16", name: "Waterside Restaurant", category: "Restaurant", location: "42 Deansgate", status: "participating" },
-  b17: { id: "b17", name: "Castlefield Bar", category: "Bar & Drinks", location: "78 Deansgate", status: "participating" },
-  b18: { id: "b18", name: "Hotel & Spa", category: "Hospitality", location: "100 Deansgate", status: "available" },
-  b19: { id: "b19", name: "Whitworth Gym", category: "Health & Fitness", location: "15 Whitworth Street", status: "participating" },
-  b20: { id: "b20", name: "Office Supplies Co", category: "Office & Business", location: "45 Whitworth Street", status: "available" },
-  b21: { id: "b21", name: "Chapel Street Pharmacy", category: "Health & Pharmacy", location: "12 Chapel Street", status: "participating" },
-  b22: { id: "b22", name: "Salford Electronics", category: "Electronics", location: "56 Chapel Street", status: "available" },
-  b23: { id: "b23", name: "Pendleton Corner Shop", category: "Convenience Store", location: "8 Pendleton Road", status: "participating" },
-  b24: { id: "b24", name: "Pendleton Dental", category: "Health & Dental", location: "22 Pendleton Road", status: "available" },
-  b25: { id: "b25", name: "Stockport Antiques", category: "Antiques & Collectables", location: "5 Great Underbank", status: "participating" },
-  b26: { id: "b26", name: "The Cheese Shop", category: "Food & Groceries", location: "18 Great Underbank", status: "available" },
-  b27: { id: "b27", name: "Merseyway Fashion", category: "Fashion & Clothing", location: "3 Merseyway", status: "participating" },
-  b28: { id: "b28", name: "Sport & Outdoor", category: "Sports & Leisure", location: "25 Merseyway", status: "available" },
-  b29: { id: "b29", name: "Bolton Library Café", category: "Café & Food", location: "2 Le Mans Crescent", status: "participating" },
-  b30: { id: "b30", name: "Civic Office Supplies", category: "Office & Business", location: "15 Le Mans Crescent", status: "available" },
-  b31: { id: "b31", name: "Bradshawgate Retail", category: "Retail", location: "8 Bradshawgate", status: "participating" },
-  b32: { id: "b32", name: "Bolton Electronics", category: "Electronics", location: "32 Bradshawgate", status: "available" },
-};
 
 const RELATIONSHIP_OPTIONS = [
   { value: "owner", label: "Owner", description: "I own this business" },
@@ -72,7 +39,26 @@ export default function BusinessClaimPage() {
     verificationNotes: "",
   });
 
-  const business = DEMO_BUSINESSES[businessId || "b4"];
+  const { data: business, isLoading } = useQuery({
+    queryKey: ["business", businessId],
+    queryFn: async () => {
+      if (!businessId) return null;
+      try {
+        const res = await adminApi.getBusiness(businessId);
+        if (!res) return null;
+        return {
+          id: res.id,
+          name: res.name,
+          category: res.category || "Business",
+          location: res.address || res.highStreet || `${res.city || "UK"}`,
+          status: (res.status || "").toLowerCase() === "active" ? "participating" : "available",
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: Boolean(businessId),
+  });
 
   const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
@@ -85,6 +71,17 @@ export default function BusinessClaimPage() {
   const handleConfirm = () => {
     navigate(`/business/${citySlug}/local-area/${localAreaSlug}/high-street/${highStreetSlug}/claimed/${businessId}`);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center flex flex-col items-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-2" />
+          <p className="text-sm text-gray-500">Loading business information...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!business) {
     return (

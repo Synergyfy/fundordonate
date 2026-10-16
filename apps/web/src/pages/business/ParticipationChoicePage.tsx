@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   Calendar, Target, Award, ArrowRight, ChevronRight, CheckCircle,
   Clock, Heart,

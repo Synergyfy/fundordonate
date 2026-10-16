@@ -3,12 +3,13 @@
 // Slide-up panel for mobile showing selected location details.
 // =============================================================================
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { X, ArrowRight, MapPin } from "lucide-react";
-import type { HubLocation } from "@/data/hubActivation";
-import { HUB_STATUS_META, getDemoCampaignsForLocation } from "@/data/hubActivation";
+import type { HubLocation } from "@/types/uk-hub";
+import { HUB_STATUS_META } from "@/types/uk-hub";
 import { HubStatusBadge } from "../HubStatusBadge";
+import { campaignApi } from "@/services/campaign";
 
 interface LocationBottomSheetProps {
   location: HubLocation | null;
@@ -17,6 +18,7 @@ interface LocationBottomSheetProps {
 
 export function LocationBottomSheet({ location, onClose }: LocationBottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
 
   // Close on Escape
   useEffect(() => {
@@ -29,10 +31,17 @@ export function LocationBottomSheet({ location, onClose }: LocationBottomSheetPr
     }
   }, [location, onClose]);
 
+  useEffect(() => {
+    if (!location?.slug) return;
+    (campaignApi.list as any)({ location: location.slug, limit: 3 })
+      .then((res: any) => setCampaigns(res?.items || res?.data || []))
+      .catch(() => setCampaigns([]));
+  }, [location?.slug]);
+
   if (!location) return null;
 
-  const meta = HUB_STATUS_META[location.status];
-  const campaigns = getDemoCampaignsForLocation(location);
+  const statusKey = location.status ?? (location.publicStatus === "ACTIVE" ? "active" : location.publicStatus === "MAKING_PROGRESS" ? "making_progress" : "needs_activation");
+  const meta = HUB_STATUS_META[statusKey] ?? HUB_STATUS_META.needs_activation;
 
   return (
     <>
@@ -73,7 +82,7 @@ export function LocationBottomSheet({ location, onClose }: LocationBottomSheetPr
             <div>
               <h3 className="font-bold text-gray-900">{location.name}</h3>
               <div className="flex items-center gap-2">
-                <HubStatusBadge status={location.status} />
+                <HubStatusBadge status={statusKey} />
               </div>
             </div>
           </div>
@@ -82,22 +91,22 @@ export function LocationBottomSheet({ location, onClose }: LocationBottomSheetPr
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-gray-500">Activation</span>
-              <span className="text-xs font-bold" style={{ color: meta.color }}>{location.activationProgress}%</span>
+              <span className="text-xs font-bold" style={{ color: meta.color }}>{location.activationProgress ?? 0}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-gray-100">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${location.activationProgress}%`, backgroundColor: meta.color }}
+                style={{ width: `${location.activationProgress ?? 0}%`, backgroundColor: meta.color }}
               />
             </div>
           </div>
 
           {/* Activity */}
-          {location.activity.length > 0 && (
+          {Boolean(location.activity && location.activity.length > 0) && (
             <div className="mt-4">
               <h4 className="text-xs font-bold text-gray-700 mb-1.5">Activity</h4>
               <ul className="space-y-1">
-                {location.activity.slice(0, 3).map(a => (
+                {(location.activity || []).slice(0, 3).map(a => (
                   <li key={a} className="flex items-start gap-2 text-xs text-gray-600">
                     <span className="mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: meta.color }} />
                     {a}

@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Map, List } from "lucide-react";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import { UkMap } from "@/components/hub/UkMap";
@@ -13,7 +14,8 @@ import { MapFilters, type MapFiltersState } from "@/components/hub/map/MapFilter
 import { MapLegend } from "@/components/hub/map/MapLegend";
 import { MapListView } from "@/components/hub/map/MapListView";
 import { LocationBottomSheet } from "@/components/hub/map/LocationBottomSheet";
-import { HUB_LOCATIONS, type HubLocation } from "@/data/hubActivation";
+import { locationService } from "@/services/location";
+import type { HubLocation } from "@/types/uk-hub";
 
 export default function UkHubMapPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
@@ -24,19 +26,24 @@ export default function UkHubMapPage() {
     founding: "all",
   });
 
+  const { data: hubLocations = [] } = useQuery({
+    queryKey: ["hub-cities-map"],
+    queryFn: () => locationService.fetchHubCities(),
+  });
+
   const filteredLocations = useMemo(() => {
-    return HUB_LOCATIONS.filter((l: HubLocation) => {
+    return hubLocations.filter((l: HubLocation) => {
       if (filters.status !== "all" && l.status !== filters.status) return false;
-      if (filters.type !== "all" && l.type !== filters.type) return false;
+      if (filters.type !== "all" && (l.type as any) !== filters.type) return false;
       if (filters.founding === "business" && (!l.opportunities || l.opportunities.length === 0)) return false;
       if (filters.founding === "consumer" && l.status === "needs_activation") return false;
       return true;
     });
-  }, [filters]);
+  }, [hubLocations, filters]);
 
   const selectedLocation = useMemo(
-    () => (selectedSlug ? HUB_LOCATIONS.find((l: HubLocation) => l.slug === selectedSlug) ?? null : null),
-    [selectedSlug]
+    () => (selectedSlug ? hubLocations.find((l: HubLocation) => l.slug === selectedSlug) ?? null : null),
+    [hubLocations, selectedSlug]
   );
 
   const handleSelect = (slug: string) => {
@@ -83,7 +90,7 @@ export default function UkHubMapPage() {
         {/* Search + Filters */}
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
           <MapSearch
-            locations={HUB_LOCATIONS}
+            locations={hubLocations}
             onSelect={handleSelect}
             className="w-full sm:max-w-xs"
           />

@@ -11,7 +11,10 @@ import {
   Shield, Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
+import { businessService } from "@/services/business";
+import { userDashboardApi } from "@/services/user-dashboard";
+import { paymentService } from "@/services/payment";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const fmt = (p: number) =>
@@ -39,17 +42,6 @@ const PAYMENT_CONFIG = {
   paypal: true,       // Enabled by default (automated)
   cheque: false,      // Disabled by default (manual, admin must enable)
   terminal: false,    // Disabled by default (manual, admin must enable)
-};
-
-// Demo business info pulled from CentralHubSolution
-const DEMO_BUSINESS_INFO = {
-  firstName: "James",
-  lastName: "Mitchell",
-  email: "james.mitchell@abcfods.co.uk",
-  businessName: "ABC Foods Ltd",
-  businessType: "Restaurant & Takeaway",
-  address: "42 High Street, Manchester",
-  postcode: "M1 1AE",
 };
 
 export default function FoundingMemberMonthlyPage() {
@@ -81,11 +73,46 @@ export default function FoundingMemberMonthlyPage() {
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
   const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
 
+  const { data: businessProfile } = useQuery({
+    queryKey: ["businessProfile"],
+    queryFn: async () => {
+      try {
+        return await businessService.getProfile();
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      try {
+        return await userDashboardApi.getProfile();
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const businessInfo = {
+    firstName: userProfile?.firstName || "",
+    lastName: userProfile?.lastName || "",
+    email: userProfile?.email || businessProfile?.email || "",
+    businessName: businessProfile?.name || "Your Registered Business",
+    businessType: businessProfile?.businessType || "Business",
+    address: businessProfile?.address || `${cityName}, UK`,
+    postcode: businessProfile?.postcode || "—",
+  };
+
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
 
   const monthlyAmount = customAmount ? Math.max(Number(customAmount), MINIMUM_AMOUNT) : selectedAmount;
   const isCustomAmountBelowMinimum = customAmount !== "" && Number(customAmount) < MINIMUM_AMOUNT;
+
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const handleContinueToSummary = () => {
     setStep("summary");
@@ -93,20 +120,42 @@ export default function FoundingMemberMonthlyPage() {
 
   const handleContinueToAccount = () => {
     setStep("account");
-    setIsRedirecting(true);
-    // Simulate redirect to CentralHubSolution
-    setTimeout(() => {
-      setIsRedirecting(false);
-    }, 2500);
   };
 
   const handleConfirmBusinessInfo = () => {
     setStep("payment");
   };
 
-  const handlePayment = () => {
-    // Simulate payment processing
-    setStep("complete");
+  const handlePayment = async () => {
+    if (!paymentMethod) return;
+    setIsProcessingPayment(true);
+    setPaymentError(null);
+
+    try {
+      if (paymentMethod === "stripe" || paymentMethod === "paypal") {
+        const method = paymentMethod === "stripe" ? "card" : "paypal";
+        const charge = await paymentService.createCharge({
+          amountMinor: Math.round(monthlyAmount * 100),
+          method: method as any,
+          type: "MEMBERSHIP" as any,
+          metadata: {
+            membershipTier: "FOUNDING_MONTHLY",
+            businessName: businessInfo.businessName,
+            city: cityName,
+          },
+        });
+
+        if (charge.approvalUrl) {
+          window.location.href = charge.approvalUrl;
+          return;
+        }
+      }
+      setStep("complete");
+    } catch (err: any) {
+      setPaymentError(err?.message || "Payment initiation failed. Please try again.");
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   return (
@@ -347,23 +396,23 @@ export default function FoundingMemberMonthlyPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="text-[10px] text-green-600 uppercase">Name</div>
-                        <div className="text-sm font-bold text-green-900">{DEMO_BUSINESS_INFO.firstName} {DEMO_BUSINESS_INFO.lastName}</div>
+                        <div className="text-sm font-bold text-green-900">{businessInfo.firstName} {businessInfo.lastName}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-green-600 uppercase">Email</div>
-                        <div className="text-sm font-bold text-green-900">{DEMO_BUSINESS_INFO.email}</div>
+                        <div className="text-sm font-bold text-green-900">{businessInfo.email}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-green-600 uppercase">Business</div>
-                        <div className="text-sm font-bold text-green-900">{DEMO_BUSINESS_INFO.businessName}</div>
+                        <div className="text-sm font-bold text-green-900">{businessInfo.businessName}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-green-600 uppercase">Type</div>
-                        <div className="text-sm font-bold text-green-900">{DEMO_BUSINESS_INFO.businessType}</div>
+                        <div className="text-sm font-bold text-green-900">{businessInfo.businessType}</div>
                       </div>
                       <div className="sm:col-span-2">
                         <div className="text-[10px] text-green-600 uppercase">Address</div>
-                        <div className="text-sm font-bold text-green-900">{DEMO_BUSINESS_INFO.address}</div>
+                        <div className="text-sm font-bold text-green-900">{businessInfo.address}</div>
                       </div>
                     </div>
                   </div>
@@ -415,11 +464,11 @@ export default function FoundingMemberMonthlyPage() {
                 <div className="border-t border-white/20 pt-3 grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <div className="text-purple-200">Business</div>
-                    <div className="font-bold">{DEMO_BUSINESS_INFO.businessName}</div>
+                    <div className="font-bold">{businessInfo.businessName}</div>
                   </div>
                   <div>
                     <div className="text-purple-200">Account</div>
-                    <div className="font-bold">{DEMO_BUSINESS_INFO.email}</div>
+                    <div className="font-bold">{businessInfo.email}</div>
                   </div>
                   <div>
                     <div className="text-purple-200">Campaign</div>
@@ -530,7 +579,7 @@ export default function FoundingMemberMonthlyPage() {
               {paymentMethod === "cheque" && (
                 <div className="rounded-lg bg-green-50 border border-green-200 p-3 mb-6">
                   <p className="text-xs text-green-700">
-                    An invoice will be sent to {DEMO_BUSINESS_INFO.email}. Please make payment within 14 days via cheque or bank transfer.
+                    An invoice will be sent to {businessInfo.email}. Please make payment within 14 days via cheque or bank transfer.
                   </p>
                 </div>
               )}
@@ -543,19 +592,34 @@ export default function FoundingMemberMonthlyPage() {
                 </div>
               )}
 
+              {paymentError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 p-3 mb-6">
+                  <p className="text-xs text-red-700">{paymentError}</p>
+                </div>
+              )}
+
               {/* Pay Button */}
               <button
                 onClick={handlePayment}
-                disabled={!paymentMethod}
+                disabled={!paymentMethod || isProcessingPayment}
                 className="w-full rounded-xl bg-purple-600 px-6 py-3 text-sm font-bold text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center justify-center gap-2">
-                  {paymentMethod === "stripe" && `Pay ${fmt(monthlyAmount)} by Card`}
-                  {paymentMethod === "paypal" && `Pay ${fmt(monthlyAmount)} with PayPal`}
-                  {paymentMethod === "cheque" && "Submit & Send Invoice"}
-                  {paymentMethod === "terminal" && "Generate Terminal QR Code"}
-                  {!paymentMethod && "Select a payment method"}
-                  {paymentMethod && <ArrowRight className="h-4 w-4" />}
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Initiating Payment...</span>
+                    </>
+                  ) : (
+                    <>
+                      {paymentMethod === "stripe" && `Pay ${fmt(monthlyAmount)} by Card`}
+                      {paymentMethod === "paypal" && `Pay ${fmt(monthlyAmount)} with PayPal`}
+                      {paymentMethod === "cheque" && "Submit & Send Invoice"}
+                      {paymentMethod === "terminal" && "Generate Terminal QR Code"}
+                      {!paymentMethod && "Select a payment method"}
+                      {paymentMethod && <ArrowRight className="h-4 w-4" />}
+                    </>
+                  )}
                 </span>
               </button>
             </>
@@ -610,9 +674,9 @@ export default function FoundingMemberMonthlyPage() {
               <div className="rounded-lg bg-green-50 border border-green-200 p-4 mb-4">
                 <h4 className="text-xs font-bold text-green-900 uppercase mb-2">Business Account</h4>
                 <div className="space-y-1 text-sm text-green-800">
-                  <div>{DEMO_BUSINESS_INFO.firstName} {DEMO_BUSINESS_INFO.lastName}</div>
-                  <div>{DEMO_BUSINESS_INFO.businessName}</div>
-                  <div>{DEMO_BUSINESS_INFO.email}</div>
+                  <div>{businessInfo.firstName} {businessInfo.lastName}</div>
+                  <div>{businessInfo.businessName}</div>
+                  <div>{businessInfo.email}</div>
                 </div>
               </div>
 

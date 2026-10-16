@@ -10,11 +10,13 @@
 const env = import.meta.env;
 
 export const CONFIG = {
-  API_URL: env.VITE_API_URL || "http://localhost:3001/api/v1",
+  API_URL: env.VITE_API_URL || "http://localhost:5024/api/v1",
   APP_NAME: env.VITE_APP_NAME || "FundOrDonate",
   APP_URL: env.VITE_APP_URL || window.location.origin,
   DEMO_MODE: env.VITE_DEMO_MODE === "true",
   NODE_ENV: env.MODE || "development",
+  STRIPE_PUBLISHABLE_KEY: env.VITE_STRIPE_PUBLISHABLE_KEY || "",
+  PAYPAL_CLIENT_ID: env.VITE_PAYPAL_CLIENT_ID || "",
 } as const;
 
 // =============================================================================
@@ -98,7 +100,15 @@ export const FORM_CONFIG = {
 // Central Hub (MCOM SSO) Configuration
 // =============================================================================
 
+export const MCOM_CONFIG = {
+  CENTRAL_URL: env.VITE_MCOM_CENTRAL_URL || "http://localhost:3010",
+  CLIENT_ID: env.VITE_MCOM_CLIENT_ID || "fundordonate",
+  REDIRECT_URI:
+    env.VITE_MCOM_REDIRECT_URI || `${window.location.origin}/auth/callback`,
+} as const;
+
 export const CENTRAL_HUB_CONFIG = {
-  CALLBACK_PATH: "/auth/central-hub/callback",
-  STORAGE_KEY: "fd_central_hub_state",
+  CALLBACK_PATH: "/auth/callback",
+  STORAGE_KEY: "fd_mcom_oauth_state",
+  RETURN_PATH_KEY: "fd_mcom_return_path",
 } as const;

@@ -1,6 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, X, SlidersHorizontal } from "lucide-react";
-import { DEMO_LOCATIONS, DEMO_TAGS } from "@/data/demo";
+import { locationService } from "@/services/location";
+
+const CAMPAIGN_TAGS = [
+  { id: "t1", name: "Local Hub", slug: "local-hub" },
+  { id: "t2", name: "High Street", slug: "high-street" },
+  { id: "t3", name: "Community", slug: "community" },
+  { id: "t4", name: "Business", slug: "business" },
+  { id: "t5", name: "Eco & Green", slug: "eco" },
+  { id: "t6", name: "Charity", slug: "charity" },
+];
 
 export interface CampaignFilters {
   search: string;
@@ -37,7 +46,6 @@ const MODE_OPTIONS = [
   { value: "", label: "All Modes" },
   { value: "donation", label: "Donate" },
   { value: "fund", label: "Fund" },
-  { value: "sponsor", label: "Sponsor" },
 ];
 
 const STATUS_OPTIONS = [
@@ -74,7 +82,6 @@ const CAMPAIGN_TYPE_OPTIONS = [
   { value: "high-street", label: "High Street" },
   { value: "founding-membership", label: "Founding Membership" },
   { value: "self-funding", label: "Self-Funding" },
-  { value: "sponsorship", label: "Sponsorship" },
   { value: "mcom-programme", label: "MCOM Programme" },
   { value: "247gbs", label: "247GBS Programme" },
 ];
@@ -106,6 +113,18 @@ const AUDIENCE_OPTIONS = [
 
 export function CampaignFilters({ filters, onChange, categories }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const [locations, setLocations] = useState<{ id: string; name: string; slug: string }[]>([]);
+
+  useEffect(() => {
+    locationService
+      .fetchLocations({ type: "CITY" })
+      .then((res) => {
+        if (res?.locations) {
+          setLocations(res.locations.map((l) => ({ id: l.id, name: l.name, slug: l.slug })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const update = (key: keyof CampaignFilters, value: string) => {
     onChange({ ...filters, [key]: value });
@@ -194,10 +213,6 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
                 filters.mode === opt.value
                   ? opt.value === "donation"
                     ? "bg-secondary-600 text-white"
-                    : opt.value === "fund"
-                    ? "bg-primary-600 text-white"
-                    : opt.value === "sponsor"
-                    ? "bg-amber-500 text-white"
                     : "bg-primary-600 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
@@ -266,13 +281,13 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
           )}
           {filters.location && (
             <FilterChip
-              label={DEMO_LOCATIONS.find((l) => l.slug === filters.location)?.name || filters.location}
+              label={locations.find((l) => l.slug === filters.location)?.name || filters.location}
               onRemove={() => update("location", "")}
             />
           )}
           {filters.tag && (
             <FilterChip
-              label={DEMO_TAGS.find((t) => t.slug === filters.tag)?.name || filters.tag}
+              label={CAMPAIGN_TAGS.find((t) => t.slug === filters.tag)?.name || filters.tag}
               onRemove={() => update("tag", "")}
             />
           )}
@@ -351,7 +366,7 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
               >
                 <option value="">All Locations</option>
-                {DEMO_LOCATIONS.map((loc) => (
+                {locations.map((loc) => (
                   <option key={loc.id} value={loc.slug}>
                     {loc.name}
                   </option>
@@ -368,7 +383,7 @@ export function CampaignFilters({ filters, onChange, categories }: Props) {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
               >
                 <option value="">All Tags</option>
-                {DEMO_TAGS.map((tag) => (
+                {CAMPAIGN_TAGS.map((tag) => (
                   <option key={tag.id} value={tag.slug}>
                     {tag.name}
                   </option>

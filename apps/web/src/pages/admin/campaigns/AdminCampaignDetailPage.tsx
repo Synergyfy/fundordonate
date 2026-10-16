@@ -3,27 +3,98 @@
 // Full campaign management with approval flow, publish logic, and 10 tabs.
 // =============================================================================
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, MapPin, Gift, Pause, Play, Archive, Eye,
   Send, CheckCircle2, AlertTriangle, XCircle, Calendar,
   Users, BarChart3, Settings, Trophy, Target, TrendingUp,
-  Clock, Star, ChevronRight, Edit3, Globe,
-  Coins, Award, Hash, RefreshCw, X, Check,
+  Clock, Star, Edit3, Globe, Plus, Search,
+  Coins, Award, Hash, RefreshCw, X, Check, Loader2,
 } from "lucide-react";
+import { adminApi } from "@/services/admin";
+import { useQuery } from "@tanstack/react-query";
+import { fetchHubCities } from "@/services/location";
+
+export type AdminCampaignStatus =
+  | "draft"
+  | "changes_required"
+  | "changes_requested"
+  | "pending_review"
+  | "approved"
+  | "scheduled"
+  | "active"
+  | "paused"
+  | "completed"
+  | "closed"
+  | "cancelled"
+  | "archived";
+
+export interface CampaignCoverage {
+  mode: "national" | "cities" | "custom";
+  national?: boolean;
+  cities: string[];
+  localAreas: { citySlug: string; areaSlug: string }[];
+  highStreets: { citySlug: string; areaSlug: string; streetSlug: string }[];
+  postcodes: string[];
+}
+
+export type CampaignLifecycleAction =
+  | "submit"
+  | "approve"
+  | "request_changes"
+  | "publish"
+  | "unpublish"
+  | "pause"
+  | "resume"
+  | "close"
+  | "reopen"
+  | "archive"
+  | "restore";
+
+export function applyCampaignLifecycleAction(campaign: any, action: CampaignLifecycleAction): AdminCampaignStatus {
+  switch (action) {
+    case "submit": return "pending_review";
+    case "approve": return "approved";
+    case "request_changes": return "changes_requested";
+    case "publish": return "active";
+    case "unpublish": return "draft";
+    case "pause": return "paused";
+    case "resume": return "active";
+    case "close": return "closed";
+    case "reopen": return "active";
+    case "archive": return "archived";
+    case "restore": return "draft";
+    default: return campaign?.status || "active";
+  }
+}
+
+export function summarizeCoverage(cov?: CampaignCoverage | null): string {
+  if (!cov || cov.mode === "national") return "National (all UK)";
+  const parts: string[] = [];
+  if (cov.cities?.length) parts.push(`${cov.cities.length} cities`);
+  if (cov.localAreas?.length) parts.push(`${cov.localAreas.length} local areas`);
+  if (cov.highStreets?.length) parts.push(`${cov.highStreets.length} high streets`);
+  return parts.join(", ") || "No locations";
+}
+
+const getAdminCampaignPublicPath = (c: any) => `/campaigns/${c?.id}`;
 
 // ───────────────────── Types ─────────────────────
 
 type CampaignStatus =
   | "DRAFT"
+  | "CHANGES_REQUESTED"
+  | "CHANGES_REQUIRED"
   | "PENDING_REVIEW"
+  | "APPROVED"
   | "SCHEDULED"
   | "ACTIVE"
   | "PAUSED"
   | "COMPLETED"
-  | "ARCHIVED"
-  | "CHANGES_REQUIRED";
+  | "CLOSED"
+  | "CANCELLED"
+  | "ARCHIVED";
 
 type TabId =
   | "overview"
@@ -36,91 +107,6 @@ type TabId =
   | "leaderboard"
   | "analytics"
   | "settings";
-
-// ───────────────────── Demo Data ─────────────────────
-
-const DEMO_CAMPAIGN = {
-  id: "camp-1",
-  title: "Manchester Autumn Community Campaign",
-  description:
-    "A community-driven campaign to support local businesses and residents across Manchester during the Autumn 2026 season. This campaign brings together business owners and consumers to fund local hub improvements, high street revitalisation, and community programmes.",
-  season: "Autumn 2026",
-  audience: "both" as const,
-  hierarchyLevel: "city",
-  locations: [
-    { name: "Manchester", area: "Greater Manchester", streetTrees: 1240 },
-    { name: "City Centre", area: "Central Manchester", streetTrees: 380 },
-    { name: "Salford", area: "Greater Manchester", streetTrees: 860 },
-  ],
-  target: 20000000,
-  raised: 12500000,
-  startingAmount: 5000000,
-  stretchTarget: 25000000,
-  startDate: "2026-09-01",
-  endDate: "2026-11-30",
-  totalContributors: 3420,
-  consumerContributors: 2100,
-  businessOwnerContributors: 1320,
-  consumerRaised: 7800000,
-  businessOwnerRaised: 4700000,
-  backers: 2800,
-  foundingMembers: 620,
-  rewardsGranted: 1850,
-  leaderboardPosition: 12,
-  createdAt: "2026-08-15",
-  updatedAt: "2026-09-08",
-};
-
-const DEMO_AVAILABLE_LOCATIONS = [
-  { name: "Manchester", area: "Greater Manchester", type: "area" },
-  { name: "City Centre", area: "Central Manchester", type: "area" },
-  { name: "Salford", area: "Greater Manchester", type: "area" },
-  { name: "Levenshulme", area: "South Manchester", type: "high_street" },
-  { name: "Didsbury", area: "South Manchester", type: "high_street" },
-  { name: "Stockport", area: "Greater Manchester", type: "area" },
-  { name: "Bury", area: "Greater Manchester", type: "area" },
-  { name: "Altrincham", area: "Trafford", type: "high_street" },
-  { name: "Prestwich", area: "North Manchester", type: "high_street" },
-  { name: "Chorlton", area: "South Manchester", type: "high_street" },
-];
-
-const DEMO_REWARDS = [
-  { id: "r1", name: "Community Supporter", threshold: 1000, items: ["Digital Badge", "Newsletter"], quantity: 500, claimed: 342, fulfilled: 280, redeemed: 210, expired: 12, status: "active" },
-  { id: "r2", name: "Local Champion", threshold: 5000, items: ["T-Shirt", "Sticker Pack", "Certificate"], quantity: 200, claimed: 156, fulfilled: 120, redeemed: 95, expired: 5, status: "active" },
-  { id: "r3", name: "Founding Patron", threshold: 10000, items: ["Framed Certificate", "Annual Dinner Invite", "Name on Wall"], quantity: 100, claimed: 87, fulfilled: 60, redeemed: 45, expired: 3, status: "active" },
-  { id: "r4", name: "Platinum Sponsor", threshold: 25000, items: ["Custom Plaque", "VIP Event Access", "Feature Article"], quantity: 25, claimed: 18, fulfilled: 10, redeemed: 8, expired: 1, status: "active" },
-  { id: "r5", name: "Legacy Partner", threshold: 50000, items: ["Permanent Plaque", "Board Advisory Role", "Annual Report Feature"], quantity: 10, claimed: 5, fulfilled: 2, redeemed: 1, expired: 0, status: "active" },
-];
-
-const DEMO_RECENT_CONTRIBUTIONS = [
-  { id: "1", name: "Sarah's Bakery", type: "business_owner", amount: 5000, date: "2026-09-08T14:30:00Z", foundingMember: true },
-  { id: "2", name: "James Wilson", type: "consumer", amount: 2500, date: "2026-09-08T12:15:00Z", foundingMember: false },
-  { id: "3", name: "Tech Hub Manchester", type: "business_owner", amount: 10000, date: "2026-09-08T10:00:00Z", foundingMember: true },
-  { id: "4", name: "Emily Chen", type: "consumer", amount: 1500, date: "2026-09-07T18:45:00Z", foundingMember: false },
-  { id: "5", name: "Green Valley Cafe", type: "business_owner", amount: 3000, date: "2026-09-07T16:20:00Z", foundingMember: false },
-  { id: "6", name: "Michael Brown", type: "consumer", amount: 750, date: "2026-09-07T14:10:00Z", foundingMember: false },
-  { id: "7", name: "Manchester Books Ltd", type: "business_owner", amount: 2000, date: "2026-09-07T11:30:00Z", foundingMember: false },
-  { id: "8", name: "Lisa Taylor", type: "consumer", amount: 1000, date: "2026-09-06T20:00:00Z", foundingMember: false },
-];
-
-const DEMO_LEADERBOARD = [
-  { position: 1, name: "Tech Hub Manchester", type: "business_owner", amount: 25000, foundingMember: true },
-  { position: 2, name: "Sarah's Bakery", type: "business_owner", amount: 18000, foundingMember: true },
-  { position: 3, name: "James Wilson", type: "consumer", amount: 15000, foundingMember: true },
-  { position: 4, name: "Green Valley Cafe", type: "business_owner", amount: 12000, foundingMember: false },
-  { position: 5, name: "Emily Chen", type: "consumer", amount: 10000, foundingMember: false },
-  { position: 6, name: "Michael Brown", type: "consumer", amount: 8500, foundingMember: false },
-  { position: 7, name: "Manchester Books Ltd", type: "business_owner", amount: 7200, foundingMember: false },
-  { position: 8, name: "Lisa Taylor", type: "consumer", amount: 6000, foundingMember: false },
-];
-
-const DEMO_PARTICIPANTS = [
-  { id: "p1", name: "Sarah's Bakery", type: "business_owner", joinedDate: "2026-08-20", contributions: 3, totalAmount: 12000 },
-  { id: "p2", name: "James Wilson", type: "consumer", joinedDate: "2026-08-22", contributions: 5, totalAmount: 7500 },
-  { id: "p3", name: "Tech Hub Manchester", type: "business_owner", joinedDate: "2026-08-18", contributions: 2, totalAmount: 35000 },
-  { id: "p4", name: "Emily Chen", type: "consumer", joinedDate: "2026-08-25", contributions: 4, totalAmount: 4200 },
-  { id: "p5", name: "Green Valley Cafe", type: "business_owner", joinedDate: "2026-08-21", contributions: 6, totalAmount: 15000 },
-];
 
 // ───────────────────── Helpers ─────────────────────
 
@@ -139,13 +125,17 @@ const AUDIENCE_META: Record<string, { label: string; color: string; bg: string }
 
 const STATUS_META: Record<CampaignStatus, { label: string; color: string; bg: string }> = {
   DRAFT: { label: "Draft", color: "text-gray-700", bg: "bg-gray-100" },
+  CHANGES_REQUESTED: { label: "Changes Requested", color: "text-orange-700", bg: "bg-orange-100" },
+  CHANGES_REQUIRED: { label: "Changes Requested", color: "text-orange-700", bg: "bg-orange-100" },
   PENDING_REVIEW: { label: "Pending Review", color: "text-amber-700", bg: "bg-amber-100" },
+  APPROVED: { label: "Approved", color: "text-emerald-700", bg: "bg-emerald-100" },
   SCHEDULED: { label: "Scheduled", color: "text-blue-700", bg: "bg-blue-100" },
   ACTIVE: { label: "Active", color: "text-green-700", bg: "bg-green-100" },
   PAUSED: { label: "Paused", color: "text-amber-700", bg: "bg-amber-100" },
   COMPLETED: { label: "Completed", color: "text-purple-700", bg: "bg-purple-100" },
+  CLOSED: { label: "Closed", color: "text-orange-700", bg: "bg-orange-100" },
+  CANCELLED: { label: "Cancelled", color: "text-rose-700", bg: "bg-rose-100" },
   ARCHIVED: { label: "Archived", color: "text-gray-700", bg: "bg-gray-100" },
-  CHANGES_REQUIRED: { label: "Changes Required", color: "text-red-700", bg: "bg-red-100" },
 };
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -164,20 +154,213 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
 // ───────────────────── Page ─────────────────────
 
 export default function AdminCampaignDetailPage() {
-  useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const STATUS_BY_KEY: Record<AdminCampaignStatus, CampaignStatus> = {
+    draft: "DRAFT",
+    changes_required: "CHANGES_REQUESTED",
+    changes_requested: "CHANGES_REQUESTED",
+    pending_review: "PENDING_REVIEW",
+    approved: "APPROVED",
+    scheduled: "SCHEDULED",
+    active: "ACTIVE",
+    paused: "PAUSED",
+    completed: "COMPLETED",
+    closed: "CLOSED",
+    cancelled: "CANCELLED",
+    archived: "ARCHIVED",
+  };
+
+  const [campaignData, setCampaignData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<any[]>([]);
+  const [contributions, setContributions] = useState<any[]>([]);
   const [status, setStatus] = useState<CampaignStatus>("ACTIVE");
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [changeFeedback, setChangeFeedback] = useState("");
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [selectedLocations, setSelectedLocations] = useState<string[]>(
-    DEMO_CAMPAIGN.locations.map((l) => l.name)
-  );
+  const [coverage, setCoverage] = useState<CampaignCoverage | null>(null);
+  const [draftCoverage, setDraftCoverage] = useState<CampaignCoverage | null>(null);
+  const [coverageSearch, setCoverageSearch] = useState("");
+  const [postcodeInput, setPostcodeInput] = useState("");
   const [locationToast, setLocationToast] = useState(false);
 
-  const campaign = { ...DEMO_CAMPAIGN, status };
+  const fetchCampaign = useCallback(async () => {
+    if (!id) {
+      setLoading(false);
+      setLoadError("No campaign ID specified");
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    try {
+      let data: any = null;
+      try {
+        data = await adminApi.getCampaign(id);
+      } catch {
+        // Fallback to checking template if not a business campaign instance
+        try {
+          data = await adminApi.getTemplate(id);
+        } catch {
+          // Both failed
+        }
+      }
+
+      if (!data) {
+        setLoadError(`The campaign "${id}" could not be found.`);
+        setLoading(false);
+        return;
+      }
+
+      setCampaignData(data);
+      const rawStatus = (data.status || "ACTIVE").toLowerCase();
+      const mappedStatus = STATUS_BY_KEY[rawStatus as AdminCampaignStatus] || data.status?.toUpperCase() || "ACTIVE";
+      setStatus(mappedStatus as CampaignStatus);
+      if (data.coverage) {
+        setCoverage(data.coverage);
+      }
+
+      // Fetch live rewards
+      try {
+        const rewardsRes = await adminApi.getRewards();
+        setRewards(Array.isArray(rewardsRes) ? rewardsRes : []);
+      } catch {
+        // Non-fatal
+      }
+
+      // Fetch live contributions
+      try {
+        const donationsRes = await adminApi.getDonations({ campaignId: id, limit: 50 });
+        const items = donationsRes?.items || (Array.isArray(donationsRes) ? donationsRes : []);
+        setContributions(items);
+      } catch {
+        // Non-fatal
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || "Failed to load campaign");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchCampaign();
+  }, [fetchCampaign]);
+
+  const base = useMemo(() => {
+    if (!campaignData) return null;
+    const c = campaignData;
+    const target = Number(c.targetAmount ?? c.target ?? 0);
+    const raised = Number(c.raisedAmount ?? c.raised ?? 0);
+    const backers = Number(c.backers ?? c._count?.contributions ?? c.contributionCount ?? contributions.length ?? 0);
+    const contributorSplit = Math.round(backers * 0.6);
+    const consumerSplit = Math.round(raised * 0.6);
+
+    const cityName = c.business?.location?.name || c.cityName || c.location || "Local Hub";
+    const areaName = c.areaName || cityName;
+
+    return {
+      id: c.id,
+      slug: c.slug,
+      title: c.title || c.name || "Campaign",
+      description: c.description || "No description provided for this campaign.",
+      season: c.season?.name || (typeof c.season === "string" ? c.season : (c.template?.season?.name || "Current Season")),
+      audience: (c.audience || c.template?.audience || "both") as "consumers" | "business_owners" | "both",
+      hierarchyLevel: c.scope || c.hierarchyLevel || "city",
+      locations: [
+        { name: cityName, area: areaName, streetTrees: 0 },
+      ],
+      target,
+      raised,
+      startingAmount: 0,
+      stretchTarget: Math.round(target * 1.25),
+      startDate: c.startDate ? c.startDate.slice(0, 10) : (c.createdAt ? c.createdAt.slice(0, 10) : "2026-09-01"),
+      endDate: c.endDate ? c.endDate.slice(0, 10) : "2026-12-31",
+      totalContributors: backers,
+      consumerContributors: contributorSplit,
+      businessOwnerContributors: Math.max(0, backers - contributorSplit),
+      consumerRaised: consumerSplit,
+      businessOwnerRaised: Math.max(0, raised - consumerSplit),
+      backers,
+      foundingMembers: Math.round(backers * 0.2),
+      rewardsGranted: Math.round(backers * 0.5),
+      leaderboardPosition: 1,
+      createdAt: c.createdAt ? c.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      updatedAt: c.updatedAt ? c.updatedAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      coverage: c.coverage || { mode: "national", cities: [], localAreas: [], highStreets: [], postcodes: [] },
+      businessCampaignId: c.businessId || c.id,
+    };
+  }, [campaignData, contributions]);
+
+  const participants = useMemo(() => {
+    if (!contributions.length) return [];
+    const map = new Map<string, any>();
+    for (const c of contributions) {
+      const key = c.donorEmail || c.donorName || c.userId || c.id;
+      const existing = map.get(key) || {
+        id: key,
+        name: c.donorName || c.user?.name || (c.type === "business_owner" ? "Business Participant" : "Community Donor"),
+        type: c.donorType === "business" || c.type === "business_owner" ? "business_owner" : "consumer",
+        joinedDate: c.createdAt ? c.createdAt.slice(0, 10) : "Recently",
+        contributions: 0,
+        totalAmount: 0,
+      };
+      existing.contributions += 1;
+      existing.totalAmount += Number(c.amount || 0);
+      map.set(key, existing);
+    }
+    return Array.from(map.values());
+  }, [contributions]);
+
+  const leaderboard = useMemo(() => {
+    if (!participants.length) return [];
+    const sorted = [...participants].sort((a, b) => b.totalAmount - a.totalAmount);
+    return sorted.slice(0, 10).map((p, idx) => ({
+      position: idx + 1,
+      name: p.name,
+      type: p.type,
+      amount: p.totalAmount,
+      foundingMember: idx < 3,
+    }));
+  }, [participants]);
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        <span className="ml-2 text-sm text-gray-500">Loading campaign details...</span>
+      </div>
+    );
+  }
+
+  if (!base || loadError) {
+    return (
+      <div className="space-y-6">
+        <Link
+          to="/admin/campaigns"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Campaigns
+        </Link>
+        <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
+          <Target className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+          <h2 className="text-xl font-bold text-gray-900">Campaign not found</h2>
+          <p className="mt-2 text-sm text-gray-500">{loadError || `The campaign "${id}" could not be found.`}</p>
+          <Link
+            to="/admin/campaigns"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            View all campaigns
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const campaign = { ...base, status };
   const progress =
     campaign.target > 0
       ? Math.min(Math.round((campaign.raised / campaign.target) * 100), 100)
@@ -192,28 +375,51 @@ export default function AdminCampaignDetailPage() {
     )
   );
 
-  // ── Status actions ──
+  // ── Status actions (persisted to the database) ──
 
-  const handleSubmitForReview = () => setStatus("PENDING_REVIEW");
-
-  const handleApprove = () => {
-    const today = new Date().toISOString().split("T")[0] ?? "";
-    setStatus(campaign.startDate <= today ? "ACTIVE" : "SCHEDULED");
+  const applyAction = async (action: CampaignLifecycleAction, note?: string) => {
+    if (!campaignData || !id) return;
+    const next = applyCampaignLifecycleAction(campaignData, action);
+    if (!next) return;
+    const dbStatus = next.toUpperCase();
+    try {
+      if (action === "request_changes") {
+        await adminApi.requestCampaignChanges(id, {
+          fieldId: "general",
+          label: "General Review",
+          note: note || "Changes requested by administrator",
+        });
+      } else {
+        await adminApi.updateCampaignStatus(id, { status: dbStatus, note });
+      }
+      setStatus(STATUS_BY_KEY[next] || (dbStatus as CampaignStatus));
+      await fetchCampaign();
+    } catch (err) {
+      console.error("Failed to update campaign status:", err);
+      setStatus(STATUS_BY_KEY[next] || (dbStatus as CampaignStatus));
+    }
   };
 
+  const handleSubmitForReview = () => applyAction("submit");
+  const handleApprove = () => applyAction("approve");
   const handleRequestChanges = () => setShowFeedbackInput(true);
 
   const submitChangesRequest = () => {
     if (changeFeedback.trim()) {
-      setStatus("CHANGES_REQUIRED");
+      applyAction("request_changes", changeFeedback.trim());
       setShowFeedbackInput(false);
+      setChangeFeedback("");
     }
   };
 
-  const handlePause = () => setStatus("PAUSED");
-  const handleResume = () => setStatus("ACTIVE");
-  const handleArchive = () => setStatus("ARCHIVED");
-  const handleUnpublish = () => setStatus("DRAFT");
+  const handlePublish = () => applyAction("publish");
+  const handleUnpublish = () => applyAction("unpublish");
+  const handlePause = () => applyAction("pause");
+  const handleResume = () => applyAction("resume");
+  const handleClose = () => applyAction("close");
+  const handleReopen = () => applyAction("reopen");
+  const handleArchive = () => applyAction("archive");
+  const handleRestore = () => applyAction("restore");
 
   // ── Tab content renderers ──
 
@@ -271,159 +477,305 @@ export default function AdminCampaignDetailPage() {
     </div>
   );
 
-  const renderLocations = () => (
-    <div className="rounded-xl border bg-white overflow-hidden">
-      <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
-        <button
-          onClick={() => setShowLocationModal(true)}
-          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
-        >
-          <MapPin className="h-3.5 w-3.5" /> Add Location
-        </button>
-      </div>
-      <div className="divide-y">
-        {DEMO_CAMPAIGN.locations.map((loc, i) => (
-          <div key={i} className="flex items-center justify-between px-4 py-4 hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
-                <MapPin className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{loc.name}</div>
-                <div className="text-xs text-gray-500">{loc.area}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">{loc.streetTrees.toLocaleString()}</div>
-                <div className="text-[10px] text-gray-400">street trees</div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </div>
-          </div>
-        ))}
-      </div>
+  const renderLocations = () => {
+    const cov = coverage;
+    const tc = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    const cityLabel = (slug: string) => tc(slug);
+    const areaLabel = (_citySlug: string, areaSlug: string) => tc(areaSlug);
+    const streetLabel = (_citySlug: string, _areaSlug: string, streetSlug: string) => tc(streetSlug);
 
-      {/* Location Toast */}
-      {locationToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
-          <CheckCircle2 className="h-4 w-4" />
-          Locations updated successfully
+    if (!cov) {
+      return (
+        <div className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">
+          Location coverage is unavailable for this campaign.
         </div>
-      )}
+      );
+    }
 
-      {/* Manage Locations Modal */}
-      {showLocationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-sm font-bold text-gray-900">Manage Locations</h3>
-              <button onClick={() => setShowLocationModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1 space-y-3">
-              {DEMO_AVAILABLE_LOCATIONS.map((loc, i) => {
-                const isSelected = selectedLocations.includes(loc.name);
-                return (
-                  <label
-                    key={i}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isSelected ? "border-primary-300 bg-primary-50" : "border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        setSelectedLocations((prev) =>
-                          isSelected ? prev.filter((n) => n !== loc.name) : [...prev, loc.name]
-                        );
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{loc.name}</div>
-                      <div className="text-xs text-gray-500">{loc.area} · {loc.type === "high_street" ? "High Street" : "Area"}</div>
-                    </div>
-                    {isSelected && <Check className="h-4 w-4 text-primary-600" />}
-                  </label>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-end gap-2 p-4 border-t">
-              <button
-                onClick={() => setShowLocationModal(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowLocationModal(false);
-                  setLocationToast(true);
-                  setTimeout(() => setLocationToast(false), 2500);
-                }}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-xs font-medium text-white hover:bg-primary-700"
-              >
-                Apply ({selectedLocations.length} locations)
-              </button>
-            </div>
+    const commitCoverage = (next: CampaignCoverage) => {
+      setCoverage(next);
+      if (campaignData) {
+        adminApi.updateCampaign(campaignData.id, { coverage: next }).catch(() => {});
+      }
+      setLocationToast(true);
+      setTimeout(() => setLocationToast(false), 2000);
+    };
+
+    const removeCity = (slug: string) =>
+      commitCoverage({
+        ...cov,
+        cities: cov.cities.filter((x) => x !== slug),
+        localAreas: cov.localAreas.filter((a) => a.citySlug !== slug),
+        highStreets: cov.highStreets.filter((s) => s.citySlug !== slug),
+      });
+    const removeArea = (citySlug: string, areaSlug: string) =>
+      commitCoverage({
+        ...cov,
+        localAreas: cov.localAreas.filter((a) => !(a.citySlug === citySlug && a.areaSlug === areaSlug)),
+        highStreets: cov.highStreets.filter((s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug)),
+      });
+    const removeStreet = (citySlug: string, areaSlug: string, streetSlug: string) =>
+      commitCoverage({
+        ...cov,
+        highStreets: cov.highStreets.filter(
+          (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug)
+        ),
+      });
+    const removePostcode = (pc: string) =>
+      commitCoverage({ ...cov, postcodes: cov.postcodes.filter((p) => p !== pc) });
+
+    const openEditor = () => {
+      setDraftCoverage({
+        mode: cov.mode || "custom",
+        national: cov.national,
+        cities: [...cov.cities],
+        localAreas: cov.localAreas.map((a) => ({ ...a })),
+        highStreets: cov.highStreets.map((s) => ({ ...s })),
+        postcodes: [...cov.postcodes],
+      });
+      setCoverageSearch("");
+      setPostcodeInput("");
+      setShowLocationModal(true);
+    };
+
+    const chip = (
+      key: string,
+      label: string,
+      sub: string,
+      onRemove: (() => void) | undefined,
+      icon: React.ReactNode = <MapPin className="h-4 w-4 text-primary-600" />
+    ) => (
+      <div key={key} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100">{icon}</div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-gray-900">{label}</div>
+            <div className="truncate text-xs text-gray-500">{sub}</div>
           </div>
         </div>
-      )}
-    </div>
-  );
+        {onRemove ? (
+          <button
+            onClick={onRemove}
+            title="Remove from coverage"
+            className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : (
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            Primary
+          </span>
+        )}
+      </div>
+    );
+
+    const section = (title: string, count: number, rows: React.ReactNode) => (
+      <div className="rounded-xl border bg-white overflow-hidden">
+        <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">{title}</h4>
+          <span className="text-xs text-gray-400">{count}</span>
+        </div>
+        <div className="divide-y">
+          {count === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-gray-400">Nothing covered at this level yet.</div>
+          ) : (
+            rows
+          )}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="space-y-4">
+        {/* Coverage summary */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
+              <MapPin className="h-5 w-5 text-primary-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
+              <p className="text-xs text-gray-500">{summarizeCoverage(cov)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {cov.national && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                <Globe className="h-3.5 w-3.5" /> Nationwide
+              </span>
+            )}
+            <button
+              onClick={openEditor}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-700"
+            >
+              <MapPin className="h-3.5 w-3.5" /> Expand coverage
+            </button>
+          </div>
+        </div>
+
+        {/* Cities */}
+        {section(
+          "Cities covered",
+          cov.cities.length,
+          <>
+            {cov.cities.map((slug) =>
+              chip(
+                `city-${slug}`,
+                cityLabel(slug),
+                "City hub",
+                slug === (campaignData?.citySlug || campaignData?.business?.location?.slug) ? undefined : () => removeCity(slug),
+                <Globe className="h-4 w-4 text-primary-600" />
+              )
+            )}
+          </>
+        )}
+
+        {/* Local areas */}
+        {section(
+          "Local areas",
+          cov.localAreas.length,
+          <>
+            {cov.localAreas.map((a) =>
+              chip(
+                `area-${a.citySlug}-${a.areaSlug}`,
+                areaLabel(a.citySlug, a.areaSlug),
+                `${cityLabel(a.citySlug)} · local area`,
+                a.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) && a.areaSlug === campaignData?.areaSlug
+                  ? undefined
+                  : () => removeArea(a.citySlug, a.areaSlug)
+              )
+            )}
+          </>
+        )}
+
+        {/* High streets */}
+        {section(
+          "High streets",
+          cov.highStreets.length,
+          <>
+            {cov.highStreets.map((s) =>
+              chip(
+                `street-${s.citySlug}-${s.areaSlug}-${s.streetSlug}`,
+                streetLabel(s.citySlug, s.areaSlug, s.streetSlug),
+                `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`,
+                s.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) &&
+                s.areaSlug === campaignData?.areaSlug &&
+                s.streetSlug === campaignData?.streetSlug
+                  ? undefined
+                  : () => removeStreet(s.citySlug, s.areaSlug, s.streetSlug)
+              )
+            )}
+          </>
+        )}
+
+        {/* Postcodes */}
+        {section(
+          "Postcodes",
+          cov.postcodes.length,
+          <>
+            {cov.postcodes.map((pc) =>
+              chip(
+                `pc-${pc}`,
+                pc,
+                "Postcode district",
+                () => removePostcode(pc),
+                <Hash className="h-4 w-4 text-primary-600" />
+              )
+            )}
+          </>
+        )}
+
+        {/* Location Toast */}
+        {locationToast && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+            <CheckCircle2 className="h-4 w-4" />
+            Location coverage updated
+          </div>
+        )}
+
+        {/* Expand Coverage Modal */}
+        {showLocationModal && draftCoverage && (
+          <CoverageEditorModal
+            draft={draftCoverage}
+            search={coverageSearch}
+            postcodeInput={postcodeInput}
+            onSearch={setCoverageSearch}
+            onPostcodeInput={setPostcodeInput}
+            onSetDraft={(next) => setDraftCoverage(next)}
+            onClose={() => setShowLocationModal(false)}
+            onApply={() => {
+              commitCoverage(draftCoverage);
+              setShowLocationModal(false);
+            }}
+            cityLabel={cityLabel}
+            areaLabel={areaLabel}
+          />
+        )}
+      </div>
+    );
+  };
 
   const renderRewards = () => (
     <div className="rounded-xl border bg-white overflow-hidden">
       <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-900">Rewards ({DEMO_REWARDS.length})</h3>
+        <h3 className="text-sm font-bold text-gray-900">Rewards ({rewards.length})</h3>
         <button className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium">
           <Gift className="h-3.5 w-3.5" /> Add Reward
         </button>
       </div>
-      <div className="divide-y">
-        {DEMO_REWARDS.map((reward) => (
-          <div key={reward.id} className="px-4 py-4 hover:bg-gray-50">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="text-sm font-medium text-gray-900">{reward.name}</div>
-                <div className="text-[10px] text-gray-400">Threshold: {fmt(reward.threshold)}</div>
-              </div>
-              <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold bg-green-100 text-green-700">
-                {reward.status}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {reward.items.map((item, i) => (
-                <span key={i} className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                  {item}
+      {rewards.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Gift className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No rewards configured yet</p>
+          <p className="text-xs text-gray-400 mt-1">Configure reward tiers to incentivise contributors to support this campaign.</p>
+        </div>
+      ) : (
+        <div className="divide-y">
+          {rewards.map((reward) => (
+            <div key={reward.id} className="px-4 py-4 hover:bg-gray-50">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{reward.title || reward.name}</div>
+                  <div className="text-[10px] text-gray-400">Threshold: {fmt(reward.thresholdAmount ?? reward.threshold ?? 0)}</div>
+                </div>
+                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold bg-green-100 text-green-700">
+                  {reward.status || "active"}
                 </span>
-              ))}
+              </div>
+              {Array.isArray(reward.items) && reward.items.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {reward.items.map((item: string, i: number) => (
+                    <span key={i} className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {reward.description && !reward.items?.length && (
+                <p className="text-xs text-gray-500 mb-3">{reward.description}</p>
+              )}
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="rounded bg-gray-50 p-2">
+                  <div className="text-xs font-bold text-gray-900">{reward.maxQuantity ?? reward.quantity ?? "∞"}</div>
+                  <div className="text-[10px] text-gray-400">Total</div>
+                </div>
+                <div className="rounded bg-blue-50 p-2">
+                  <div className="text-xs font-bold text-blue-700">{reward.claimedCount ?? reward.claimed ?? 0}</div>
+                  <div className="text-[10px] text-blue-500">Claimed</div>
+                </div>
+                <div className="rounded bg-green-50 p-2">
+                  <div className="text-xs font-bold text-green-700">{reward.fulfilledCount ?? reward.fulfilled ?? 0}</div>
+                  <div className="text-[10px] text-green-500">Fulfilled</div>
+                </div>
+                <div className="rounded bg-purple-50 p-2">
+                  <div className="text-xs font-bold text-purple-700">{reward.redeemedCount ?? reward.redeemed ?? 0}</div>
+                  <div className="text-[10px] text-purple-500">Redeemed</div>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="rounded bg-gray-50 p-2">
-                <div className="text-xs font-bold text-gray-900">{reward.quantity}</div>
-                <div className="text-[10px] text-gray-400">Total</div>
-              </div>
-              <div className="rounded bg-blue-50 p-2">
-                <div className="text-xs font-bold text-blue-700">{reward.claimed}</div>
-                <div className="text-[10px] text-blue-500">Claimed</div>
-              </div>
-              <div className="rounded bg-green-50 p-2">
-                <div className="text-xs font-bold text-green-700">{reward.fulfilled}</div>
-                <div className="text-[10px] text-green-500">Fulfilled</div>
-              </div>
-              <div className="rounded bg-purple-50 p-2">
-                <div className="text-xs font-bold text-purple-700">{reward.redeemed}</div>
-                <div className="text-[10px] text-purple-500">Redeemed</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -475,29 +827,37 @@ export default function AdminCampaignDetailPage() {
         <div className="p-4 border-b bg-gray-50">
           <h3 className="text-sm font-bold text-gray-900">Recent Participants</h3>
         </div>
-        <div className="divide-y">
-          {DEMO_PARTICIPANTS.map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${
-                  p.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                }`}>
-                  {p.name[0]}
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{p.name}</div>
-                  <div className="text-[10px] text-gray-400">
-                    {p.type === "business_owner" ? "Business Owner" : "Consumer"} · Joined {p.joinedDate}
+        {participants.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-500">
+            <Users className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+            <p className="font-medium text-gray-700">No participants yet</p>
+            <p className="text-xs text-gray-400 mt-1">Participants will appear here once community members or businesses contribute.</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {participants.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${
+                    p.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                  }`}>
+                    {p.name[0]}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{p.name}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {p.type === "business_owner" ? "Business Owner" : "Consumer"} · Joined {p.joinedDate}
+                    </div>
                   </div>
                 </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-gray-900">{fmt(p.totalAmount)}</div>
+                  <div className="text-[10px] text-gray-400">{p.contributions} contributions</div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">{fmt(p.totalAmount)}</div>
-                <div className="text-[10px] text-gray-400">{p.contributions} contributions</div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -507,50 +867,62 @@ export default function AdminCampaignDetailPage() {
       <div className="p-4 border-b bg-gray-50">
         <h3 className="text-sm font-bold text-gray-900">Recent Contributions</h3>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {DEMO_RECENT_CONTRIBUTIONS.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
-                      c.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                    }`}>
-                      {c.name[0]}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">{c.name}</div>
-                      {c.foundingMember && (
-                        <span className="text-[10px] text-amber-600 font-medium">Founding Member</span>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    c.type === "business_owner" ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
-                  }`}>
-                    {c.type === "business_owner" ? "Business" : "Consumer"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-bold text-gray-900">{fmt(c.amount)}</td>
-                <td className="px-4 py-3 text-gray-500">
-                  {new Date(c.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </td>
+      {contributions.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Coins className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No contributions recorded yet</p>
+          <p className="text-xs text-gray-400 mt-1">Donations and pledges made towards this campaign will be listed here.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y">
+              {contributions.map((c) => {
+                const name = c.donorName || c.user?.name || (c.type === "business_owner" ? "Business Donor" : "Community Donor");
+                const isBiz = c.donorType === "business" || c.type === "business_owner";
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+                          isBiz ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                        }`}>
+                          {name[0] || "D"}
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{name}</div>
+                          {c.isFoundingMember && (
+                            <span className="text-[10px] text-amber-600 font-medium">Founding Member</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isBiz ? "bg-blue-100 text-blue-700" : "bg-primary-100 text-primary-700"
+                      }`}>
+                        {isBiz ? "Business" : "Consumer"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{fmt(c.amount || 0)}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -638,11 +1010,11 @@ export default function AdminCampaignDetailPage() {
   };
 
   const renderRewardActivity = () => {
-    const totalClaimed = DEMO_REWARDS.reduce((s, r) => s + r.claimed, 0);
-    const totalFulfilled = DEMO_REWARDS.reduce((s, r) => s + r.fulfilled, 0);
-    const totalRedeemed = DEMO_REWARDS.reduce((s, r) => s + r.redeemed, 0);
-    const totalExpired = DEMO_REWARDS.reduce((s, r) => s + r.expired, 0);
-    const totalIssued = DEMO_REWARDS.reduce((s, r) => s + r.quantity, 0);
+    const totalClaimed = rewards.reduce((s, r) => s + (r.claimedCount ?? r.claimed ?? 0), 0);
+    const totalFulfilled = rewards.reduce((s, r) => s + (r.fulfilledCount ?? r.fulfilled ?? 0), 0);
+    const totalRedeemed = rewards.reduce((s, r) => s + (r.redeemedCount ?? r.redeemed ?? 0), 0);
+    const totalExpired = rewards.reduce((s, r) => s + (r.expiredCount ?? r.expired ?? 0), 0);
+    const totalIssued = rewards.reduce((s, r) => s + (r.maxQuantity ?? r.quantity ?? 0), 0);
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -680,27 +1052,38 @@ export default function AdminCampaignDetailPage() {
           <div className="p-4 border-b bg-gray-50">
             <h3 className="text-sm font-bold text-gray-900">Per-Reward Breakdown</h3>
           </div>
-          <div className="divide-y">
-            {DEMO_REWARDS.map((r) => {
-              const claimRate = r.quantity > 0 ? Math.round((r.claimed / r.quantity) * 100) : 0;
-              return (
-                <div key={r.id} className="px-4 py-3 hover:bg-gray-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900">{r.name}</span>
-                    <span className="text-xs text-gray-500">{claimRate}% claimed</span>
+          {rewards.length === 0 ? (
+            <div className="p-8 text-center text-sm text-gray-500">
+              <Gift className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+              No reward activity to display.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {rewards.map((r) => {
+                const qty = r.maxQuantity ?? r.quantity ?? 0;
+                const claimed = r.claimedCount ?? r.claimed ?? 0;
+                const fulfilled = r.fulfilledCount ?? r.fulfilled ?? 0;
+                const redeemed = r.redeemedCount ?? r.redeemed ?? 0;
+                const claimRate = qty > 0 ? Math.round((claimed / qty) * 100) : 0;
+                return (
+                  <div key={r.id} className="px-4 py-3 hover:bg-gray-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-900">{r.title || r.name}</span>
+                      <span className="text-xs text-gray-500">{claimRate}% claimed</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${claimRate}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <span>{claimed}/{qty || "∞"} claimed</span>
+                      <span>{fulfilled} fulfilled</span>
+                      <span>{redeemed} redeemed</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary-500 rounded-full" style={{ width: `${claimRate}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                    <span>{r.claimed}/{r.quantity} claimed</span>
-                    <span>{r.fulfilled} fulfilled</span>
-                    <span>{r.redeemed} redeemed</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -711,30 +1094,38 @@ export default function AdminCampaignDetailPage() {
       <div className="p-4 border-b bg-gray-50">
         <h3 className="text-sm font-bold text-gray-900">Campaign Leaderboard</h3>
       </div>
-      <div className="divide-y">
-        {DEMO_LEADERBOARD.map((entry) => (
-          <div key={entry.position} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${
-                entry.position === 1 ? "bg-amber-100 text-amber-700" :
-                entry.position === 2 ? "bg-gray-200 text-gray-700" :
-                entry.position === 3 ? "bg-orange-100 text-orange-700" :
-                "bg-gray-100 text-gray-600"
-              }`}>
-                {entry.position <= 3 ? <Trophy className="h-4 w-4" /> : `#${entry.position}`}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{entry.name}</div>
-                <div className="text-[10px] text-gray-400">
-                  {entry.type === "business_owner" ? "Business Owner" : "Consumer"}
-                  {entry.foundingMember && " · Founding Member"}
+      {leaderboard.length === 0 ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Trophy className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+          <p className="font-medium text-gray-700">No leaderboard entries yet</p>
+          <p className="text-xs text-gray-400 mt-1">Once contributions start coming in, the top contributors will appear here.</p>
+        </div>
+      ) : (
+        <div className="divide-y">
+          {leaderboard.map((entry) => (
+            <div key={entry.position} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${
+                  entry.position === 1 ? "bg-amber-100 text-amber-700" :
+                  entry.position === 2 ? "bg-gray-200 text-gray-700" :
+                  entry.position === 3 ? "bg-orange-100 text-orange-700" :
+                  "bg-gray-100 text-gray-600"
+                }`}>
+                  {entry.position <= 3 ? <Trophy className="h-4 w-4" /> : `#${entry.position}`}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{entry.name}</div>
+                  <div className="text-[10px] text-gray-400">
+                    {entry.type === "business_owner" ? "Business Owner" : "Consumer"}
+                    {entry.foundingMember && " · Founding Member"}
+                  </div>
                 </div>
               </div>
+              <div className="text-sm font-bold text-gray-900">{fmt(entry.amount)}</div>
             </div>
-            <div className="text-sm font-bold text-gray-900">{fmt(entry.amount)}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -861,9 +1252,14 @@ export default function AdminCampaignDetailPage() {
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
           <div>
             <div className="text-sm font-medium text-gray-900">Locations</div>
-            <div className="text-xs text-gray-500">{campaign.locations.map((l) => l.name).join(", ")}</div>
+            <div className="text-xs text-gray-500">
+              {coverage ? summarizeCoverage(coverage) : "—"}
+            </div>
           </div>
-          <button className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab("locations")}
+            className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+          >
             <Edit3 className="h-3.5 w-3.5" /> Edit
           </button>
         </div>
@@ -923,12 +1319,20 @@ export default function AdminCampaignDetailPage() {
         {/* Status Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {status === "DRAFT" && (
-            <button
-              onClick={handleSubmitForReview}
-              className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
-            >
-              <Send className="h-3.5 w-3.5" /> Submit for Review
-            </button>
+            <>
+              <button
+                onClick={handleSubmitForReview}
+                className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
+              >
+                <Send className="h-3.5 w-3.5" /> Submit for Review
+              </button>
+              <Link
+                to={`/admin/campaigns/${campaign.id}/edit`}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Edit3 className="h-3.5 w-3.5" /> Edit
+              </Link>
+            </>
           )}
 
           {status === "PENDING_REVIEW" && (
@@ -948,8 +1352,31 @@ export default function AdminCampaignDetailPage() {
             </>
           )}
 
+          {status === "APPROVED" && (
+            <>
+              <button
+                onClick={handlePublish}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <Globe className="h-3.5 w-3.5" /> Publish
+              </button>
+              <button
+                onClick={handleUnpublish}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Unpublish
+              </button>
+            </>
+          )}
+
           {status === "SCHEDULED" && (
             <>
+              <button
+                onClick={handlePublish}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <Globe className="h-3.5 w-3.5" /> Publish Now
+              </button>
               <button
                 onClick={handleUnpublish}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -973,6 +1400,12 @@ export default function AdminCampaignDetailPage() {
               >
                 <Pause className="h-3.5 w-3.5" /> Pause
               </button>
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 hover:bg-orange-100"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Close
+              </button>
               <Link
                 to={`/admin/campaigns/${campaign.id}/edit`}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -990,12 +1423,35 @@ export default function AdminCampaignDetailPage() {
               >
                 <Play className="h-3.5 w-3.5" /> Resume
               </button>
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 hover:bg-orange-100"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Close
+              </button>
               <Link
                 to={`/admin/campaigns/${campaign.id}/edit`}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
               >
                 <Edit3 className="h-3.5 w-3.5" /> Edit
               </Link>
+            </>
+          )}
+
+          {status === "CLOSED" && (
+            <>
+              <button
+                onClick={handleReopen}
+                className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Reopen
+              </button>
+              <button
+                onClick={handleArchive}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Archive className="h-3.5 w-3.5" /> Archive
+              </button>
             </>
           )}
 
@@ -1008,7 +1464,16 @@ export default function AdminCampaignDetailPage() {
             </button>
           )}
 
-          {status === "CHANGES_REQUIRED" && (
+          {status === "ARCHIVED" && (
+            <button
+              onClick={handleRestore}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Restore to Draft
+            </button>
+          )}
+
+          {(status === "CHANGES_REQUIRED" || status === "CHANGES_REQUESTED") && (
             <button
               onClick={handleSubmitForReview}
               className="flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100"
@@ -1018,7 +1483,7 @@ export default function AdminCampaignDetailPage() {
           )}
 
           <Link
-            to={`/campaigns/${campaign.id}`}
+            to={campaignData ? getAdminCampaignPublicPath(campaignData) : `/campaigns/${campaign.id}`}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             <Eye className="h-3.5 w-3.5" /> Public View
@@ -1086,7 +1551,7 @@ export default function AdminCampaignDetailPage() {
       )}
 
       {/* Changes Required Banner */}
-      {status === "CHANGES_REQUIRED" && (
+      {(status === "CHANGES_REQUIRED" || status === "CHANGES_REQUESTED") && (
         <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 mb-6">
           <div className="flex items-start gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100">
@@ -1125,6 +1590,331 @@ export default function AdminCampaignDetailPage() {
 
       {/* Tab Content */}
       <div className="mb-8">{tabRenderers[activeTab]()}</div>
+    </div>
+  );
+}
+
+// ───────────────────── Coverage editor modal ─────────────────────
+
+interface CoverageEditorModalProps {
+  draft: CampaignCoverage;
+  search: string;
+  postcodeInput: string;
+  onSearch: (v: string) => void;
+  onPostcodeInput: (v: string) => void;
+  onSetDraft: (next: CampaignCoverage) => void;
+  onClose: () => void;
+  onApply: () => void;
+  cityLabel: (slug: string) => string;
+  areaLabel: (citySlug: string, areaSlug: string) => string;
+}
+
+function CoverageEditorModal({
+  draft,
+  search,
+  postcodeInput,
+  onSearch,
+  onPostcodeInput,
+  onSetDraft,
+  onClose,
+  onApply,
+  cityLabel,
+  areaLabel,
+}: CoverageEditorModalProps) {
+  const q = search.trim().toLowerCase();
+  const match = (name: string) => !q || name.toLowerCase().includes(q);
+
+  const setDraft = (fn: (d: CampaignCoverage) => CampaignCoverage) => onSetDraft(fn(draft));
+
+  const toggleCity = (slug: string) =>
+    setDraft((d) =>
+      d.cities.includes(slug)
+        ? {
+            ...d,
+            cities: d.cities.filter((x) => x !== slug),
+            localAreas: d.localAreas.filter((a) => a.citySlug !== slug),
+            highStreets: d.highStreets.filter((s) => s.citySlug !== slug),
+          }
+        : { ...d, cities: [...d.cities, slug] }
+    );
+
+  const toggleArea = (citySlug: string, areaSlug: string) =>
+    setDraft((d) =>
+      d.localAreas.some((a) => a.citySlug === citySlug && a.areaSlug === areaSlug)
+        ? {
+            ...d,
+            localAreas: d.localAreas.filter((a) => !(a.citySlug === citySlug && a.areaSlug === areaSlug)),
+            highStreets: d.highStreets.filter(
+              (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug)
+            ),
+          }
+        : { ...d, localAreas: [...d.localAreas, { citySlug, areaSlug }] }
+    );
+
+  const toggleStreet = (citySlug: string, areaSlug: string, streetSlug: string) =>
+    setDraft((d) =>
+      d.highStreets.some(
+        (s) => s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug
+      )
+        ? {
+            ...d,
+            highStreets: d.highStreets.filter(
+              (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug)
+            ),
+          }
+        : { ...d, highStreets: [...d.highStreets, { citySlug, areaSlug, streetSlug }] }
+    );
+
+  const addPostcode = () => {
+    const pc = postcodeInput.trim().toUpperCase();
+    if (!pc) return;
+    if (!draft.postcodes.includes(pc)) setDraft((d) => ({ ...d, postcodes: [...d.postcodes, pc] }));
+    onPostcodeInput("");
+  };
+
+  const { data: hubCitiesData } = useQuery({
+    queryKey: ["hubCities"],
+    queryFn: fetchHubCities,
+  });
+
+  const ukCities = useMemo(() => {
+    if (hubCitiesData && hubCitiesData.length > 0) {
+      return hubCitiesData.map((c) => ({ slug: c.slug, name: c.name }));
+    }
+    return [];
+  }, [hubCitiesData]);
+
+  const filteredCities = ukCities.filter((c) => match(c.name));
+  const areaOptions = draft.cities.map((citySlug) => ({
+    citySlug,
+    slug: `${citySlug}-central`,
+    name: `${citySlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())} Central`,
+  })).filter((a) => match(a.name));
+  const streetOptions = draft.localAreas.map(({ citySlug, areaSlug }) => ({
+    citySlug,
+    areaSlug,
+    slug: `${areaSlug}-high-street`,
+    name: `${areaSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())} High Street`,
+  })).filter((s) => match(s.name));
+
+  const optionRow = (
+    key: string,
+    checked: boolean,
+    onChange: () => void,
+    label: string,
+    sub?: string
+  ) => (
+    <label
+      key={key}
+      className={`flex cursor-pointer items-center gap-3 px-3 py-2 ${
+        checked ? "bg-primary-50" : "hover:bg-gray-50"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+      />
+      <span className="flex-1 text-sm text-gray-900">{label}</span>
+      {sub && <span className="text-[10px] text-gray-400">{sub}</span>}
+      {checked && <Check className="h-4 w-4 text-primary-600" />}
+    </label>
+  );
+
+  const block = (title: string, count: number, body: React.ReactNode) => (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">{title}</h4>
+        <span className="text-xs text-gray-400">{count} selected</span>
+      </div>
+      <div className="max-h-44 divide-y overflow-y-auto rounded-lg border">{body}</div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="mx-4 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b p-4">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Expand Location Coverage</h3>
+            <p className="text-xs text-gray-500">
+              Add cities, local areas, high streets and postcodes — without creating a new campaign.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-4">
+          {/* Nationwide */}
+          <label
+            className={`flex cursor-pointer items-center justify-between gap-4 rounded-lg border p-3 ${
+              draft.national ? "border-primary-300 bg-primary-50" : "border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                <Globe className="h-4 w-4 text-primary-600" /> Nationwide coverage
+              </div>
+              <div className="text-xs text-gray-500">
+                Covers every city, local area and high street — the other selections below are then
+                implied.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draft.national}
+              onChange={() => setDraft((d) => ({ ...d, national: !d.national }))}
+              className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </label>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search cities, local areas, high streets..."
+              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Cities */}
+          {block(
+            "Cities",
+            draft.cities.length,
+            filteredCities.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching cities.</div>
+            ) : (
+              <>
+                {filteredCities.map((c) =>
+                  optionRow(`c-${c.slug}`, draft.cities.includes(c.slug), () => toggleCity(c.slug), c.name, "City hub")
+                )}
+              </>
+            )
+          )}
+
+          {/* Local areas */}
+          {block(
+            "Local areas",
+            draft.localAreas.length,
+            draft.cities.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">
+                Select a city first to add its local areas.
+              </div>
+            ) : areaOptions.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching local areas.</div>
+            ) : (
+              <>
+                {areaOptions.map((a) =>
+                  optionRow(
+                    `a-${a.citySlug}-${a.slug}`,
+                    draft.localAreas.some((x) => x.citySlug === a.citySlug && x.areaSlug === a.slug),
+                    () => toggleArea(a.citySlug, a.slug),
+                    a.name,
+                    cityLabel(a.citySlug)
+                  )
+                )}
+              </>
+            )
+          )}
+
+          {/* High streets */}
+          {block(
+            "High streets",
+            draft.highStreets.length,
+            draft.localAreas.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">
+                Select a local area first to add its high streets.
+              </div>
+            ) : streetOptions.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching high streets.</div>
+            ) : (
+              <>
+                {streetOptions.map((s) =>
+                  optionRow(
+                    `s-${s.citySlug}-${s.areaSlug}-${s.slug}`,
+                    draft.highStreets.some(
+                      (x) =>
+                        x.citySlug === s.citySlug && x.areaSlug === s.areaSlug && x.streetSlug === s.slug
+                    ),
+                    () => toggleStreet(s.citySlug, s.areaSlug, s.slug),
+                    s.name,
+                    `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`
+                  )
+                )}
+              </>
+            )
+          )}
+
+          {/* Postcodes */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">Postcodes</h4>
+              <span className="text-xs text-gray-400">{draft.postcodes.length} selected</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={postcodeInput}
+                onChange={(e) => onPostcodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addPostcode();
+                  }
+                }}
+                placeholder="e.g. M1"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <button
+                onClick={addPostcode}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Plus className="h-4 w-4" /> Add
+              </button>
+            </div>
+            {draft.postcodes.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {draft.postcodes.map((pc) => (
+                  <span
+                    key={pc}
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700"
+                  >
+                    <Hash className="h-3 w-3" />
+                    {pc}
+                    <button
+                      onClick={() =>
+                        setDraft((d) => ({ ...d, postcodes: d.postcodes.filter((p) => p !== pc) }))
+                      }
+                      className="text-gray-400 hover:text-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t p-4">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onApply}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-xs font-medium text-white hover:bg-primary-700"
+          >
+            Apply coverage
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

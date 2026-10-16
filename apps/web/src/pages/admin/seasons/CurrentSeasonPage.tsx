@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { seasonApi, type Season, type SeasonMetrics, type SeasonCityActivity } from "@/services/season.service";
+import { seasonApi, type Season, type SeasonMetrics, type SeasonCityActivity } from "@/services/season";
 import {
   Calendar, TrendingUp, Users, MapPin, Trophy, Settings, Activity,
   ChevronRight, AlertTriangle, Target, BarChart3,

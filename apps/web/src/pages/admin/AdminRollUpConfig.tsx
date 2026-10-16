@@ -5,9 +5,9 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from "react";
-import { hubProgressApi, type RollUpConfig, type RollUpPreview } from "@/services/hubProgress.service";
-import { ALL_LOCATIONS } from "@/data/ukHubData";
-import { formatCurrency } from "@/data/ukHubData";
+import { hubProgressApi, type RollUpConfig, type RollUpPreview } from "@/services/hub-progress";
+import { adminApi, type AdminLocation } from "@/services/admin";
+import { formatCurrency } from "@/utils/formatters";
 
 const AGGREGATION_OPTIONS = [
   { value: "realtime", label: "Real-time", desc: "Aggregate on every contribution" },
@@ -19,11 +19,11 @@ const CAMPAIGN_TYPE_OPTIONS = [
   { value: "donation", label: "Donation Campaigns" },
   { value: "fund", label: "Fund Campaigns" },
   { value: "founding", label: "Founding Membership" },
-  { value: "sponsor", label: "Sponsorship" },
 ];
 
 export function AdminRollUpConfig() {
   const [config, setConfig] = useState<RollUpConfig | null>(null);
+  const [locations, setLocations] = useState<AdminLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState<RollUpPreview | null>(null);
@@ -32,8 +32,12 @@ export function AdminRollUpConfig() {
   const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
-    hubProgressApi.getRollUpConfig().then((data) => {
-      setConfig(data);
+    Promise.all([
+      hubProgressApi.getRollUpConfig(),
+      adminApi.getLocations({ limit: 100 }).catch(() => ({ data: [], total: 0 })),
+    ]).then(([configData, locsRes]) => {
+      setConfig(configData);
+      setLocations(locsRes.data || []);
       setLoading(false);
     });
   }, []);
@@ -312,14 +316,14 @@ export function AdminRollUpConfig() {
           Contributions flow upward: High Street → Borough → City → National
         </p>
         <div className="max-h-96 overflow-y-auto">
-          {ALL_LOCATIONS.filter((l) => l.type === "CITY").slice(0, 10).map((city) => {
-            const children = ALL_LOCATIONS.filter((l) => l.parentId === city.id);
+          {locations.filter((l) => l.type === "CITY").slice(0, 10).map((city) => {
+            const children = locations.filter((l) => l.parentId === city.id);
             return (
               <div key={city.id} className="mb-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                   <span>🏙️</span>
                   <span>{city.name}</span>
-                  <span className="text-xs text-gray-400">({formatCurrency(city.fundingRaised)} raised)</span>
+                  <span className="text-xs text-gray-400">({formatCurrency((city as any).fundingRaised || 0)} raised)</span>
                 </div>
                 {children.length > 0 && (
                   <div className="ml-6 mt-1 space-y-1">
@@ -327,7 +331,7 @@ export function AdminRollUpConfig() {
                       <div key={borough.id} className="flex items-center gap-2 text-xs text-gray-600">
                         <span>🏘️</span>
                         <span>{borough.name}</span>
-                        <span className="text-gray-400">({formatCurrency(borough.fundingRaised)})</span>
+                        <span className="text-gray-400">({formatCurrency((borough as any).fundingRaised || 0)})</span>
                       </div>
                     ))}
                     {children.length > 3 && (

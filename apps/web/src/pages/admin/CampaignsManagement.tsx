@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { adminApi } from "@/services/admin.service";
+import { adminApi } from "@/services/admin";
 import { CampaignStatusBadge } from "@/components/ui/CampaignStatusBadge";
 import type {
   CampaignStatus as CampaignStatusType,
@@ -48,7 +48,7 @@ const formatCurrency = (a: number) =>
 const formatDate = (d: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 
-const CAMPAIGN_MODES: string[] = ["donation", "crowdfunding", "fund", "sponsor"];
+const CAMPAIGN_MODES: string[] = ["donation", "crowdfunding", "fund"];
 
 const STATUS_OPTIONS: { value: CampaignStatusType; label: string }[] = [
   { value: "draft", label: "Draft" },
@@ -186,7 +186,7 @@ export function CampaignsManagement() {
               return (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-3 py-3">
-                    <Link to={`/campaigns/${c.slug}`} className="font-semibold text-gray-800 hover:text-primary-600">{c.title}</Link>
+                    <Link to={`/campaigns/${c.id}`} className="font-semibold text-gray-800 hover:text-primary-600">{c.title}</Link>
                     <p className="text-xs text-gray-400">{c._count.donations} donations · {c._count.pledges} pledges</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {c.isFeatured && <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Featured</span>}
@@ -306,7 +306,7 @@ export function CampaignsManagement() {
 
             <div className="mt-5 flex gap-2">
               <Link
-                to={`/campaigns/${selected.slug}`}
+                to={`/campaigns/${selected.id}`}
                 className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
                 onClick={() => setSelected(null)}
               >

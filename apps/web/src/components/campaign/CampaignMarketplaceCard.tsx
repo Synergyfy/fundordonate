@@ -53,18 +53,14 @@ export function CampaignMarketplaceCard({ campaign }: Props) {
     ? `${campaign.author.firstName || ""} ${campaign.author.lastName || ""}`.trim() || campaign.author.username || "Anonymous"
     : "Anonymous";
 
-  const modeLabel = campaign.mode === "fund" ? "FUND" : campaign.mode === "sponsor" ? "SPONSOR" : "DONATE";
-  const ctaLabel = campaign.mode === "fund" ? "Fund This Project" : campaign.mode === "sponsor" ? "Become a Partner" : "Donate Now";
-  const contributorLabel = campaign.mode === "fund" ? "Backers" : campaign.mode === "sponsor" ? "Partners" : "Donors";
+  const modeLabel = campaign.mode === "fund" ? "FUND" : "DONATE";
+  const ctaLabel = campaign.mode === "fund" ? "Fund This Project" : "Donate Now";
+  const contributorLabel = campaign.mode === "fund" ? "Backers" : "Donors";
   const modeColor = campaign.mode === "fund"
     ? "bg-primary-500/90 text-white"
-    : campaign.mode === "sponsor"
-    ? "bg-amber-500/90 text-white"
     : "bg-secondary-500/90 text-white";
   const modeBg = campaign.mode === "fund"
     ? "bg-primary-50 text-primary-700"
-    : campaign.mode === "sponsor"
-    ? "bg-amber-50 text-amber-700"
     : "bg-secondary-50 text-secondary-700";
 
   return (
@@ -195,7 +191,7 @@ export function CampaignMarketplaceCard({ campaign }: Props) {
             <span className="text-xs text-gray-600">{authorName}</span>
           </div>
           <span className={`text-xs font-semibold ${
-            campaign.mode === "fund" ? "text-primary-600" : campaign.mode === "sponsor" ? "text-amber-600" : "text-secondary-600"
+            campaign.mode === "fund" ? "text-primary-600" : "text-secondary-600"
           }`}>
             {ctaLabel} →
           </span>

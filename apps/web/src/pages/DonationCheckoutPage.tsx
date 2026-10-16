@@ -5,7 +5,8 @@ import { DonationDetailsStep, type DonationDetails } from "@/components/checkout
 import { DonationPersonalInfoStep, type DonorInfo } from "@/components/checkout/DonationPersonalInfoStep";
 import { DonationPaymentStep, type PaymentGateway } from "@/components/checkout/DonationPaymentStep";
 import { DonationOrderSummary } from "@/components/checkout/DonationOrderSummary";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
+import { paymentApi } from "@/services/payment";
 
 const STEPS = ["Amount", "Details", "Info", "Payment"];
 
@@ -74,30 +75,48 @@ export function DonationCheckoutPage() {
     }
   };
 
+  // `amount` is already held in pence (see DonationAmountStep).
+  const amountInPence = amount;
+
   const handleSubmit = async () => {
     if (!campaign) return;
     setSubmitting(true);
     setError("");
     try {
-      const result = await campaignApi.createDonation(campaign.id, {
-        amount,
-        paymentMethod: gateway,
+      if (gateway === "native") {
+        // Manual bank transfer path
+        navigate(`/thank-you?type=donation&method=offline`);
+        return;
+      }
+
+      const charge = await paymentApi.createCharge({
+        amountMinor: amountInPence,
+        method: gateway,
+        type: "DONATION",
+        campaignId: campaign.id,
         isAnonymous: details.isAnonymous,
         notes: details.notes || undefined,
-        tributeType: details.tributeType || undefined,
-        tributeTo: details.tributeTo || undefined,
-        tributeNotificationEmail: details.tributeNotificationEmail || undefined,
-        tributeNotificationMessage: details.tributeNotificationMessage || undefined,
+        metadata: {
+          donorFirstName: donorInfo.firstName,
+          donorLastName: donorInfo.lastName,
+          donorEmail: donorInfo.email,
+          donorPhone: donorInfo.phone || undefined,
+          tributeType: details.tributeType || undefined,
+          tributeTo: details.tributeTo || undefined,
+          tributeNotificationEmail: details.tributeNotificationEmail || undefined,
+          tributeNotificationMessage: details.tributeNotificationMessage || undefined,
+        },
       });
-      if (gateway === "paypal") {
-        window.location.href = `/payment/paypal?donation=${result.uid}`;
-      } else if (gateway === "native") {
-        navigate(`/thank-you?uid=${result.uid}&type=donation&method=offline`);
+
+      if (gateway === "paypal" && charge.approvalUrl) {
+        window.location.href = charge.approvalUrl;
+      } else if (gateway === "wallet") {
+        navigate(`/thank-you?reference=${charge.reference}&type=donation&method=wallet`);
       } else {
-        navigate(`/thank-you?uid=${result.uid}&type=donation`);
+        navigate(`/thank-you?reference=${charge.reference}&type=donation`);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to process donation");
+      setError(err instanceof Error ? err.message : "Failed to process donation through MCOM Central");
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +190,7 @@ export function DonationCheckoutPage() {
               {currentStep === 0 && <DonationAmountStep amount={amount} onChange={setAmount} />}
               {currentStep === 1 && <DonationDetailsStep details={details} onChange={setDetails} donationAmount={amount} />}
               {currentStep === 2 && <DonationPersonalInfoStep info={donorInfo} onChange={setDonorInfo} />}
-              {currentStep === 3 && <DonationPaymentStep selected={gateway} onChange={setGateway} />}
+              {currentStep === 3 && <DonationPaymentStep selected={gateway} onChange={setGateway} amountPence={amountInPence} />}
 
               {/* Navigation */}
               <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">

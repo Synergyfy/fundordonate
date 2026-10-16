@@ -8,8 +8,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { HubLocation } from "@/types/uk-hub";
 import { LOCATION_TYPE_META } from "@/types/uk-hub";
-import { getEffectiveStatus } from "@/services/locationResolver";
-import { seasonApi, type Season } from "@/services/season.service";
+import { getEffectiveStatus } from "@/services/location";
+import { seasonApi, type Season } from "@/services/season";
 import { LocationStatusBadge } from "@/components/hub/HubStatusBadge";
 import { Store, Users, Calendar, Clock, TrendingUp, Target, MapPin } from "lucide-react";
 

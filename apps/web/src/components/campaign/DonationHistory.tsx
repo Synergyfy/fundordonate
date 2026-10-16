@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 
 type Tab = "donations" | "pledges";
 

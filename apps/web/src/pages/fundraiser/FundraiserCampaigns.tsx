@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fundraiserApi } from "@/services/fundraiser.service";
+import { fundraiserApi } from "@/services/fundraiser";
 import { CampaignStatusBadge } from "@/components/ui/CampaignStatusBadge";
 
 interface Campaign {

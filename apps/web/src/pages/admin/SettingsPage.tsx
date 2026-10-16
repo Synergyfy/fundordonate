@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { adminApi } from "@/services/admin.service";
+import { adminApi } from "@/services/admin";
 
 interface Settings {
   siteName: string;
@@ -8,10 +8,12 @@ interface Settings {
   paymentGateways: string[];
 }
 
-export function SettingsPage() {
+type SettingsTabId = "general" | "payment" | "email" | "campaign" | "security" | "advanced";
+
+export function SettingsPage({ initialTab = "general" }: { initialTab?: SettingsTabId } = {}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {

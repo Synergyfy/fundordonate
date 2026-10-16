@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import { Heart, Smartphone, MapPin, ArrowRight, Check } from "lucide-react";
 
 interface Campaign {

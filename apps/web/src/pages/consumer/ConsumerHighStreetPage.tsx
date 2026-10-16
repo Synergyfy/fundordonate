@@ -9,10 +9,11 @@ import {
   ArrowLeft, Store, ChevronRight, Users, Megaphone, Calendar,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
-import { getHighStreetsForArea } from "@/data/highStreetData";
-import { HUB_LOCATIONS, getDemoCampaignsForLocation } from "@/data/hubActivation";
+import { locationService } from "@/services/location";
+import { campaignApi } from "@/services/campaign";
+import { RecommendHighStreetButton } from "@/components/RecommendHighStreetButton";
 
 export default function ConsumerHighStreetPage() {
   const { citySlug, localAreaSlug } = useParams<{
@@ -29,23 +30,23 @@ export default function ConsumerHighStreetPage() {
   const seasons = seasonResponse?.seasons ?? [];
   const currentSeason = seasons.find((s: Season) => s.status === "ACTIVE") || seasons[0] || null;
 
-  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
-  const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "City";
+  const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Local Area";
 
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
 
-  const highStreets = useMemo(() => getHighStreetsForArea(citySlug || "", localAreaSlug || ""), [citySlug, localAreaSlug]);
+  const { data: highStreets = [] } = useQuery({
+    queryKey: ["high-streets", citySlug, localAreaSlug],
+    queryFn: () => locationService.getHighStreetsForArea(citySlug || "", localAreaSlug || ""),
+  });
 
-  const mapLoc = useMemo(
-    () => HUB_LOCATIONS.find(l => l.slug === citySlug) ?? null,
-    [citySlug],
-  );
+  const { data: campaignsResponse } = useQuery({
+    queryKey: ["campaigns", localAreaSlug || citySlug],
+    queryFn: () => (campaignApi.list as any)({ location: localAreaSlug || citySlug, limit: 10 }),
+  });
 
-  const campaigns = useMemo(() => {
-    if (!mapLoc) return [];
-    return getDemoCampaignsForLocation(mapLoc);
-  }, [mapLoc]);
+  const campaigns = (campaignsResponse?.items ?? (campaignsResponse as any)?.data ?? []) as any[];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -100,9 +101,18 @@ export default function ConsumerHighStreetPage() {
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:py-12 sm:px-6 lg:px-8">
         {/* High Streets List */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">High Streets in {localAreaName}</h2>
-          <p className="text-sm text-gray-500">Select a high street to see campaigns and community activity.</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">High Streets in {localAreaName}</h2>
+            <p className="text-sm text-gray-500">Select a high street to see campaigns and community activity.</p>
+          </div>
+          <RecommendHighStreetButton
+            role="consumer"
+            citySlug={citySlug || ""}
+            cityName={cityName}
+            areaSlug={localAreaSlug || ""}
+            areaName={localAreaName}
+          />
         </div>
 
         {highStreets.length === 0 ? (
@@ -112,13 +122,22 @@ export default function ConsumerHighStreetPage() {
             <p className="text-sm text-gray-500">
               High streets for {localAreaName} are being set up. Check back soon.
             </p>
+            <div className="mt-4 flex justify-center">
+              <RecommendHighStreetButton
+                role="consumer"
+                citySlug={citySlug || ""}
+                cityName={cityName}
+                areaSlug={localAreaSlug || ""}
+                areaName={localAreaName}
+              />
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {highStreets.map((hs) => {
+            {highStreets.map((hs: any) => {
               const hsCampaigns = campaigns.filter(c =>
-                c.location?.toLowerCase().includes(hs.name.toLowerCase()) ||
-                c.tags?.some(t => t.toLowerCase().includes(hs.slug))
+                c.location?.toLowerCase().includes(hs.name?.toLowerCase()) ||
+                c.tags?.some((t: any) => t?.toLowerCase().includes(hs.slug))
               );
               return (
                 <Link

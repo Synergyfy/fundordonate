@@ -7,8 +7,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Check, ChevronRight, ChevronLeft, Store, MapPin, Tag, Target, Crown, FileCheck,
+  Check, ChevronRight, ChevronLeft, Store, MapPin, Tag, Target, Crown, FileCheck, Loader2,
 } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
+import { useBusinessOnboarding } from "@/services/business/hook";
+import { useLocationTreeQuery } from "@/services/location/hook";
 
 const STEPS = [
   { id: 1, label: "Welcome", icon: Store },
@@ -30,53 +33,7 @@ const CATEGORIES = [
   "Education", "Environment", "Community", "Sports & Fitness", "Professional Services",
 ];
 
-const LOCATION_HIERARCHY: Record<string, { name: string; boroughs: Record<string, { name: string; highStreets: string[] }> }> = {
-  manchester: {
-    name: "Manchester",
-    boroughs: {
-      "northern-quarter": { name: "Northern Quarter", highStreets: ["Oldham Street", "Tib Street", "Hewitt Street"] },
-      "nq": { name: "NQ", highStreets: ["Thomas Street", "Boardman Street"] },
-      "ancoats": { name: "Ancoats", highStreets: ["Ancoats Lane", "Pollard Street"] },
-      "castlefield": { name: "Castlefield", highStreets: ["Deansgate", "Castle Street"] },
-    },
-  },
-  london: {
-    name: "London",
-    boroughs: {
-      "westminster": { name: "Westminster", highStreets: ["Oxford Street", "Regent Street"] },
-      "camden": { name: "Camden", highStreets: ["Camden High Street", "Chalk Farm Road"] },
-      "islington": { name: "Islington", highStreets: ["Upper Street", "Liverpool Road"] },
-    },
-  },
-  birmingham: {
-    name: "Birmingham",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["New Street", "Corporation Street"] },
-      "jewellery-quarter": { name: "Jewellery Quarter", highStreets: ["Warstone Lane", "Vittoria Street"] },
-    },
-  },
-  leeds: {
-    name: "Leeds",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Briggate", "Headrow"] },
-      "brunswick": { name: "Brunswick", highStreets: ["Leeds Road"] },
-    },
-  },
-  liverpool: {
-    name: "Liverpool",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Bold Street", "Mathew Street"] },
-      "bialt": { name: "Baltic Triangle", highStreets: ["Jamaica Street", "Bridgewater Street"] },
-    },
-  },
-  bristol: {
-    name: "Bristol",
-    boroughs: {
-      "city-centre": { name: "City Centre", highStreets: ["Corn Street", "Park Street"] },
-      "harbourside": { name: "Harbourside", highStreets: ["Canons Way", "Queens Road"] },
-    },
-  },
-};
+
 
 const MEMBERSHIP_TIERS = [
   { id: "bronze", name: "Bronze", price: "Free", features: ["Basic listing", "1 campaign/season", "Standard support"] },
@@ -114,11 +71,20 @@ export default function BusinessOnboardingPage() {
     membershipTier: "bronze",
   });
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const onboardMutation = useBusinessOnboarding();
+  const { data: treeResponse, isLoading: isLoadingLocations } = useLocationTreeQuery();
+
+  const locationTree = (Array.isArray(treeResponse)
+    ? treeResponse
+    : (treeResponse as any)?.tree || (treeResponse as any)?.roots || []) as any[];
 
   const update = (partial: Partial<OnboardingData>) => setData((d) => ({ ...d, ...partial }));
 
-  const selectedCity = LOCATION_HIERARCHY[data.cityId];
-  const selectedBorough = selectedCity?.boroughs[data.boroughId];
+  const selectedCity = locationTree.find((c: any) => c.id === data.cityId || c.slug === data.cityId);
+  const boroughs = (selectedCity?.children || []) as any[];
+  const selectedBorough = boroughs.find((b: any) => b.id === data.boroughId || b.slug === data.boroughId);
+  const highStreets = (selectedBorough?.children || []) as any[];
 
   const canProceed = () => {
     switch (step) {
@@ -133,10 +99,34 @@ export default function BusinessOnboardingPage() {
     }
   };
 
-  const handleComplete = () => {
-    // In production, this would submit the onboarding data
-    alert("Onboarding complete! Welcome to FundorDonate, " + data.businessName + "!");
-    navigate("/business-owner");
+  const handleComplete = async () => {
+    try {
+      const city = selectedCity?.name || "Manchester";
+      const borough = selectedBorough?.name || "City Centre";
+      const street = data.highStreetId || selectedBorough?.highStreets?.[0] || "High Street";
+
+      await onboardMutation.mutateAsync({
+        businessName: data.businessName.trim(),
+        businessType: data.businessType,
+        registrationNumber: data.registrationNumber || undefined,
+        description: data.description || undefined,
+        email: user?.email || "business@fundordonate.com",
+        city,
+        localArea: borough,
+        highStreet: street,
+        postcode: "M1 1AA",
+        category: data.categories[0] || "Community",
+        subcategories: data.categories.slice(1),
+        preferredAudience: data.preferredAudience,
+        campaignGoal: data.campaignGoal || undefined,
+        membershipTier: (data.membershipTier.toUpperCase() as any) || "BRONZE",
+      });
+
+      navigate("/dashboard");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to complete onboarding. Please try again.";
+      alert(Array.isArray(msg) ? msg.join(", ") : msg);
+    }
   };
 
   const toggleCategory = (cat: string) => {
@@ -274,9 +264,9 @@ export default function BusinessOnboardingPage() {
                   onChange={(e) => update({ cityId: e.target.value, boroughId: "", highStreetId: "" })}
                   className="input-field mt-1.5 w-full"
                 >
-                  <option value="">Select city...</option>
-                  {Object.entries(LOCATION_HIERARCHY).map(([id, city]) => (
-                    <option key={id} value={id}>{city.name}</option>
+                  <option value="">{isLoadingLocations ? "Loading cities..." : "Select city..."}</option>
+                  {locationTree.map((city: any) => (
+                    <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
                 </select>
               </div>
@@ -289,8 +279,8 @@ export default function BusinessOnboardingPage() {
                     className="input-field mt-1.5 w-full"
                   >
                     <option value="">Select borough...</option>
-                    {Object.entries(selectedCity.boroughs).map(([id, borough]) => (
-                      <option key={id} value={id}>{borough.name}</option>
+                    {boroughs.map((borough: any) => (
+                      <option key={borough.id} value={borough.id}>{borough.name}</option>
                     ))}
                   </select>
                 </div>
@@ -304,8 +294,8 @@ export default function BusinessOnboardingPage() {
                     className="input-field mt-1.5 w-full"
                   >
                     <option value="">Select high street...</option>
-                    {selectedBorough.highStreets.map((hs) => (
-                      <option key={hs} value={hs}>{hs}</option>
+                    {highStreets.map((hs: any) => (
+                      <option key={hs.id} value={hs.name}>{hs.name}</option>
                     ))}
                   </select>
                 </div>
@@ -454,9 +444,18 @@ export default function BusinessOnboardingPage() {
           ) : (
             <button
               onClick={handleComplete}
-              className="flex items-center gap-1 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+              disabled={onboardMutation.isPending}
+              className="flex items-center gap-1.5 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
             >
-              <Check className="h-4 w-4" /> Complete Setup
+              {onboardMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Submitting...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> Complete Setup
+                </>
+              )}
             </button>
           )}
         </div>

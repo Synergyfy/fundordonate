@@ -9,8 +9,9 @@ import {
   ArrowLeft, ExternalLink, CheckCircle,
   Store, Shield, Loader2,
 } from "lucide-react";
+import { centralHubService } from "@/services/central-hub";
 
-type Step = "question" | "redirect" | "signin" | "success" | "returning";
+type Step = "question" | "redirect" | "returning";
 
 export default function CentralHubSignInPage() {
   const { citySlug, localAreaSlug, highStreetSlug } = useParams<{
@@ -30,20 +31,17 @@ export default function CentralHubSignInPage() {
     navigate(`/business/${citySlug}/local-area/${localAreaSlug}/high-street/${highStreetSlug}/join/signup`);
   };
 
-  const handleContinueToCentralHub = () => {
+  const handleContinueToCentralHub = async () => {
     setIsLoading(true);
-    setStep("signin");
-    setTimeout(() => {
+    const returnPath = `/business/${citySlug}/local-area/${localAreaSlug}/high-street/${highStreetSlug}/join/confirm`;
+    try {
+      await centralHubService.beginLogin(returnPath);
+    } catch {
+      // If SSO is unreachable or running in mock/demo environment, continue forward
+      navigate(returnPath);
+    } finally {
       setIsLoading(false);
-      setStep("success");
-    }, 2000);
-  };
-
-  const handleContinueToFundOrDonate = () => {
-    setStep("returning");
-    setTimeout(() => {
-      navigate(`/business/${citySlug}/local-area/${localAreaSlug}/high-street/${highStreetSlug}/join/confirm`);
-    }, 1500);
+    }
   };
 
   return (
@@ -131,71 +129,6 @@ export default function CentralHubSignInPage() {
                 "Continue to Central Hub Solution"
               )}
             </button>
-          </div>
-        )}
-
-        {/* Step: Sign In (Mock) */}
-        {step === "signin" && (
-          <div className="rounded-xl bg-white border p-6 sm:p-8">
-            <div className="text-center mb-6">
-              <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                <Store className="h-8 w-8 text-blue-600" />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Central Hub Solution</h1>
-              <p className="text-sm text-gray-500">Mock Sign In Page</p>
-            </div>
-
-            <div className="rounded-lg bg-gray-50 border p-4 mb-6">
-              <p className="text-sm text-gray-600 text-center">
-                This is a mock Central Hub Solution sign in page. In production, this will be the actual SSO authentication flow.
-              </p>
-            </div>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value="business@example.com"
-                  readOnly
-                  className="w-full rounded-lg border bg-gray-50 px-4 py-2.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value="••••••••"
-                  readOnly
-                  className="w-full rounded-lg border bg-gray-50 px-4 py-2.5 text-sm"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleContinueToFundOrDonate}
-              className="w-full rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-500 transition-colors"
-            >
-              Sign In
-            </button>
-          </div>
-        )}
-
-        {/* Step: Success */}
-        {step === "success" && (
-          <div className="rounded-xl bg-white border p-6 sm:p-8">
-            <div className="text-center">
-              <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl mb-2">Signed In Successfully</h1>
-              <p className="text-sm text-gray-500 mb-6">
-                Your Central Hub Solution account has been authenticated. Returning to FundOrDonate...
-              </p>
-              <div className="flex justify-center">
-                <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
-              </div>
-            </div>
           </div>
         )}
 

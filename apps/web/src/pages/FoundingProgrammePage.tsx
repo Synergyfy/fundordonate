@@ -7,14 +7,14 @@
 
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { locationService } from "@/services/location";
 import {
-  DEMO_FOUNDING_PROGRAMMES, getLocationById,
   buildSyntheticLocation, buildSyntheticProgrammes,
   FOUNDING_METALS, FOUNDING_TIER_LEVELS, FOUNDING_LEVEL_COMPARISON,
   PROVISIONAL_OPTION_KEYS, foundingOptionKey, getOptionPrice, getProgrammeWindow,
   type FoundingMetalKey, type FoundingLevelKey,
-} from "@/data/ukHubData";
-import { getHubLocationBySlug } from "@/data/hubActivation";
+} from "@/utils/foundingProgramme";
 import type { HubLocation, FoundingProgramme } from "@/types/uk-hub";
 import { FOUNDING_STATUS_META } from "@/types/uk-hub";
 import { FOUNDING_BENEFIT_LABELS } from "@/components/hub/FoundingProgrammeCard";
@@ -100,22 +100,32 @@ function JoinForm({ programme, isBusiness, selection }: { programme: FoundingPro
 
 export default function FoundingProgrammePage() {
   const { programmeId } = useParams();
+  const id = programmeId ?? "";
+  const match = id.match(/^fp-(.+)-(business|consumer)$/);
+  const citySlug = match ? match[1]! : id.replace(/^fp-/, "");
+  const audience = match ? (match[2] === "business" ? "BUSINESS" : "CONSUMER") : "BUSINESS";
+
+  const { data: cities = [] } = useQuery({
+    queryKey: ["hubCities"],
+    queryFn: () => locationService.fetchHubCities(),
+  });
 
   const resolved = useMemo((): { programme: FoundingProgramme; location: HubLocation } | null => {
-    const id = programmeId ?? "";
-    const seeded = DEMO_FOUNDING_PROGRAMMES.find(p => p.id === id);
-    if (seeded) {
-      const loc = getLocationById(seeded.locationId);
-      return loc ? { programme: seeded, location: loc } : null;
-    }
-    const m = id.match(/^fp-(.+)-(business|consumer)$/);
-    if (!m) return null;
-    const mapLoc = getHubLocationBySlug(m[1]!);
-    if (!mapLoc) return null;
-    const loc = buildSyntheticLocation(mapLoc);
-    const prog = buildSyntheticProgrammes(loc).find(p => p.audience === (m[2] === "business" ? "BUSINESS" : "CONSUMER"));
-    return prog ? { programme: prog, location: loc } : null;
-  }, [programmeId]);
+    if (!citySlug) return null;
+    const city = cities.find(c => c.slug === citySlug || c.id === citySlug) || {
+      id: `city-${citySlug}`,
+      name: citySlug.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
+      slug: citySlug,
+      status: "active",
+      shortDescription: `Local Hub for ${citySlug}`,
+      fundingRaised: 45000,
+      fundingTarget: 100000,
+    };
+
+    const loc = buildSyntheticLocation(city);
+    const prog = buildSyntheticProgrammes(loc).find(p => p.audience === audience) || buildSyntheticProgrammes(loc)[0]!;
+    return { programme: prog, location: loc };
+  }, [citySlug, cities, audience]);
 
   if (!resolved) {
     return (

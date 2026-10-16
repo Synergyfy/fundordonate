@@ -6,13 +6,14 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   ArrowRight, ChevronRight, ChevronDown, ChevronUp,
   Home, ArrowLeft, Search, Heart, TrendingUp, Calendar, Clock,
 } from "lucide-react";
 import { Tooltip, TOOLTIPS } from "@/components/ui/Tooltip";
-import { getHighStreetsForArea, hasHighStreetData, getLocalAreaData, isCityNeedsActivation } from "@/data/highStreetData";
+import { RecommendHighStreetButton } from "@/components/RecommendHighStreetButton";
+import { locationService } from "@/services/location";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
@@ -22,11 +23,12 @@ export default function BusinessHighStreetSelectPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedStreet, setExpandedStreet] = useState<string | null>(null);
 
-  // Use unified high street data
-  const highStreetsData = getHighStreetsForArea(citySlug || "", localAreaSlug || "");
-  const cityHasData = hasHighStreetData(citySlug || "");
-  const areaData = getLocalAreaData(citySlug || "", localAreaSlug || "");
-  const cityNeedsActivation = isCityNeedsActivation(citySlug || "");
+  const { data: highStreetsData = [] } = useQuery({
+    queryKey: ["high-streets", citySlug, localAreaSlug],
+    queryFn: () => locationService.getHighStreetsForArea(citySlug || "", localAreaSlug || ""),
+  });
+  const cityHasData = highStreetsData.length > 0;
+  const cityNeedsActivation = false;
 
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],
@@ -42,7 +44,8 @@ export default function BusinessHighStreetSelectPage() {
     return `${day}/${month}/${year}`;
   };
 
-  const localAreaName = areaData?.name ?? (localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area");
+  const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Local Area";
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "City";
 
   // Convert to format expected by the component
   const highStreets = useMemo(() => {
@@ -57,17 +60,17 @@ export default function BusinessHighStreetSelectPage() {
       communityActivity: number;
       description: string;
     }> = {};
-    highStreetsData.forEach(street => {
+    highStreetsData.forEach((street: any) => {
       result[street.slug] = {
         name: street.name,
-        activationPct: street.activationPct,
-        totalBusinesses: street.totalBusinesses,
-        participatingBusinesses: street.participatingBusinesses,
-        campaigns: street.campaigns,
-        fundingRaised: street.fundingRaised,
-        fundingTarget: street.fundingTarget,
-        communityActivity: street.communityActivities,
-        description: street.description,
+        activationPct: street.activationPct ?? 60,
+        totalBusinesses: street.totalBusinesses ?? 15,
+        participatingBusinesses: street.participatingBusinesses ?? 6,
+        campaigns: street.campaigns ?? 2,
+        fundingRaised: street.fundingRaised ?? 4500,
+        fundingTarget: street.fundingTarget ?? 10000,
+        communityActivity: street.communityActivities ?? 4,
+        description: street.description ?? `High Street for ${street.name}`,
       };
     });
     return result;
@@ -142,7 +145,16 @@ export default function BusinessHighStreetSelectPage() {
         </div>
 
         {/* High Streets */}
-        <h2 className="text-lg font-bold text-gray-900 mb-4 sm:text-xl">High Streets in {localAreaName}</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-6">
+          <h2 className="text-lg font-bold text-gray-900 sm:text-xl">High Streets in {localAreaName}</h2>
+          <RecommendHighStreetButton
+            role="business"
+            citySlug={citySlug || ""}
+            cityName={cityName}
+            areaSlug={localAreaSlug || ""}
+            areaName={localAreaName}
+          />
+        </div>
 
         {cityNeedsActivation && !cityHasData ? (
           <div className="rounded-xl bg-white p-6 text-center border sm:p-8">
@@ -167,6 +179,16 @@ export default function BusinessHighStreetSelectPage() {
             <Home className="mx-auto h-10 w-10 text-gray-300 sm:h-12 sm:w-12" />
             <h3 className="mt-2 text-base font-bold text-gray-900 sm:text-lg">No High Streets Found</h3>
             <p className="mt-1 text-sm text-gray-500">No high streets are configured for this area yet.</p>
+            <div className="mt-4 flex justify-center">
+              <RecommendHighStreetButton
+                role="business"
+                citySlug={citySlug || ""}
+                cityName={cityName}
+                areaSlug={localAreaSlug || ""}
+                areaName={localAreaName}
+                label="Can't see your high street? Recommend it"
+              />
+            </div>
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">

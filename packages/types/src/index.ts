@@ -150,7 +150,7 @@ export interface Campaign {
   isEvergreen?: boolean;
 
   // Participation Configuration
-  participationTypes?: string; // JSON array: ["fund","donate","sponsor"]
+  participationTypes?: string; // JSON array: ["fund","donate"]
   backerTiersEnabled?: boolean;
   recurringEnabled?: boolean;
 

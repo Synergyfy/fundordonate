@@ -155,8 +155,8 @@ export default function HowItWorksPage() {
                       "Become a Business Contributor",
                       "Receive Backer Status",
                       "Participate in Fund or Donate campaigns",
-                      "Offer Gift Cards, Vouchers, Coupons, Deals",
-                      "Share, Exchange and Redeem Nationally",
+                      "Offer rewards to your supporters",
+                      "Recognise and reward participation nationally",
                     ].map((step, i) => (
                       <div key={step} className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 text-sm font-bold flex items-center justify-center flex-shrink-0">
@@ -186,7 +186,7 @@ export default function HowItWorksPage() {
                 {[
                   { icon: Building2, title: "Join Your Local Hub", desc: "Register as a Business Owner and connect with your local High Street Hub." },
                   { icon: Users, title: "Become a Business Contributor", desc: "Contribute to your Local Hub and receive Backer Status with national reward exchange benefits." },
-                  { icon: Share2, title: "Share Exchange Redeem", desc: "Offer Gift Cards, Vouchers, Coupons, and Deals. Connect with Local Residents through MCOM." },
+                  { icon: Share2, title: "Reward Supporters", desc: "Offer rewards and recognise the people who back your hub. Connect with Local Residents through the community network." },
                   { icon: Globe, title: "Go National", desc: "Your Backer Status works across all 76 UK City Hubs. Share, Exchange and Redeem Nationally." },
                 ].map((item) => (
                   <div key={item.title} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">

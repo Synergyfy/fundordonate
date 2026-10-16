@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { getSplitDestinations } from "@/data/ukHubData";
+import { getSplitDestinations } from "@/services/location";
 
 const LEVELS = [
   {

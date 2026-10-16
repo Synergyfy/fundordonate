@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
-import api from "@/lib/api";
+import api from "@/services/api";
 
 interface Props {
   campaignId: string;
@@ -9,25 +9,31 @@ interface Props {
   initialCount?: number;
 }
 
-export function BookmarkButton({ campaignId, initialBookmarked = false, initialCount = 0 }: Props) {
+export function BookmarkButton({ campaignId, initialBookmarked, initialCount = 0 }: Props) {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const [bookmarked, setBookmarked] = useState(initialBookmarked);
+  const [bookmarked, setBookmarked] = useState(initialBookmarked ?? false);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
 
-  // Check actual bookmark state on mount when user is logged in
   useEffect(() => {
-    if (!user) return;
+    if (initialBookmarked !== undefined) {
+      setBookmarked(initialBookmarked);
+    }
+  }, [initialBookmarked]);
+
+  // Check actual bookmark state on mount only when user is logged in and initialBookmarked was not provided
+  useEffect(() => {
+    if (!user || initialBookmarked !== undefined) return;
     api
-      .get(`/campaigns/${campaignId}/bookmark/check`)
+      .get<{ bookmarked: boolean }>(`/campaigns/${campaignId}/bookmark/check`)
       .then((res) => {
-        setBookmarked(res.data.data.bookmarked);
+        setBookmarked(res?.bookmarked ?? false);
       })
       .catch(() => {
         // Ignore check errors — use initial state
       });
-  }, [campaignId, user]);
+  }, [campaignId, user, initialBookmarked]);
 
   const toggle = useCallback(async () => {
     if (!user) {

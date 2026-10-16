@@ -5,7 +5,8 @@ import { PledgeDetailsStep, type PledgeDetails } from "@/components/checkout/Ple
 import { DonationPersonalInfoStep, type DonorInfo } from "@/components/checkout/DonationPersonalInfoStep";
 import { DonationPaymentStep, type PaymentGateway } from "@/components/checkout/DonationPaymentStep";
 import { PledgeOrderSummary } from "@/components/checkout/PledgeOrderSummary";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
+import { paymentApi } from "@/services/payment";
 
 const STEPS = ["Reward", "Details", "Info", "Payment"];
 
@@ -89,8 +90,9 @@ export function PledgeCheckoutPage() {
   }, [campaignSlug]);
 
   useEffect(() => {
-    if (selectedReward && details.amount < selectedReward.amount) {
-      setDetails((d) => ({ ...d, amount: selectedReward.amount }));
+    // `details.amount` is in pounds; the reward threshold is in pence.
+    if (selectedReward && details.amount < selectedReward.amount / 100) {
+      setDetails((d) => ({ ...d, amount: selectedReward.amount / 100 }));
     }
   }, [selectedRewardId]);
 
@@ -98,7 +100,7 @@ export function PledgeCheckoutPage() {
     switch (currentStep) {
       case 0: return true;
       case 1:
-        if (selectedReward && details.amount < selectedReward.amount) return false;
+        if (selectedReward && details.amount < selectedReward.amount / 100) return false;
         if (details.amount <= 0) return false;
         if (details.shippingRequired) {
           return !!(details.shippingFirstName && details.shippingLastName && details.shippingAddress1 && details.shippingCity && details.shippingState && details.shippingPostalCode);
@@ -110,28 +112,46 @@ export function PledgeCheckoutPage() {
     }
   };
 
+  const totalAmountPence = Math.round((details.amount + details.bonusSupport) * 100);
+
   const handleSubmit = async () => {
     if (!campaign) return;
     setSubmitting(true);
     setError("");
     try {
-      const result = await campaignApi.createPledge(campaign.id, {
-        amount: details.amount,
+      if (gateway === "native") {
+        navigate(`/thank-you?type=pledge&method=offline`);
+        return;
+      }
+
+      const charge = await paymentApi.createCharge({
+        amountMinor: totalAmountPence,
+        method: gateway,
+        type: "PLEDGE",
+        campaignId: campaign.id,
         rewardId: selectedRewardId || undefined,
-        bonusSupportAmount: details.bonusSupport,
-        shippingCost: 0,
         notes: details.notes || undefined,
-        paymentMethod: gateway,
+        metadata: {
+          donorFirstName: donorInfo.firstName,
+          donorLastName: donorInfo.lastName,
+          donorEmail: donorInfo.email,
+          donorPhone: donorInfo.phone || undefined,
+          rewardTitle: selectedReward?.title,
+          shippingRequired: details.shippingRequired,
+          shippingCity: details.shippingCity,
+          shippingPostalCode: details.shippingPostalCode,
+        },
       });
-      if (gateway === "paypal") {
-        window.location.href = `/payment/paypal?pledge=${result.uid}`;
-      } else if (gateway === "native") {
-        navigate(`/thank-you?uid=${result.uid}&type=pledge&method=offline`);
+
+      if (gateway === "paypal" && charge.approvalUrl) {
+        window.location.href = charge.approvalUrl;
+      } else if (gateway === "wallet") {
+        navigate(`/thank-you?reference=${charge.reference}&type=pledge&method=wallet`);
       } else {
-        navigate(`/thank-you?uid=${result.uid}&type=pledge`);
+        navigate(`/thank-you?reference=${charge.reference}&type=pledge`);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to process pledge");
+      setError(err instanceof Error ? err.message : "Failed to process pledge through MCOM Central");
     } finally {
       setSubmitting(false);
     }
@@ -208,7 +228,7 @@ export function PledgeCheckoutPage() {
                 <DonationPersonalInfoStep info={donorInfo} onChange={setDonorInfo} />
               )}
               {currentStep === 3 && (
-                <DonationPaymentStep selected={gateway} onChange={setGateway} />
+                <DonationPaymentStep selected={gateway} onChange={setGateway} amountPence={totalAmountPence} />
               )}
 
               <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
@@ -242,7 +262,7 @@ export function PledgeCheckoutPage() {
                         Processing...
                       </span>
                     ) : (
-                      `Pledge £${(details.amount / 100).toFixed(2)}`
+                      `Pledge £${(details.amount + details.bonusSupport).toFixed(2)}`
                     )}
                   </button>
                 )}

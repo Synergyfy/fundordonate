@@ -10,9 +10,16 @@ import { lazy } from "react";
 // =============================================================================
 
 export const HomePage = lazy(() => import("@/pages/HomePage"));
+export const CampaignsIndexPage = lazy(() => import("@/pages/CampaignsIndexPage"));
 export const CampaignsPage = lazy(() => import("@/pages/CampaignsPage"));
 export const CampaignDetailPage = lazy(() => import("@/pages/CampaignDetailPage").then(m => ({ default: m.CampaignDetailPage })));
 export const AboutPage = lazy(() => import("@/pages/AboutPage"));
+export const NationalFundingPage = lazy(() => import("@/pages/NationalFundingPage"));
+export const SeasonalFundingPage = lazy(() => import("@/pages/SeasonalFundingPage"));
+export const DonatePage = lazy(() => import("@/pages/DonatePage"));
+export const ContactPage = lazy(() => import("@/pages/ContactPage"));
+export const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+export const TermsPage = lazy(() => import("@/pages/TermsPage"));
 export const HowItWorksPage = lazy(() => import("@/pages/HowItWorksPage"));
 export const FundVsDonatePage = lazy(() => import("@/pages/FundVsDonatePage"));
 export const NationalHubPage = lazy(() => import("@/pages/NationalHubPage"));
@@ -45,15 +52,23 @@ export const MembershipPurchasePage = lazy(() => import("@/pages/MembershipPurch
 export const ContributorProfilePage = lazy(() => import("@/pages/ContributorProfilePage"));
 
 // =============================================================================
+// Consumer Contribution Flow Pages
+// =============================================================================
+
+export const CampaignBrowsePage = lazy(() => import("@/components/consumer/CampaignBrowsePage").then(m => ({ default: m.CampaignBrowsePage })));
+export const ContributionFlow = lazy(() => import("@/components/consumer/ContributionFlow").then(m => ({ default: m.ContributionFlow })));
+export const ContributionConfirmationPage = lazy(() => import("@/components/consumer/ContributionConfirmationPage").then(m => ({ default: m.ContributionConfirmationPage })));
+export const CampaignTrackingPage = lazy(() => import("@/components/consumer/CampaignTrackingPage").then(m => ({ default: m.CampaignTrackingPage })));
+
+// =============================================================================
 // Auth Pages
 // =============================================================================
 
 export const LoginPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.LoginPage })));
+export const AdminLoginPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.AdminLoginPage })));
 export const RegisterPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.RegisterPage })));
-export const ForgotPasswordPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.ForgotPasswordPage })));
-export const ResetPasswordPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.ResetPasswordPage })));
-export const VerifyEmailPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.VerifyEmailPage })));
 export const CentralHubCallbackPage = lazy(() => import("@/pages/auth").then(m => ({ default: m.CentralHubCallbackPage })));
+export const UpgradePage = lazy(() => import("@/pages/auth").then(m => ({ default: m.UpgradePage })));
 
 // =============================================================================
 // Admin Pages
@@ -86,8 +101,27 @@ export const AdminHubContentPage = lazy(() => import("@/pages/admin/AdminHubCont
 export const AllCampaignsPage = lazy(() => import("@/pages/admin/campaigns/AllCampaignsPage").then(m => ({ default: m.AllCampaignsPage })));
 export const NewAdminCampaignWizard = lazy(() => import("@/components/admin/wizard/AdminCampaignWizard").then(m => ({ default: m.AdminCampaignWizard })));
 export const AdminCampaignDetailPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignDetailPage"));
-export const AdminTemplatesPage = lazy(() => import("@/pages/admin/AdminTemplatesPage"));
+export const AdminCampaignTemplatesPage = lazy(() => import("@/pages/admin/campaigns/CampaignTemplatesPage").then(m => ({ default: m.CampaignTemplatesPage })));
+export const AdminTemplateWizardPage = lazy(() => import("@/pages/admin/campaigns/TemplateWizardPage").then(m => ({ default: m.TemplateWizardPage })));
 export const AdminTargetCalculationPage = lazy(() => import("@/pages/admin/AdminTargetCalculationPage"));
+
+// =============================================================================
+// Admin Reward Library Pages
+// =============================================================================
+
+export const RewardLibraryPage = lazy(() => import("@/pages/admin/rewards/RewardLibraryPage").then(m => ({ default: m.RewardLibraryPage })));
+export const AssetManagementPage = lazy(() => import("@/pages/admin/rewards/AssetManagementPage").then(m => ({ default: m.AssetManagementPage })));
+export const RewardTemplatesPage = lazy(() => import("@/pages/admin/rewards/RewardTemplatesPage").then(m => ({ default: m.RewardTemplatesPage })));
+export const RewardRulesPage = lazy(() => import("@/pages/admin/rewards/RewardRulesPage").then(m => ({ default: m.RewardRulesPage })));
+export const AdminFulfilmentPage = lazy(() => import("@/pages/admin/rewards/FulfilmentPage").then(m => ({ default: m.FulfilmentPage })));
+
+// =============================================================================
+// Admin Funding / Participants / Reports
+// =============================================================================
+
+export const AdminFundingPage = lazy(() => import("@/pages/admin/funding/FundingPage").then(m => ({ default: m.FundingPage })));
+export const AdminDonorsPage = lazy(() => import("@/pages/admin/participants/DonorsPage").then(m => ({ default: m.DonorsPage })));
+export const AdminReportsPage = lazy(() => import("@/pages/admin/reports/ReportsPage").then(m => ({ default: m.ReportsPage })));
 
 // =============================================================================
 // Admin UK Activation Pages
@@ -98,6 +132,7 @@ export const AdminCitiesPage = lazy(() => import("@/pages/admin/activation/Citie
 export const AdminLocalAreasPage = lazy(() => import("@/pages/admin/activation/LocalAreasPage").then(m => ({ default: m.LocalAreasPage })));
 export const AdminHighStreetsPage = lazy(() => import("@/pages/admin/activation/HighStreetsPage").then(m => ({ default: m.HighStreetsPage })));
 export const AdminActivationProgressPage = lazy(() => import("@/pages/admin/activation/ActivationProgressPage").then(m => ({ default: m.ActivationProgressPage })));
+export const AdminLocationRecommendationsPage = lazy(() => import("@/pages/admin/activation/LocationRecommendationsPage").then(m => ({ default: m.LocationRecommendationsPage })));
 export const AdminAddCityWizard = lazy(() => import("@/components/admin/wizard/AddCityWizard").then(m => ({ default: m.AddCityWizard })));
 export const AdminCityManagementPage = lazy(() => import("@/pages/admin/activation/CityManagementPage").then(m => ({ default: m.CityManagementPage })));
 
@@ -138,12 +173,20 @@ export const BusinessOwnerContributionsPage = lazy(() => import("@/pages/busines
 export const BusinessOwnerLeaderboardPage = lazy(() => import("@/pages/business-owner/BusinessOwnerLeaderboardPage"));
 export const BusinessOwnerRewardsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerRewardsPage"));
 export const BusinessOwnerSettingsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerSettingsPage"));
+export const BusinessCampaignCentrePage = lazy(() => import("@/pages/business-owner/BusinessCampaignCentrePage"));
+export const BusinessCampaignSetupPage = lazy(() => import("@/pages/business-owner/CampaignSetupPage"));
+export const BusinessMyCampaignDetailPage = lazy(() => import("@/pages/business-owner/MyCampaignDetailPage"));
 
 export const SpilloverPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SpilloverPage })));
 export const FoundingMembersPage = lazy(() => import("@/pages/admin/AdminFoundingMembersPage"));
 export const MembershipPage = lazy(() => import("@/pages/admin/AdminMembershipPage"));
-export const BusinessCampaignsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.BusinessCampaignsPage })));
-export const InStoreContributionsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.InStoreContributionsPage })));
+export const BusinessCampaignsPage = lazy(() => import("@/pages/admin/business-owners/BusinessCampaignsPage").then(m => ({ default: m.BusinessCampaignsPage })));
+export const InStoreContributionsPage = lazy(() => import("@/pages/admin/business-owners/InStoreContributionsPage").then(m => ({ default: m.InStoreContributionsPage })));
+export const BusinessContributionsPage = lazy(() => import("@/pages/admin/business-owners/BusinessContributionsPage").then(m => ({ default: m.BusinessContributionsPage })));
+export const BusinessRewardsPage = lazy(() => import("@/pages/admin/business-owners/BusinessRewardsPage").then(m => ({ default: m.BusinessRewardsPage })));
+export const BusinessLeaderboardsPage = lazy(() => import("@/pages/admin/business-owners/BusinessLeaderboardsPage").then(m => ({ default: m.BusinessLeaderboardsPage })));
+export const BusinessRecognitionPage = lazy(() => import("@/pages/admin/business-owners/BusinessRecognitionPage").then(m => ({ default: m.BusinessRecognitionPage })));
+export const CampaignCommsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.CampaignCommsPage })));
 export const RewardsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.RewardsPage })));
 export const LeaderboardsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.LeaderboardsPage })));
 export const RecognitionPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.RecognitionPage })));
@@ -171,12 +214,21 @@ export const SystemHealthPage = lazy(() => import("@/pages/admin/AdminPlaceholde
 // Dashboard Pages
 // =============================================================================
 
-export const DashboardOverview = lazy(() => import("@/pages/dashboard/DashboardOverview").then(m => ({ default: m.DashboardOverview })));
-export const DonationHistory = lazy(() => import("@/pages/dashboard/DonationHistory").then(m => ({ default: m.DonationHistory })));
-export const PledgeHistory = lazy(() => import("@/pages/dashboard/PledgeHistory").then(m => ({ default: m.PledgeHistory })));
-export const BookmarkedCampaigns = lazy(() => import("@/pages/dashboard/BookmarkedCampaigns").then(m => ({ default: m.BookmarkedCampaigns })));
-export const ReceiptsPage = lazy(() => import("@/pages/dashboard/ReceiptsPage").then(m => ({ default: m.ReceiptsPage })));
+export const ConsumerHomePage = lazy(() => import("@/pages/dashboard/ConsumerHomePage").then(m => ({ default: m.ConsumerHomePage })));
 export const ProfilePage = lazy(() => import("@/pages/dashboard/ProfilePage").then(m => ({ default: m.ProfilePage })));
+export const ConsumerExplorePage = lazy(() => import("@/pages/dashboard/ConsumerExplorePage").then(m => ({ default: m.ConsumerExplorePage })));
+export const ConsumerActivityPage = lazy(() => import("@/pages/dashboard/ConsumerActivityPage").then(m => ({ default: m.ConsumerActivityPage })));
+export const ContributionDetailPage = lazy(() => import("@/pages/dashboard/ContributionDetailPage").then(m => ({ default: m.ContributionDetailPage })));
+export const ConsumerYouPage = lazy(() => import("@/pages/dashboard/ConsumerYouPage").then(m => ({ default: m.ConsumerYouPage })));
+export const ConsumerRewardsPage = lazy(() => import("@/pages/dashboard/ConsumerRewardsPage").then(m => ({ default: m.ConsumerRewardsPage })));
+export const ConsumerRewardDetailPage = lazy(() => import("@/pages/dashboard/ConsumerRewardDetailPage").then(m => ({ default: m.ConsumerRewardDetailPage })));
+export const ConsumerMembershipPage = lazy(() => import("@/pages/dashboard/ConsumerMembershipPage").then(m => ({ default: m.ConsumerMembershipPage })));
+export const ConsumerFoundingMemberStatusPage = lazy(() => import("@/pages/dashboard/ConsumerFoundingMemberStatusPage").then(m => ({ default: m.ConsumerFoundingMemberStatusPage })));
+export const ConsumerRecognitionPage = lazy(() => import("@/pages/dashboard/ConsumerRecognitionPage").then(m => ({ default: m.ConsumerRecognitionPage })));
+export const ConsumerNotificationsPage = lazy(() => import("@/pages/dashboard/ConsumerNotificationsPage").then(m => ({ default: m.ConsumerNotificationsPage })));
+export const ConsumerSettingsPage = lazy(() => import("@/pages/dashboard/ConsumerSettingsPage").then(m => ({ default: m.ConsumerSettingsPage })));
+export const ConsumerHelpPage = lazy(() => import("@/pages/dashboard/ConsumerHelpPage").then(m => ({ default: m.ConsumerHelpPage })));
+export const ConsumerCampaignDetailPage = lazy(() => import("@/pages/dashboard/ConsumerCampaignDetailPage").then(m => ({ default: m.ConsumerCampaignDetailPage })));
 
 // =============================================================================
 // Fundraiser Pages

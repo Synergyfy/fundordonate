@@ -4,13 +4,14 @@ import {
   UserRound, BriefcaseBusiness, Lightbulb, X,
 } from "lucide-react";
 import { HubStatusBadge } from "./HubStatusBadge";
+import { useState, useEffect } from "react";
 import {
   HUB_STATUS_META,
   OPPORTUNITY_META,
-  getDemoCampaignsForLocation,
   type HubLocation,
   type OpportunityRole,
-} from "@/data/hubActivation";
+} from "@/types/uk-hub";
+import { campaignApi } from "@/services/campaign";
 
 const OPPORTUNITY_ICONS: Record<OpportunityRole, typeof UserRound> = {
   agent: UserRound,
@@ -19,7 +20,8 @@ const OPPORTUNITY_ICONS: Record<OpportunityRole, typeof UserRound> = {
 };
 
 function ActionForStatus({ location }: { location: HubLocation }) {
-  if (location.status === "active") {
+  const statusKey = location.status ?? (location.publicStatus === "ACTIVE" ? "active" : location.publicStatus === "MAKING_PROGRESS" ? "making_progress" : "needs_activation");
+  if (statusKey === "active") {
     return (
       <Link
         to={`/campaigns?location=${location.slug}`}
@@ -30,10 +32,10 @@ function ActionForStatus({ location }: { location: HubLocation }) {
       </Link>
     );
   }
-  if (location.status === "making_progress") {
+  if (statusKey === "making_progress") {
     return (
       <Link
-        to={location.campaignSlugs.length ? `/campaigns/${location.campaignSlugs[0]}` : `/campaigns?location=${location.slug}`}
+        to={location.campaignSlugs?.length ? `/campaigns/${location.campaignSlugs[0]}` : `/campaigns?location=${location.slug}`}
         className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition-colors"
       >
         Help Fund or Donate
@@ -43,7 +45,7 @@ function ActionForStatus({ location }: { location: HubLocation }) {
   }
   return (
     <Link
-      to={location.campaignSlugs.length ? `/campaigns/${location.campaignSlugs[0]}` : `/campaigns/create`}
+      to={location.campaignSlugs?.length ? `/campaigns/${location.campaignSlugs[0]}` : `/campaigns/create`}
       className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-secondary-600 text-white text-sm font-semibold rounded-xl hover:bg-secondary-700 transition-colors"
     >
       Help Activate This Hub
@@ -59,8 +61,16 @@ export function LocationPanel({
   location: HubLocation;
   onClose?: () => void;
 }) {
-  const meta = HUB_STATUS_META[location.status];
-  const campaigns = getDemoCampaignsForLocation(location);
+  const statusKey = location.status ?? (location.publicStatus === "ACTIVE" ? "active" : location.publicStatus === "MAKING_PROGRESS" ? "making_progress" : "needs_activation");
+  const meta = HUB_STATUS_META[statusKey] ?? HUB_STATUS_META.needs_activation;
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!location?.slug) return;
+    (campaignApi.list as any)({ location: location.slug, limit: 3 })
+      .then((res: any) => setCampaigns(res?.items || res?.data || []))
+      .catch(() => setCampaigns([]));
+  }, [location?.slug]);
   const hasOpportunities = !!location.opportunities && location.opportunities.length > 0;
 
   return (
@@ -99,7 +109,7 @@ export function LocationPanel({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <HubStatusBadge status={location.status} />
+          <HubStatusBadge status={location.status || "needs_activation"} />
           <span className="text-xs text-gray-400">{location.type.replace(/_/g, " ")}</span>
         </div>
 
@@ -126,7 +136,7 @@ export function LocationPanel({
             What is happening here
           </h4>
           <ul className="space-y-1.5">
-            {location.activity.map((a) => (
+            {(location.activity || []).map((a) => (
               <li key={a} className="flex items-start gap-2 text-sm text-gray-600">
                 <CheckCircle2 className="w-4 h-4 text-secondary-500 mt-0.5 flex-shrink-0" />
                 {a}

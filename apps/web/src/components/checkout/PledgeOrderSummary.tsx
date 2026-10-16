@@ -12,13 +12,22 @@ interface Props {
   selectedReward: Reward | null;
   details: PledgeDetails;
   gateway: PaymentGateway;
+  feeRate?: number;
+  feeFixed?: number;
 }
 
-const FEE_RATE = 0.029;
-const FEE_FIXED = 30;
+const DEFAULT_FEE_RATE = 0.029;
+const DEFAULT_FEE_FIXED = 30;
 
-export function PledgeOrderSummary({ campaignTitle, selectedReward, details, gateway }: Props) {
-  const processingFee = details.coverFees ? Math.round(details.amount * FEE_RATE + FEE_FIXED) : 0;
+export function PledgeOrderSummary({
+  campaignTitle,
+  selectedReward,
+  details,
+  gateway,
+  feeRate = DEFAULT_FEE_RATE,
+  feeFixed = DEFAULT_FEE_FIXED,
+}: Props) {
+  const processingFee = details.coverFees ? Math.round(details.amount * feeRate + feeFixed) : 0;
   const total = details.amount + details.bonusSupport + processingFee;
 
   return (
@@ -39,23 +48,23 @@ export function PledgeOrderSummary({ campaignTitle, selectedReward, details, gat
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
           <span className="text-gray-500">Pledge</span>
-          <span className="font-medium text-gray-900">${(details.amount / 100).toFixed(2)}</span>
+          <span className="font-medium text-gray-900">£{(details.amount / 100).toFixed(2)}</span>
         </div>
         {details.bonusSupport > 0 && (
           <div className="flex justify-between">
             <span className="text-gray-500">Bonus</span>
-            <span className="font-medium text-gray-900">+${(details.bonusSupport / 100).toFixed(2)}</span>
+            <span className="font-medium text-gray-900">+£{(details.bonusSupport / 100).toFixed(2)}</span>
           </div>
         )}
         {processingFee > 0 && (
           <div className="flex justify-between">
             <span className="text-gray-500">Fee</span>
-            <span className="font-medium text-gray-900">${(processingFee / 100).toFixed(2)}</span>
+            <span className="font-medium text-gray-900">£{(processingFee / 100).toFixed(2)}</span>
           </div>
         )}
         <div className="flex justify-between border-t border-gray-100 pt-2">
           <span className="font-semibold text-gray-900">Total</span>
-          <span className="font-bold text-gray-900">${(total / 100).toFixed(2)}</span>
+          <span className="font-bold text-gray-900">£{(total / 100).toFixed(2)}</span>
         </div>
       </div>
 

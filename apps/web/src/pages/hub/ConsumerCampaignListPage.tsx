@@ -6,9 +6,9 @@
 import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
-import { getDemoCampaignsForHighStreet } from "@/data/highStreetData";
-import { getAreaTerminology } from "@/data/ukHubData";
+import { campaignApi } from "@/services/campaign";
+import { seasonApi } from "@/services/season";
+import { getAreaTerminology } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import type { BreadcrumbItem } from "@/types/uk-hub";
 import {
@@ -37,15 +37,16 @@ export default function ConsumerCampaignListPage() {
   const areaName = (localAreaSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   const streetName = (highStreetSlug || "").replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 
-  const allCampaigns = useMemo(
-    () => getDemoCampaignsForHighStreet(citySlug || "", localAreaSlug || "", highStreetSlug || ""),
-    [citySlug, localAreaSlug, highStreetSlug],
-  );
+  const { data: campaignResponse } = useQuery({
+    queryKey: ["public-campaigns-street", "consumer", citySlug, localAreaSlug, highStreetSlug],
+    queryFn: () =>
+      (campaignApi.list as any)({ audience: "consumer", location: highStreetSlug || localAreaSlug || citySlug, limit: 50 }),
+  });
 
-  const campaigns = useMemo(
-    () => allCampaigns.filter(c => c.targetAudience === "consumer" || c.targetAudience === "both"),
-    [allCampaigns],
-  );
+  const campaigns = useMemo(() => {
+    const list = (campaignResponse?.items ?? (campaignResponse as any)?.data ?? []) as any[];
+    return list.filter((c: any) => c.targetAudience === "consumer" || c.targetAudience === "both" || !c.targetAudience);
+  }, [campaignResponse]);
 
   const breadcrumbs: BreadcrumbItem[] = [
     { label: cityName, slug: citySlug || "", fullPath: citySlug || "", type: "CITY" },
@@ -173,7 +174,7 @@ export default function ConsumerCampaignListPage() {
                         Consumer
                       </span>
                       <span className="rounded-full bg-green-100 text-green-700 px-2.5 py-0.5 text-[10px] font-bold">
-                        {campaign.mode === "fund" ? "Fund" : campaign.mode === "donation" ? "Donate" : "Sponsor"}
+                        {campaign.mode === "fund" ? "Fund" : "Donate"}
                       </span>
                     </div>
 

@@ -5,15 +5,12 @@
 
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { businessService } from "@/services/business";
 import {
   ArrowLeft, ArrowRight, CheckCircle, Store, MapPin,
   Building, Flag, Globe, ArrowDown,
 } from "lucide-react";
-
-const MOCK_BUSINESS = {
-  name: "ABC Foods Ltd",
-  postcode: "M1 1AE",
-};
 
 export default function HighStreetConfirmPage() {
   const { citySlug, localAreaSlug, highStreetSlug } = useParams<{
@@ -23,6 +20,22 @@ export default function HighStreetConfirmPage() {
   }>();
   const navigate = useNavigate();
   const [isConfirmed, setIsConfirmed] = useState(false);
+
+  const { data: businessProfile } = useQuery({
+    queryKey: ["businessProfile"],
+    queryFn: async () => {
+      try {
+        return await businessService.getProfile();
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const business = {
+    name: businessProfile?.name || "Business Enterprise",
+    postcode: businessProfile?.postcode || "M1 1AE",
+  };
 
   const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Manchester";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
@@ -61,7 +74,7 @@ export default function HighStreetConfirmPage() {
           {/* Confirmation Details */}
           <div className="space-y-3 mb-6">
             {[
-              { label: "Business", value: MOCK_BUSINESS.name, icon: Store, color: "text-blue-600" },
+              { label: "Business", value: business.name, icon: Store, color: "text-blue-600" },
               { label: "High Street", value: streetName, icon: Building, color: "text-purple-600" },
               { label: "Local Area", value: localAreaName, icon: MapPin, color: "text-green-600" },
               { label: "City", value: cityName, icon: Flag, color: "text-orange-600" },
@@ -84,7 +97,7 @@ export default function HighStreetConfirmPage() {
             <h4 className="text-xs font-bold text-blue-900 uppercase mb-3">Your connection path</h4>
             <div className="flex flex-col items-center gap-0">
               {[
-                { label: "Business", sub: MOCK_BUSINESS.name, icon: Store, color: "bg-blue-100 text-blue-600" },
+                { label: "Business", sub: business.name, icon: Store, color: "bg-blue-100 text-blue-600" },
                 { label: "High Street", sub: streetName, icon: Building, color: "bg-purple-100 text-purple-600" },
                 { label: "Local Area", sub: localAreaName, icon: MapPin, color: "bg-green-100 text-green-600" },
                 { label: "City", sub: cityName, icon: Flag, color: "bg-orange-100 text-orange-600" },
@@ -113,7 +126,7 @@ export default function HighStreetConfirmPage() {
           {/* Message */}
           <div className="rounded-lg bg-green-50 border border-green-200 p-4 mb-6">
             <p className="text-sm text-green-800">
-              By confirming, your business <span className="font-bold">{MOCK_BUSINESS.name}</span> will be officially connected to{" "}
+              By confirming, your business <span className="font-bold">{business.name}</span> will be officially connected to{" "}
               <span className="font-bold">{streetName}</span> in FundOrDonate.
             </p>
           </div>

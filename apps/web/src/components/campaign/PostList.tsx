@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 
 interface Post {
   id: string;

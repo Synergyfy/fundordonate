@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { FoundingProgramme, FoundingProgrammeStatus, FoundingAudience } from "@/types/uk-hub";
 import { FOUNDING_STATUS_META } from "@/types/uk-hub";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 interface FoundingFormData {
   locationId: string;
@@ -163,8 +164,7 @@ export function FoundingProgrammeForm({
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-gray-700">Opens At</label>
-            <input
-              type="date"
+            <DatePicker
               value={form.opensAt}
               onChange={e => set("opensAt", e.target.value)}
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
@@ -172,8 +172,7 @@ export function FoundingProgrammeForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Closes At</label>
-            <input
-              type="date"
+            <DatePicker
               value={form.closesAt}
               onChange={e => set("closesAt", e.target.value)}
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"

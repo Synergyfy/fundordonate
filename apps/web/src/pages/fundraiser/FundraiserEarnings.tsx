@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { walletApi } from "@/services/wallet.service";
+import { walletApi } from "@/services/wallet";
 
 interface WalletSummary {
   balance: number;

@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
-import { PaymentMethodSelector, type PaymentMethodType } from "./PaymentMethodSelector";
 import { ContributionDestination } from "./ContributionDestination";
+import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
 
 interface Reward {
   id: string;
   title: string;
   description?: string;
+  /** Minimum qualifying contribution, in pence. */
   amount: number;
   deliveryDate?: string;
   limit?: number;
@@ -28,54 +28,47 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
   const navigate = useNavigate();
   const [selectedRewardId, setSelectedRewardId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
-  const [bonusSupport, setBonusSupport] = useState<string>("0");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("stripe");
+  const [bonusSupport, setBonusSupport] = useState<string>("");
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
   const [error, setError] = useState("");
 
   const formatCurrency = (pence: number) =>
     new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(pence / 100);
 
-  const activeRewards = rewards.filter((r) => r.status === "active").sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const activeRewards = rewards
+    .filter((r) => r.status === "active")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const selectedReward = activeRewards.find((r) => r.id === selectedRewardId);
-  const pledgeAmount = (parseInt(amount) || 0) * 100; // Convert to minor units (cents)
-  const bonusAmount = (parseInt(bonusSupport) || 0) * 100; // Convert to minor units (cents)
+
+  // Everything is kept in pence; the inputs are pounds.
+  const pledgeAmount = Math.round((parseFloat(amount) || 0) * 100);
+  const bonusAmount = Math.round((parseFloat(bonusSupport) || 0) * 100);
   const totalAmount = pledgeAmount + bonusAmount;
+  const minPledgePence = selectedReward?.amount ?? 0;
 
   const handleRewardSelect = (rewardId: string) => {
     setSelectedRewardId(rewardId);
+    setShowPayment(false);
     const reward = activeRewards.find((r) => r.id === rewardId);
     if (reward) {
-      setAmount(String(reward.amount));
+      // `reward.amount` is pence; the input field is pounds.
+      setAmount(String(reward.amount / 100));
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
     if (pledgeAmount <= 0) {
       setError("Please enter a valid amount");
       return;
     }
-
-    setLoading(true);
-    setError("");
-    try {
-      const result = await campaignApi.createPledge(campaignId, {
-        amount: pledgeAmount,
-        rewardId: selectedRewardId || undefined,
-        bonusSupportAmount: bonusAmount,
-        paymentMethod,
-        notes: notes || undefined,
-        contributionType: contributionType || "backer",
-        hierarchyLevel: hierarchyLevel || undefined,
-      } as any);
-      navigate(`/thank-you?uid=${result.uid}&type=pledge`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to process pledge");
-    } finally {
-      setLoading(false);
+    if (minPledgePence > 0 && pledgeAmount < minPledgePence) {
+      setError(`Minimum for "${selectedReward?.title}" is ${formatCurrency(minPledgePence)}`);
+      return;
     }
+    setError("");
+    setShowPayment(true);
   };
 
   return (
@@ -83,7 +76,7 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
       <h2 className="text-xl font-bold text-gray-900">Back This Project</h2>
       <p className="mt-1 text-sm text-gray-500">for "{campaignTitle}"</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+      <form onSubmit={handleContinue} className="mt-6 space-y-6">
         {error && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
@@ -99,6 +92,7 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
                 onClick={() => {
                   setSelectedRewardId("");
                   setAmount("");
+                  setShowPayment(false);
                 }}
                 className={`w-full rounded-lg border-2 p-4 text-left transition-colors ${
                   !selectedRewardId
@@ -163,9 +157,13 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">£</span>
             <input
               type="number"
-              min={selectedReward?.amount || 1}
+              min={selectedReward ? selectedReward.amount / 100 : 1}
+              step="0.01"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setShowPayment(false);
+              }}
               placeholder="0"
               className="input-field pl-8"
               required
@@ -186,15 +184,16 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
             <input
               type="number"
               min="0"
+              step="0.01"
               value={bonusSupport}
-              onChange={(e) => setBonusSupport(e.target.value)}
+              onChange={(e) => {
+                setBonusSupport(e.target.value);
+                setShowPayment(false);
+              }}
               className="input-field pl-8"
             />
           </div>
         </div>
-
-        {/* Payment Method */}
-        <PaymentMethodSelector value={paymentMethod} onChange={setPaymentMethod} />
 
         {/* Notes */}
         <div>
@@ -221,15 +220,64 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
           </div>
         )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading || pledgeAmount <= 0}
-          className="btn-primary w-full"
-        >
-          {loading ? "Processing..." : `Pledge ${formatCurrency(totalAmount) || "£0"}`}
-        </button>
+        {/* Continue — the payment panel is rendered OUTSIDE this <form> (below)
+            so its own Stripe <form> is never nested inside another <form>.
+            A submit event on a nested form does not bubble, so React's
+            onSubmit/preventDefault never runs and the browser performs a
+            native submit — reloading the page and jumping back to the top. */}
+        {!showPayment && (
+          <button
+            type="submit"
+            disabled={pledgeAmount <= 0}
+            className="btn-primary w-full"
+          >
+            Continue to Payment {formatCurrency(totalAmount) || "£0"}
+          </button>
+        )}
       </form>
+
+      {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
+      {showPayment && (
+        <div className="mt-6 space-y-3 border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">
+              Pledge {formatCurrency(totalAmount)}
+              {selectedReward && (
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  · {selectedReward.title}
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPayment(false)}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+            >
+              ← Edit pledge
+            </button>
+          </div>
+          <McomCheckoutPanel
+            amountPence={totalAmount}
+            purpose="PLEDGE"
+            campaignId={campaignId}
+            rewardId={selectedRewardId || undefined}
+            notes={notes || undefined}
+            formatGbp={formatCurrency}
+            metadata={{
+              campaignTitle,
+              rewardTitle: selectedReward?.title,
+              bonusSupportPence: bonusAmount,
+              contributionType: contributionType || "backer",
+              hierarchyLevel: hierarchyLevel || undefined,
+            }}
+            onSuccess={(result) => {
+              navigate(
+                `/thank-you?reference=${encodeURIComponent(result.reference)}&type=pledge&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
+              );
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

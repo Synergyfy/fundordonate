@@ -1,54 +1,45 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/services/api";
 import {
   Search, Target, MapPin, Clock, Users, X,
   SlidersHorizontal, ChevronDown, ArrowRight, Store,
 } from "lucide-react";
-import { HUB_LOCATIONS } from "@/data/hubActivation";
-import { getDemoCampaignsForHighStreet, getLocalAreasForCity } from "@/data/highStreetData";
-import type { DemoCampaign } from "@/data/demo";
+import { campaignApi } from "@/services/campaign";
 
 /* ───────── helpers ───────── */
 
-type CampaignWithLocation = DemoCampaign & {
+export interface CampaignWithLocation {
+  id: string;
+  title: string;
+  slug: string;
+  shortDescription?: string;
+  description?: string;
+  featuredImage?: string;
+  mode?: string;
+  targetAudience?: string;
+  goalAmount: number;
+  raisedAmount: number;
+  deadline: string;
   citySlug: string;
   cityName: string;
   areaSlug: string;
   areaName: string;
   streetSlug: string;
   streetName: string;
-};
-
-function getAllHighStreetCampaigns(): CampaignWithLocation[] {
-  const all: CampaignWithLocation[] = [];
-  const seen = new Set<string>();
-
-  for (const loc of HUB_LOCATIONS) {
-    const citySlug = loc.slug;
-    const cityName = loc.name;
-    const areas = getLocalAreasForCity(citySlug);
-
-    for (const area of areas) {
-      for (const street of area.highStreetsList) {
-        const campaigns = getDemoCampaignsForHighStreet(citySlug, area.slug, street.slug);
-        for (const c of campaigns) {
-          if (!seen.has(c.slug)) {
-            seen.add(c.slug);
-            all.push({
-              ...c,
-              citySlug,
-              cityName,
-              areaSlug: area.slug,
-              areaName: area.name,
-              streetSlug: street.slug,
-              streetName: street.name,
-            });
-          }
-        }
-      }
-    }
-  }
-  return all;
+  category?: { id?: string; name?: string; slug?: string };
+  _count?: { donations?: number; pledges?: number };
+  business?: {
+    id: string;
+    name: string;
+    slug?: string;
+    city?: string;
+    localArea?: string;
+    highStreet?: string;
+    logoUrl?: string | null;
+    coverImageUrl?: string | null;
+  };
 }
 
 function getCampaignUrl(c: CampaignWithLocation): string {
@@ -66,68 +57,108 @@ function daysLeft(deadline: string): number {
 }
 
 function getModeColor(mode: string): string {
-  switch (mode) {
-    case "fund": return "bg-primary-500/90 text-white";
-    case "donate": return "bg-secondary-500/90 text-white";
-    case "sponsor": return "bg-amber-500/90 text-white";
-    default: return "bg-gray-500/90 text-white";
-  }
+  return mode === "fund" ? "bg-primary-500/90 text-white" : "bg-secondary-500/90 text-white";
 }
 
 function getModeLabel(mode: string): string {
-  switch (mode) {
-    case "fund": return "Fund";
-    case "donate": return "Donate";
-    case "sponsor": return "Sponsor";
-    default: return mode;
-  }
+  return mode === "fund" ? "Fund" : "Donate";
 }
 
 /* ───────── component ───────── */
 
-export default function CampaignsPage() {
+interface CampaignsPageProps {
+  /** Audience page — fixes the audience filter and sets the header copy. */
+  audience: "business" | "consumer";
+}
+
+const MODE_TABS = [
+  { value: "fund", label: "Fund" },
+  { value: "donation", label: "Donate" },
+] as const;
+
+const PAGE_COPY = {
+  business: {
+    title: "Business Campaigns",
+    subtitle:
+      "Fund or donate to business campaigns on UK high streets — back local shops, services and independent businesses as they grow.",
+    placeholder: "Search business campaigns, cities, areas or streets...",
+  },
+  consumer: {
+    title: "Consumer Campaigns",
+    subtitle:
+      "Fund or donate to community campaigns across UK high streets — support the local causes that matter to you.",
+    placeholder: "Search consumer campaigns, cities, areas or streets...",
+  },
+} as const;
+
+export default function CampaignsPage({ audience }: CampaignsPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modeParam = searchParams.get("mode");
+  const modeTab = modeParam === "fund" || modeParam === "donation" ? modeParam : null;
+  const copy = PAGE_COPY[audience];
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
-  const [activeAudience, setActiveAudience] = useState("all");
   const [activeSort, setActiveSort] = useState("trending");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCity, setSelectedCity] = useState("all");
   const [selectedArea, setSelectedArea] = useState("all");
   const [selectedStreet, setSelectedStreet] = useState("all");
 
-  const allCampaigns = useMemo(() => getAllHighStreetCampaigns(), []);
+  const { data: liveData } = useQuery({
+    queryKey: ["public-campaigns", audience],
+    queryFn: () => (campaignApi.list as any)({ audience, limit: 100 }),
+    staleTime: 60_000,
+  });
+
+  const allCampaigns: CampaignWithLocation[] = useMemo(() => {
+    const items = (liveData as any)?.data || (liveData as any)?.items || (Array.isArray(liveData) ? liveData : []);
+    return items.map((c: any) => ({
+      ...c,
+      citySlug: c.citySlug || (c.city ? c.city.toLowerCase().replace(/\s+/g, "-") : "worcester"),
+      cityName: c.cityName || c.city || "Worcester",
+      areaSlug: c.areaSlug || (c.area ? c.area.toLowerCase().replace(/\s+/g, "-") : "city-centre"),
+      areaName: c.areaName || c.area || "City Centre",
+      streetSlug: c.streetSlug || (c.street ? c.street.toLowerCase().replace(/\s+/g, "-") : "high-street"),
+      streetName: c.streetName || c.street || "High Street",
+      targetAudience: c.targetAudience || audience,
+      goalAmount: c.goalAmount || 10000,
+      raisedAmount: c.raisedAmount || 0,
+      deadline: c.deadline || new Date(Date.now() + 30 * 86400000).toISOString(),
+    }));
+  }, [liveData, audience]);
 
   // Derive filter options from campaigns
   const cities = useMemo(() => {
     const map = new Map<string, string>();
-    allCampaigns.forEach(c => map.set(c.citySlug, c.cityName));
+    allCampaigns.forEach(c => {
+      if (c.citySlug) map.set(c.citySlug, c.cityName);
+    });
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allCampaigns]);
 
   const areas = useMemo(() => {
-    if (selectedCity === "all") {
-      const map = new Map<string, string>();
-      allCampaigns.forEach(c => map.set(c.areaSlug, c.areaName));
-      return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
-    }
     const map = new Map<string, string>();
-    allCampaigns.filter(c => c.citySlug === selectedCity).forEach(c => map.set(c.areaSlug, c.areaName));
+    for (const c of allCampaigns) {
+      if (selectedCity !== "all" && c.citySlug !== selectedCity) continue;
+      if (c.areaSlug) map.set(c.areaSlug, c.areaName);
+    }
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allCampaigns, selectedCity]);
 
   const streets = useMemo(() => {
-    let filtered = allCampaigns;
-    if (selectedCity !== "all") filtered = filtered.filter(c => c.citySlug === selectedCity);
-    if (selectedArea !== "all") filtered = filtered.filter(c => c.areaSlug === selectedArea);
     const map = new Map<string, string>();
-    filtered.forEach(c => map.set(c.streetSlug, c.streetName));
+    for (const c of allCampaigns) {
+      if (selectedCity !== "all" && c.citySlug !== selectedCity) continue;
+      if (selectedArea !== "all" && c.areaSlug !== selectedArea) continue;
+      if (c.streetSlug) map.set(c.streetSlug, c.streetName);
+    }
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allCampaigns, selectedCity, selectedArea]);
 
   const categories = useMemo(() => {
     const map = new Map<string, string>();
     allCampaigns.forEach(c => {
-      if (c.category) map.set(c.category.slug, c.category.name);
+      if (c.category?.slug && c.category?.name) map.set(c.category.slug, c.category.name);
     });
     return Array.from(map.entries()).map(([slug, name]) => ({ slug, name }));
   }, [allCampaigns]);
@@ -143,20 +174,29 @@ export default function CampaignsPage() {
         c.cityName.toLowerCase().includes(q) ||
         c.areaName.toLowerCase().includes(q) ||
         c.streetName.toLowerCase().includes(q) ||
-        c.category?.name.toLowerCase().includes(q)
+        c.category?.name?.toLowerCase().includes(q)
       );
     }
 
-    if (selectedCity !== "all") result = result.filter(c => c.citySlug === selectedCity);
-    if (selectedArea !== "all") result = result.filter(c => c.areaSlug === selectedArea);
-    if (selectedStreet !== "all") result = result.filter(c => c.streetSlug === selectedStreet);
+    if (selectedCity !== "all" || selectedArea !== "all" || selectedStreet !== "all") {
+      result = result.filter((c) => {
+        if (selectedCity !== "all" && c.citySlug && c.citySlug !== selectedCity) return false;
+        if (selectedArea !== "all" && c.areaSlug && c.areaSlug !== selectedArea) return false;
+        if (selectedStreet !== "all" && c.streetSlug && c.streetSlug !== selectedStreet) return false;
+        return true;
+      });
+    }
 
     if (activeCategory !== "all") {
       result = result.filter(c => c.category?.slug === activeCategory);
     }
 
-    if (activeAudience !== "all") {
-      result = result.filter(c => c.targetAudience === activeAudience);
+    if (audience) {
+      result = result.filter(c => c.targetAudience === audience);
+    }
+
+    if (modeTab) {
+      result = result.filter(c => c.mode === modeTab);
     }
 
     switch (activeSort) {
@@ -179,23 +219,21 @@ export default function CampaignsPage() {
     }
 
     return result;
-  }, [allCampaigns, search, selectedCity, selectedArea, selectedStreet, activeCategory, activeAudience, activeSort]);
+  }, [allCampaigns, search, selectedCity, selectedArea, selectedStreet, activeCategory, audience, activeSort, modeTab]);
 
-  const activeFilterCount = (selectedCity !== "all" ? 1 : 0) + (selectedArea !== "all" ? 1 : 0) + (selectedStreet !== "all" ? 1 : 0) + (activeCategory !== "all" ? 1 : 0) + (activeAudience !== "all" ? 1 : 0);
+  const activeFilterCount = (selectedCity !== "all" ? 1 : 0) + (selectedArea !== "all" ? 1 : 0) + (selectedStreet !== "all" ? 1 : 0) + (activeCategory !== "all" ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <section className="bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-700 px-4 py-4 text-center text-white sm:py-6">
-        <h1 className="text-3xl font-bold sm:text-4xl lg:text-5xl">Explore Campaigns</h1>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">
-          Discover local campaigns across UK high streets. Support businesses and communities in your area.
-        </p>
+        <h1 className="text-3xl font-bold sm:text-4xl lg:text-5xl">{copy.title}</h1>
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">{copy.subtitle}</p>
         <div className="mx-auto mt-8 flex max-w-xl items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur-sm">
           <Search className="ml-3 h-5 w-5 text-white/60" />
           <input
             type="text"
-            placeholder="Search campaigns, cities, areas or streets..."
+            placeholder={copy.placeholder}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-white/50 outline-none"
@@ -227,24 +265,27 @@ export default function CampaignsPage() {
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           </div>
 
-          {/* Audience pills */}
-          {[
-            { value: "all", label: "All Audiences", color: "bg-gray-900 text-white" },
-            { value: "business", label: "Business", color: "bg-blue-600 text-white" },
-            { value: "consumer", label: "Consumer", color: "bg-pink-600 text-white" },
-          ].map(a => (
-            <button
-              key={a.value}
-              onClick={() => setActiveAudience(a.value)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                activeAudience === a.value
-                  ? a.color
-                  : "border border-gray-200 bg-white text-gray-600 hover:border-primary-300"
-              }`}
-            >
-              {a.label}
-            </button>
-          ))}
+          {/* Fund / Donate tabs */}
+          <div role="tablist" aria-label="Campaign type" className="flex gap-2">
+            {MODE_TABS.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                role="tab"
+                aria-selected={modeTab === t.value}
+                onClick={() => setSearchParams(modeTab === t.value ? {} : { mode: t.value })}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  modeTab === t.value
+                    ? t.value === "fund"
+                      ? "bg-primary-600 text-white"
+                      : "bg-secondary-600 text-white"
+                    : "border border-gray-200 bg-white text-gray-600 hover:border-primary-300"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
           {/* Filters toggle */}
           <button
@@ -337,7 +378,6 @@ export default function CampaignsPage() {
                   setSelectedArea("all");
                   setSelectedStreet("all");
                   setActiveCategory("all");
-                  setActiveAudience("all");
                 }}
                 className="mt-3 text-sm font-medium text-primary-600 hover:text-primary-700"
               >
@@ -422,18 +462,19 @@ export default function CampaignsPage() {
                       )}
                     </span>
                     {/* Mode badge */}
-                    <span className={`absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm ${getModeColor(c.mode)}`}>
-                      {getModeLabel(c.mode)}
+                    <span className={`absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm ${getModeColor(c.mode || "DONATION")}`}>
+                      {getModeLabel(c.mode || "DONATION")}
                     </span>
-                    {/* Days left */}
-                    <span className="absolute bottom-3 right-3 rounded-full bg-black/60 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                      {dLeft}d left
-                    </span>
-                    {/* Location */}
-                    <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                      <MapPin className="h-3 w-3" />
-                      {c.cityName} · {c.areaName}
-                    </span>
+                    {/* Bottom bar — location + days left (single row so they never overlap) */}
+                    <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1 rounded-full bg-black/50 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                        <MapPin className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{c.cityName} · {c.areaName}</span>
+                      </span>
+                      <span className="flex-shrink-0 whitespace-nowrap rounded-full bg-black/60 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                        {dLeft}d left
+                      </span>
+                    </div>
                   </div>
 
                   {/* Content */}
@@ -479,10 +520,10 @@ export default function CampaignsPage() {
                     {/* Author */}
                     <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
                       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
-                        {c.author?.firstName?.[0] ?? "U"}
+                        {(c as any).author?.firstName?.[0] || (c as any).business?.name?.[0] || "U"}
                       </div>
-                      <span className="text-xs text-gray-600">
-                        {c.author?.firstName} {c.author?.lastName}
+                      <span className="text-xs text-gray-600 truncate">
+                        {(c as any).author?.firstName ? `${(c as any).author.firstName} ${(c as any).author.lastName || ""}`.trim() : ((c as any).business?.name ?? "Local Business")}
                       </span>
                       <ArrowRight className="ml-auto h-4 w-4 text-gray-300 transition-colors group-hover:text-primary-500" />
                     </div>

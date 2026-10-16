@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
-import { PaymentMethodSelector, type PaymentMethodType } from "./PaymentMethodSelector";
 import { ContributionDestination } from "./ContributionDestination";
+import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
 
 interface Props {
   campaignId: string;
@@ -22,42 +21,24 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
   const navigate = useNavigate();
   const [amount, setAmount] = useState<string>("");
   const [customAmount, setCustomAmount] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("stripe");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [notes, setNotes] = useState("");
   const [tributeType, setTributeType] = useState("");
   const [tributeTo, setTributeTo] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
   const [error, setError] = useState("");
 
-  const donationAmount = (parseInt(amount) || 0) * 100; // Convert to minor units (cents)
+  // `amount` is a pounds string from the input; convert once to pence.
+  const donationAmount = Math.round((parseFloat(amount) || 0) * 100);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
-    if (donationAmount < minAmount) {
+    if (donationAmount < minAmount * 100) {
       setError(`Minimum donation is £${minAmount}`);
       return;
     }
-
-    setLoading(true);
     setError("");
-    try {
-      const result = await campaignApi.createDonation(campaignId, {
-        amount: donationAmount,
-        paymentMethod,
-        isAnonymous,
-        notes: notes || undefined,
-        tributeType: tributeType || undefined,
-        tributeTo: tributeTo || undefined,
-        contributionType: contributionType || "backer",
-        hierarchyLevel: hierarchyLevel || undefined,
-      } as any);
-      navigate(`/thank-you?uid=${result.uid}&type=donation`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to process donation");
-    } finally {
-      setLoading(false);
-    }
+    setShowPayment(true);
   };
 
   return (
@@ -65,7 +46,7 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
       <h2 className="text-xl font-bold text-gray-900">Make a Donation</h2>
       <p className="mt-1 text-sm text-gray-500">to "{campaignTitle}"</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+      <form onSubmit={handleContinue} className="mt-6 space-y-6">
         {error && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
@@ -81,9 +62,10 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
                 onClick={() => {
                   setAmount(String(preset));
                   setCustomAmount(false);
+                  setShowPayment(false);
                 }}
                 className={`rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                  !customAmount && donationAmount === preset
+                  !customAmount && amount === String(preset)
                     ? "border-primary-500 bg-primary-50 text-primary-700"
                     : "border-gray-200 text-gray-700 hover:border-gray-300"
                 }`}
@@ -102,10 +84,12 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
             <input
               type="number"
               min={minAmount}
+              step="0.01"
               value={customAmount ? amount : ""}
               onChange={(e) => {
                 setAmount(e.target.value);
                 setCustomAmount(true);
+                setShowPayment(false);
               }}
               onFocus={() => setCustomAmount(true)}
               placeholder="0"
@@ -113,9 +97,6 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
             />
           </div>
         </div>
-
-        {/* Payment Method */}
-        <PaymentMethodSelector value={paymentMethod} onChange={setPaymentMethod} />
 
         {/* Anonymous */}
         <label className="flex items-center gap-3">
@@ -176,15 +157,59 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
           </div>
         )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading || donationAmount < minAmount}
-          className="btn-primary w-full"
-        >
-          {loading ? "Processing..." : `Donate ${formatCurrency(donationAmount) || "£0"}`}
-        </button>
+        {/* Continue — the payment panel is rendered OUTSIDE this <form> (below)
+            so its own Stripe <form> is never nested inside another <form>.
+            A submit event on a nested form does not bubble, so React's
+            onSubmit/preventDefault never runs and the browser performs a
+            native submit — reloading the page and jumping back to the top. */}
+        {!showPayment && (
+          <button
+            type="submit"
+            disabled={donationAmount < minAmount * 100}
+            className="btn-primary w-full"
+          >
+            Continue to Payment {formatCurrency(donationAmount) || "£0"}
+          </button>
+        )}
       </form>
+
+      {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
+      {showPayment && (
+        <div className="mt-6 space-y-3 border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">
+              Pay {formatCurrency(donationAmount)}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPayment(false)}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+            >
+              ← Edit amount
+            </button>
+          </div>
+          <McomCheckoutPanel
+            amountPence={donationAmount}
+            purpose="DONATION"
+            campaignId={campaignId}
+            isAnonymous={isAnonymous}
+            notes={notes || undefined}
+            formatGbp={formatCurrency}
+            metadata={{
+              campaignTitle,
+              tributeType: tributeType || undefined,
+              tributeTo: tributeTo || undefined,
+              contributionType: contributionType || "backer",
+              hierarchyLevel: hierarchyLevel || undefined,
+            }}
+            onSuccess={(result) => {
+              navigate(
+                `/thank-you?reference=${encodeURIComponent(result.reference)}&type=donation&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
+              );
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

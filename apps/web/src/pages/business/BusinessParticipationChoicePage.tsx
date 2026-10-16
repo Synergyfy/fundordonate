@@ -10,10 +10,9 @@ import {
   Shield, Vote, Gift, Trophy, Users, Clock,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi, type Season } from "@/services/season.service";
+import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
-import type { DemoCampaign } from "@/data/demo";
-import { getDemoCampaignsForLocation, HUB_LOCATIONS } from "@/data/hubActivation";
+import { campaignApi } from "@/services/campaign";
 
 const fmtDate = (d: string) => {
   const date = new Date(d);
@@ -37,24 +36,20 @@ export default function BusinessParticipationChoicePage() {
   const ctx = isConsumerContext ? "consumer" : "business";
   const [searchParams] = useSearchParams();
   const campaignSlugFromUrl = searchParams.get("campaign");
-  const campaignFromState = (location.state as { campaign?: DemoCampaign })?.campaign ?? null;
+  const campaignFromState = (location.state as { campaign?: any })?.campaign ?? null;
   const [selectedChoice, setSelectedChoice] = useState<"backer" | "founding" | null>(null);
   const [modalType, setModalType] = useState<ModalType>(null);
 
-  const mapLoc = useMemo(
-    () => HUB_LOCATIONS.find(l => l.slug === citySlug) ?? null,
-    [citySlug],
-  );
-
-  const campaigns = useMemo(() => {
-    if (!mapLoc) return [];
-    return getDemoCampaignsForLocation(mapLoc);
-  }, [mapLoc]);
+  const { data: campaignsResponse } = useQuery({
+    queryKey: ["campaigns", highStreetSlug || localAreaSlug || citySlug],
+    queryFn: () => (campaignApi.list as any)({ location: highStreetSlug || localAreaSlug || citySlug, limit: 10 }),
+  });
+  const campaigns = (campaignsResponse?.items ?? (campaignsResponse as any)?.data ?? []) as any[];
 
   const campaign = useMemo(() => {
     if (campaignFromState) return campaignFromState;
-    if (campaignSlugFromUrl) return campaigns.find(c => c.slug === campaignSlugFromUrl) ?? null;
-    return null;
+    if (campaignSlugFromUrl) return campaigns.find((c) => c.slug === campaignSlugFromUrl) ?? null;
+    return campaigns[0] ?? null;
   }, [campaignFromState, campaignSlugFromUrl, campaigns]);
 
   const { data: seasonResponse } = useQuery({

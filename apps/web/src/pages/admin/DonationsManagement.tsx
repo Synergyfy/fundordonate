@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { adminApi } from "@/services/admin.service";
+import { adminApi } from "@/services/admin";
 
 interface Donation {
   uid: string;

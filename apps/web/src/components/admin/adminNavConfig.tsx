@@ -5,8 +5,7 @@
 
 import { ReactNode } from "react";
 import {
-  Calendar, MapPin, Target, Building2, Users, Store,
-  Trophy, Wallet, MessageSquare, BarChart3, Settings,
+  Calendar, Target, Wallet, Gift, MapPin, Users, BarChart3, Settings,
 } from "lucide-react";
 
 // =============================================================================
@@ -34,165 +33,115 @@ export interface AdminNavGroup {
 
 export function getAdminNavGroups(): AdminNavGroup[] {
   return [
-    // ─── 2. Seasons & Programmes ──────────────────────────────────────────
+    // ─── Seasons & Programmes ─────────────────────────────────────────────
     {
       id: "seasons",
       label: "Seasons & Programmes",
       icon: <Calendar className="w-[18px] h-[18px]" />,
       items: [
-        { label: "All Seasons", path: "/admin/seasons", icon: <span className="text-xs">📋</span>, implemented: true },
+        { label: "All Seasons", path: "/admin/seasons", icon: <span className="text-xs">📋</span>, exact: true, implemented: true },
         { label: "Current Season", path: "/admin/seasons/current", icon: <span className="text-xs">🔄</span>, implemented: true },
         { label: "Season Review", path: "/admin/seasons/review", icon: <span className="text-xs">📊</span>, implemented: true },
+        { label: "Membership", path: "/admin/membership", icon: <span className="text-xs">🎫</span>, implemented: true },
       ],
     },
 
-    // ─── 3. UK Activation ─────────────────────────────────────────────────
-    {
-      id: "activation",
-      label: "UK Activation",
-      icon: <MapPin className="w-[18px] h-[18px]" />,
-      items: [
-        { label: "National Hub", path: "/admin/hub-locations", icon: <span className="text-xs">🇬🇧</span>, implemented: true },
-        { label: "Cities", path: "/admin/cities", icon: <span className="text-xs">🏙️</span>, implemented: true },
-        { label: "Local Areas", path: "/admin/local-areas", icon: <span className="text-xs">🏘️</span>, implemented: true },
-        { label: "High Streets", path: "/admin/high-streets", icon: <span className="text-xs">🛣️</span>, implemented: true },
-        { label: "Activation Progress", path: "/admin/activation", icon: <span className="text-xs">📈</span>, implemented: true },
-      ],
-    },
-
-    // ─── 4. Campaigns ──────────────────────────────────────────────────────
+    // ─── Campaigns ────────────────────────────────────────────────────────
     {
       id: "campaigns",
       label: "Campaigns",
       icon: <Target className="w-[18px] h-[18px]" />,
       items: [
-        { label: "Campaigns", path: "/admin/campaigns", icon: <Target className="w-4 h-4" />, implemented: true },
+        { label: "All Campaigns", path: "/admin/campaigns", icon: <span className="text-xs">🎯</span>, exact: true, implemented: true },
+        { label: "Business Campaigns", path: "/admin/campaigns/business", icon: <span className="text-xs">🏢</span>, implemented: true },
+        { label: "Consumer Campaigns", path: "/admin/campaigns/consumer", icon: <span className="text-xs">👥</span>, implemented: true },
+        { label: "Pending Review", path: "/admin/campaigns/pending-review", icon: <span className="text-xs">⏳</span>, implemented: true },
+        { label: "Campaign Templates", path: "/admin/campaigns/templates", icon: <span className="text-xs">📋</span>, implemented: true },
         { label: "Categories", path: "/admin/categories", icon: <span className="text-xs">📂</span>, implemented: true },
       ],
     },
 
-    // ─── 5. Business Owners ───────────────────────────────────────────────
+    // ─── Funding ──────────────────────────────────────────────────────────
     {
-      id: "business-owners",
-      label: "Business Owners",
-      icon: <Building2 className="w-[18px] h-[18px]" />,
-      items: [
-        { label: "Business Owner Overview", path: "/admin/business-owners", icon: <span className="text-xs">📊</span>, implemented: true },
-        { label: "Business Owners", path: "/admin/business-owners/list", icon: <span className="text-xs">👤</span>, implemented: true },
-        { label: "Business Owner Campaigns", path: "/admin/business-owners/campaigns", icon: <span className="text-xs">🎯</span>, implemented: true },
-        { label: "Business Owner Backers", path: "/admin/business-owners/backers", icon: <span className="text-xs">🤝</span>, implemented: false },
-        { label: "Business Owner Founding Members", path: "/admin/business-owners/founding-members", icon: <span className="text-xs">⭐</span>, implemented: false },
-        { label: "Business Owner Membership", path: "/admin/business-owners/membership", icon: <span className="text-xs">🎫</span>, implemented: false },
-        { label: "Business Owner Rewards", path: "/admin/business-owners/rewards", icon: <span className="text-xs">🏆</span>, implemented: false },
-        { label: "Business Owner Leaderboards", path: "/admin/business-owners/leaderboards", icon: <span className="text-xs">🥇</span>, implemented: false },
-        { label: "Business Owner Recognition", path: "/admin/business-owners/recognition", icon: <span className="text-xs">🎖️</span>, implemented: false },
-      ],
-    },
-
-    // ─── 6. Consumers ─────────────────────────────────────────────────────
-    {
-      id: "consumers",
-      label: "Consumers",
-      icon: <Users className="w-[18px] h-[18px]" />,
-      items: [
-        { label: "Consumer Overview", path: "/admin/consumer-overview", icon: <span className="text-xs">📊</span>, implemented: true },
-        { label: "Consumers", path: "/admin/consumers/list", icon: <span className="text-xs">👤</span>, implemented: true },
-        { label: "Consumer Campaigns", path: "/admin/consumer-overview/campaigns", icon: <span className="text-xs">🎯</span>, implemented: true },
-        { label: "Consumer Backers", path: "/admin/consumer-overview/backers", icon: <span className="text-xs">🤝</span>, implemented: false },
-        { label: "Consumer Founding Members", path: "/admin/consumer-overview/founding-members", icon: <span className="text-xs">⭐</span>, implemented: false },
-        { label: "Consumer Membership", path: "/admin/consumer-overview/membership", icon: <span className="text-xs">🎫</span>, implemented: false },
-        { label: "Consumer Rewards", path: "/admin/consumer-overview/rewards", icon: <span className="text-xs">🏆</span>, implemented: false },
-        { label: "Consumer Leaderboards", path: "/admin/consumer-overview/leaderboards", icon: <span className="text-xs">🥇</span>, implemented: false },
-        { label: "Consumer Recognition", path: "/admin/consumer-overview/recognition", icon: <span className="text-xs">🎖️</span>, implemented: false },
-      ],
-    },
-
-    // ─── 7. Businesses & Community ────────────────────────────────────────
-    {
-      id: "businesses-community",
-      label: "Businesses & Community",
-      icon: <Store className="w-[18px] h-[18px]" />,
-      items: [
-        { label: "Businesses", path: "/admin/businesses/directory", icon: <span className="text-xs">📒</span>, implemented: true },
-        { label: "Business Campaigns", path: "/admin/businesses/campaigns", icon: <span className="text-xs">📢</span>, implemented: false },
-        { label: "Business Contributions", path: "/admin/businesses/contributions", icon: <span className="text-xs">💰</span>, implemented: false },
-        { label: "In-Store & Community", path: "/admin/in-store-contributions", icon: <span className="text-xs">🏬</span>, implemented: false },
-        { label: "Business Activation", path: "/admin/businesses/activation", icon: <span className="text-xs">📈</span>, implemented: false },
-      ],
-    },
-
-    // ─── 8. Engagement ────────────────────────────────────────────────────
-    {
-      id: "engagement",
-      label: "Engagement",
-      icon: <Trophy className="w-[18px] h-[18px]" />,
-      items: [
-        { label: "Rewards", path: "/admin/engagement/rewards", icon: <span className="text-xs">🏆</span>, implemented: false },
-        { label: "Leaderboards", path: "/admin/engagement/leaderboards", icon: <span className="text-xs">🥇</span>, implemented: false },
-        { label: "Recognition", path: "/admin/engagement/recognition", icon: <span className="text-xs">🎖️</span>, implemented: false },
-        { label: "Incentives", path: "/admin/engagement/incentives", icon: <span className="text-xs">🎁</span>, implemented: false },
-      ],
-    },
-
-    // ─── 9. Finance & Operations ──────────────────────────────────────────
-    {
-      id: "finance",
-      label: "Finance & Operations",
+      id: "funding",
+      label: "Funding",
       icon: <Wallet className="w-[18px] h-[18px]" />,
       items: [
-        { label: "Financial Overview", path: "/admin/finance", icon: <span className="text-xs">📊</span>, implemented: false },
-        { label: "Balances & Allocations", path: "/admin/finance/balances", icon: <span className="text-xs">💳</span>, implemented: false },
-        { label: "Payouts", path: "/admin/finance/payouts", icon: <span className="text-xs">💸</span>, implemented: false },
-        { label: "Refunds & Adjustments", path: "/admin/finance/refunds", icon: <span className="text-xs">↩️</span>, implemented: false },
-        { label: "Contributions & Transactions", path: "/admin/finance/transactions", icon: <span className="text-xs">📋</span>, implemented: false },
-        { label: "Funding Rules", path: "/admin/finance/rules", icon: <span className="text-xs">⚙️</span>, implemented: false },
+        { label: "Funds", path: "/admin/funding", icon: <span className="text-xs">🏦</span>, exact: true, implemented: true },
+        { label: "Contributions", path: "/admin/funding/contributions", icon: <span className="text-xs">❤️</span>, implemented: true },
+        { label: "Payments", path: "/admin/funding/payments", icon: <span className="text-xs">💳</span>, implemented: true },
+        { label: "Withdrawals", path: "/admin/funding/withdrawals", icon: <span className="text-xs">💸</span>, implemented: true },
       ],
     },
 
-    // ─── 10. Content & Communication ──────────────────────────────────────
+    // ─── Rewards & Assets ─────────────────────────────────────────────────
     {
-      id: "content",
-      label: "Content & Communication",
-      icon: <MessageSquare className="w-[18px] h-[18px]" />,
+      id: "rewards",
+      label: "Rewards & Assets",
+      icon: <Gift className="w-[18px] h-[18px]" />,
       items: [
-        { label: "Content & CMS", path: "/admin/content", icon: <span className="text-xs">📄</span>, implemented: false },
-        { label: "Notifications", path: "/admin/notifications", icon: <span className="text-xs">🔔</span>, implemented: false },
-        { label: "Support", path: "/admin/support", icon: <span className="text-xs">💬</span>, implemented: false },
-        { label: "Moderation", path: "/admin/moderation", icon: <span className="text-xs">🛡️</span>, implemented: false },
-        { label: "Campaign Communications", path: "/admin/content/campaign-comms", icon: <span className="text-xs">📨</span>, implemented: false },
+        { label: "Rewards", path: "/admin/rewards/library", icon: <span className="text-xs">🏆</span>, implemented: true },
+        { label: "Reward Templates", path: "/admin/rewards/templates", icon: <span className="text-xs">🎁</span>, implemented: true },
+        { label: "Asset Management", path: "/admin/rewards/assets", icon: <span className="text-xs">📦</span>, implemented: true },
+        { label: "Reward Rules", path: "/admin/rewards/rules", icon: <span className="text-xs">⚙️</span>, implemented: true },
+        { label: "Fulfilment", path: "/admin/rewards/fulfilment", icon: <span className="text-xs">🚚</span>, implemented: true },
       ],
     },
 
-    // ─── 11. Analytics & Reporting ────────────────────────────────────────
+    // ─── UK Activation ────────────────────────────────────────────────────
     {
-      id: "analytics",
-      label: "Analytics & Reporting",
+      id: "activation",
+      label: "UK Activation",
+      icon: <MapPin className="w-[18px] h-[18px]" />,
+      items: [
+        { label: "Activation Hub", path: "/admin/hub-locations", icon: <span className="text-xs">🇬🇧</span>, implemented: true },
+        { label: "Activation Progress", path: "/admin/activation", icon: <span className="text-xs">📈</span>, implemented: true },
+        { label: "Cities", path: "/admin/cities", icon: <span className="text-xs">🏙️</span>, implemented: true },
+        { label: "Local Areas", path: "/admin/local-areas", icon: <span className="text-xs">🗺️</span>, implemented: true },
+        { label: "High Streets", path: "/admin/high-streets", icon: <span className="text-xs">🏬</span>, implemented: true },
+        { label: "Recommendations", path: "/admin/locations/recommendations", icon: <span className="text-xs">📣</span>, implemented: true },
+      ],
+    },
+
+    // ─── Participants ─────────────────────────────────────────────────────
+    {
+      id: "participants",
+      label: "Participants",
+      icon: <Users className="w-[18px] h-[18px]" />,
+      items: [
+        { label: "Businesses", path: "/admin/businesses/directory", icon: <span className="text-xs">📒</span>, implemented: true },
+        { label: "Consumers", path: "/admin/consumers/list", icon: <span className="text-xs">👤</span>, implemented: true },
+        { label: "Founding Members", path: "/admin/founding-members", icon: <span className="text-xs">⭐</span>, implemented: true },
+        { label: "Backers", path: "/admin/backers", icon: <span className="text-xs">🤝</span>, implemented: true },
+        { label: "Donors", path: "/admin/donors", icon: <span className="text-xs">❤️</span>, implemented: true },
+      ],
+    },
+
+    // ─── Reports ──────────────────────────────────────────────────────────
+    {
+      id: "reports",
+      label: "Reports",
       icon: <BarChart3 className="w-[18px] h-[18px]" />,
       items: [
-        { label: "Seasonal Performance", path: "/admin/analytics/seasonal", icon: <span className="text-xs">📅</span>, implemented: false },
-        { label: "Activation Performance", path: "/admin/analytics/activation", icon: <span className="text-xs">📈</span>, implemented: false },
-        { label: "Campaign Performance", path: "/admin/analytics/campaigns", icon: <span className="text-xs">🎯</span>, implemented: false },
-        { label: "Consumer Performance", path: "/admin/analytics/consumers", icon: <span className="text-xs">👤</span>, implemented: false },
-        { label: "Business Owner Performance", path: "/admin/analytics/business-owners", icon: <span className="text-xs">🏢</span>, implemented: false },
-        { label: "Participation & Membership", path: "/admin/analytics/participation", icon: <span className="text-xs">👥</span>, implemented: false },
-        { label: "Engagement & Rewards", path: "/admin/analytics/engagement", icon: <span className="text-xs">🏆</span>, implemented: false },
-        { label: "Financial Reports", path: "/admin/analytics/financial", icon: <span className="text-xs">💰</span>, implemented: false },
-        { label: "Custom Reports", path: "/admin/analytics/custom", icon: <span className="text-xs">📊</span>, implemented: false },
+        { label: "Business Reports", path: "/admin/reports/business", icon: <span className="text-xs">🏢</span>, exact: true, implemented: true },
+        { label: "Consumer Reports", path: "/admin/reports/consumer", icon: <span className="text-xs">👥</span>, implemented: true },
+        { label: "Funding Reports", path: "/admin/reports/funding", icon: <span className="text-xs">💰</span>, implemented: true },
+        { label: "Campaign Reports", path: "/admin/reports/campaigns", icon: <span className="text-xs">🎯</span>, implemented: true },
+        { label: "Reward Reports", path: "/admin/reports/rewards", icon: <span className="text-xs">🎁</span>, implemented: true },
       ],
     },
 
-    // ─── 12. Platform & System ────────────────────────────────────────────
+    // ─── Settings & Integrations ──────────────────────────────────────────
     {
-      id: "system",
-      label: "Platform & System",
+      id: "settings",
+      label: "Settings & Integrations",
       icon: <Settings className="w-[18px] h-[18px]" />,
       items: [
-        { label: "Users & Roles", path: "/admin/system/users", icon: <span className="text-xs">👥</span>, implemented: false },
+        { label: "General Settings", path: "/admin/settings", icon: <span className="text-xs">⚙️</span>, exact: true, implemented: true },
+        { label: "Payment Rules", path: "/admin/settings/payments", icon: <span className="text-xs">💳</span>, implemented: true },
         { label: "Integrations", path: "/admin/system/integrations", icon: <span className="text-xs">🔗</span>, implemented: false },
-        { label: "Platform Settings", path: "/admin/settings", icon: <span className="text-xs">⚙️</span>, implemented: true },
-        { label: "Taxonomy & Configuration", path: "/admin/system/taxonomy", icon: <span className="text-xs">🏷️</span>, implemented: false },
+        { label: "Users & Roles", path: "/admin/system/users", icon: <span className="text-xs">👥</span>, implemented: false },
         { label: "Audit Logs", path: "/admin/system/audit-logs", icon: <span className="text-xs">📋</span>, implemented: false },
-        { label: "Security", path: "/admin/system/security", icon: <span className="text-xs">🔒</span>, implemented: false },
         { label: "System Health", path: "/admin/system/health", icon: <span className="text-xs">💓</span>, implemented: false },
       ],
     },
@@ -204,7 +153,7 @@ export function getAdminNavGroups(): AdminNavGroup[] {
 // =============================================================================
 
 export const ADMIN_OVERVIEW_ITEM: AdminNavItem = {
-  label: "Overview",
+  label: "Dashboard",
   path: "/admin",
   icon: (
     <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

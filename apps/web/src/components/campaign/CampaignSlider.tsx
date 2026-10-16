@@ -133,12 +133,10 @@ export function CampaignSlider({ campaigns }: Props) {
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium backdrop-blur ${
                       campaign.mode === "fund"
                         ? "bg-primary-500/90 text-white"
-                        : campaign.mode === "sponsor"
-                        ? "bg-amber-500/90 text-white"
                         : "bg-secondary-500/90 text-white"
                     }`}
                   >
-                    {campaign.mode === "fund" ? "Fund" : campaign.mode === "sponsor" ? "Sponsor" : "Donate"}
+                    {campaign.mode === "fund" ? "Fund" : "Donate"}
                   </span>
                 </div>
                 {daysLeft > 0 && (

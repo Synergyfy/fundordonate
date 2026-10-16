@@ -87,10 +87,11 @@ export function getLeaderboardEntryAriaLabel(entry: {
   rank: number;
   user?: { firstName?: string; username: string };
   totalContributed: number;
-  campaignCount: number;
+  campaignCount?: number;
 }): string {
+  const count = entry.campaignCount ?? 0;
   const name = entry.user?.firstName || entry.user?.username || "Anonymous";
-  return `Rank ${entry.rank}: ${name}. £${(entry.totalContributed / 100).toLocaleString()} total contributed across ${entry.campaignCount} campaign${entry.campaignCount !== 1 ? "s" : ""}.`;
+  return `Rank ${entry.rank}: ${name}. £${(entry.totalContributed / 100).toLocaleString()} total contributed across ${count} campaign${count !== 1 ? "s" : ""}.`;
 }
 
 /**

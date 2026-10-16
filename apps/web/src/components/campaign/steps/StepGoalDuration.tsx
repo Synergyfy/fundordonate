@@ -1,4 +1,5 @@
 import type { CampaignFormData } from "../CampaignBuilder";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 interface Props {
   formData: CampaignFormData;
@@ -81,9 +82,8 @@ export function StepGoalDuration({ formData, onUpdate }: Props) {
         <label htmlFor="deadline" className="block text-sm font-medium text-gray-700">
           Campaign Deadline <span className="text-red-500">*</span>
         </label>
-        <input
+        <DatePicker
           id="deadline"
-          type="date"
           min={minDateStr}
           value={formData.deadline}
           onChange={(e) => onUpdate({ deadline: e.target.value })}

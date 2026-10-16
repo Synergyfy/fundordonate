@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { HubLocation, LocationType, LocationInternalLifecycle, LocationPublicStatus } from "@/types/uk-hub";
 import { LOCATION_TYPE_META } from "@/types/uk-hub";
+import { FileUpload } from "@/components/ui/FileUpload";
 
 export interface LocationFormData {
   name: string;
@@ -211,22 +212,20 @@ export function LocationForm({ initial, allLocations, onSubmit, onCancel, isEdit
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Primary Image URL</label>
-            <input
-              type="url"
-              value={form.primaryImage}
-              onChange={e => set("primaryImage", e.target.value)}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
+            <FileUpload
+              value={form.primaryImage || ""}
+              onChange={url => set("primaryImage", url)}
+              label="Primary Image"
+              accept="image/*"
               placeholder="https://..."
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Secondary Image URL</label>
-            <input
-              type="url"
-              value={form.secondaryImage}
-              onChange={e => set("secondaryImage", e.target.value)}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100"
+            <FileUpload
+              value={form.secondaryImage || ""}
+              onChange={url => set("secondaryImage", url)}
+              label="Secondary Image"
+              accept="image/*"
               placeholder="https://..."
             />
           </div>

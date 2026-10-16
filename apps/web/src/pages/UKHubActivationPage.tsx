@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Search, MapPin, ArrowRight, Users, Building2, Heart, Globe,
   Store, UserRound, BriefcaseBusiness,
@@ -9,19 +10,20 @@ import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { UkMap } from "@/components/hub/UkMap";
 import { LocationPanel } from "@/components/hub/LocationPanel";
 import { SplitContributionExplain } from "@/components/hub/SplitContributionExplain";
+import { locationService } from "@/services/location";
 import {
-  HUB_LOCATIONS,
   OPPORTUNITY_META,
   HUB_STATUS_META,
   type HubStatus,
   type OpportunityRole,
-} from "@/data/hubActivation";
+  type HubLocation,
+} from "@/types/uk-hub";
 
 const STATUS_OPTIONS: { value: HubStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "making_progress", label: "Making Progress" },
-   { value: "needs_activation", label: "Inactive" },
+  { value: "needs_activation", label: "Inactive" },
 ];
 
 function Section({ children, className = "", id }: { children: React.ReactNode; className?: string; id?: string }) {
@@ -44,25 +46,35 @@ export default function UKHubActivationPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [mobileStatOpen, setMobileStatOpen] = useState(false);
 
+  const { data: hubLocations = [] } = useQuery({
+    queryKey: ["hub-cities-activation"],
+    queryFn: () => locationService.fetchHubCities(),
+  });
+
   const selected = useMemo(
-    () => HUB_LOCATIONS.find((l) => l.slug === selectedSlug) ?? null,
-    [selectedSlug]
+    () => hubLocations.find((l) => l.slug === selectedSlug) ?? null,
+    [hubLocations, selectedSlug]
   );
 
   // Base filtered by opportunity + search (used for counters).
   const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return HUB_LOCATIONS.filter((l) => {
+    return hubLocations.filter((l) => {
       if (oppFilters.length > 0 && !oppFilters.some((r) => l.opportunities?.includes(r))) return false;
-      if (q && !(l.name.toLowerCase().includes(q) || l.region.toLowerCase().includes(q))) return false;
+      if (q && !(l.name.toLowerCase().includes(q) || (l.region || "").toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [search, oppFilters]);
+  }, [hubLocations, search, oppFilters]);
 
   // Dynamic status counts after opportunity + search filter.
   const statusCounts = useMemo(() => {
     const c = { all: searchFiltered.length, active: 0, making_progress: 0, needs_activation: 0 };
-    searchFiltered.forEach((l) => { c[l.status] += 1; });
+    searchFiltered.forEach((l) => {
+      const st = l.status || "needs_activation";
+      if (st in c) {
+        c[st as keyof typeof c] += 1;
+      }
+    });
     return c;
   }, [searchFiltered]);
 
@@ -272,7 +284,7 @@ export default function UKHubActivationPage() {
           <div className="grid md:grid-cols-3 gap-5">
             {(Object.keys(OPPORTUNITY_META) as OpportunityRole[]).map((role) => {
               const m = OPPORTUNITY_META[role];
-              const hubs = HUB_LOCATIONS.filter((l) => l.opportunities?.includes(role));
+              const hubs = hubLocations.filter((l) => l.opportunities?.includes(role));
               const iconMap = { agent: UserRound, account_manager: BriefcaseBusiness, consultant: Lightbulb };
               const Icon = iconMap[role];
               return (

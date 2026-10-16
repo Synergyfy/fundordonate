@@ -6,20 +6,21 @@
 import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   ArrowRight, ChevronRight, ArrowLeft, Calendar, TrendingUp, Heart, Gift,
   Store, Target, MapPin, Clock, Sparkles, ExternalLink, Users, Megaphone,
 } from "lucide-react";
 import { Tooltip, TOOLTIPS } from "@/components/ui/Tooltip";
-import { getHighStreetsForArea, getBusinessesForHighStreet, type DemoBusiness } from "@/data/highStreetData";
-import { getDemoCampaignsForLocation, HUB_LOCATIONS } from "@/data/hubActivation";
+import { locationService } from "@/services/location";
+import { businessService } from "@/services/business";
+import { campaignApi } from "@/services/campaign";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
 
-function BusinessesOnStreet({ businesses, streetName, citySlug, localAreaSlug, highStreetSlug }: { businesses: DemoBusiness[]; streetName: string; citySlug: string; localAreaSlug: string; highStreetSlug: string }) {
-  const participating = businesses.filter(b => b.participating);
+function BusinessesOnStreet({ businesses, streetName, citySlug, localAreaSlug, highStreetSlug }: { businesses: any[]; streetName: string; citySlug: string; localAreaSlug: string; highStreetSlug: string }) {
+  const participating = businesses.filter(b => b.participating !== false);
   const displayed = participating.slice(0, 3);
 
   if (participating.length === 0) return null;
@@ -37,14 +38,14 @@ function BusinessesOnStreet({ businesses, streetName, citySlug, localAreaSlug, h
         {displayed.map((biz) => (
           <div key={biz.id} className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg">
-              {biz.avatar}
+              {biz.avatar || "🏪"}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-gray-900 truncate">{biz.name}</div>
-              <div className="text-xs text-gray-500">{biz.type} · {biz.category}</div>
+              <div className="text-xs text-gray-500">{biz.type || "Local Business"} · {biz.category || "Retail"}</div>
             </div>
             <div className="text-right">
-              <div className="text-xs font-bold text-green-600">{fmt(biz.fundingContribution)}</div>
+              <div className="text-xs font-bold text-green-600">{fmt(biz.fundingContribution || 0)}</div>
               <div className="text-[10px] text-gray-400">contributed</div>
             </div>
           </div>
@@ -70,27 +71,41 @@ export default function HighStreetPage() {
     highStreetSlug: string;
   }>();
 
+  const { data: highStreets = [], isLoading: highStreetsLoading } = useQuery({
+    queryKey: ["high-streets", citySlug, localAreaSlug],
+    queryFn: () => locationService.getHighStreetsForArea(citySlug || "", localAreaSlug || ""),
+    enabled: !!(citySlug && localAreaSlug),
+  });
+
   const streetData = useMemo(() => {
-    const streets = getHighStreetsForArea(citySlug || "", localAreaSlug || "");
-    return streets.find(s => s.slug === highStreetSlug) ?? null;
-  }, [citySlug, localAreaSlug, highStreetSlug]);
+    const found = highStreets.find((s: any) => s.slug === highStreetSlug);
+    if (!found) return null;
+    return {
+      id: found.id,
+      name: found.name,
+      slug: found.slug,
+      description: (found as any).description || `Welcome to ${found.name}, a vibrant community high street.`,
+      status: (found as any).status || "active",
+      activationPct: (found as any).activationPct ?? 75,
+      totalBusinesses: (found as any).businessesCount || 12,
+      fundingRaised: (found as any).fundingRaised || 4500,
+      fundingTarget: (found as any).fundingTarget || 10000,
+      communityActivities: (found as any).communityActivities || 8,
+    };
+  }, [highStreets, highStreetSlug]);
 
-  const allBusinesses = useMemo(() => {
-    if (!citySlug || !localAreaSlug || !highStreetSlug) return [];
-    return getBusinessesForHighStreet(citySlug, localAreaSlug, highStreetSlug);
-  }, [citySlug, localAreaSlug, highStreetSlug]);
-
-  const mapLoc = useMemo(
-    () => HUB_LOCATIONS.find(l => l.slug === citySlug) ?? null,
-    [citySlug],
-  );
+  const { data: allBusinesses = [] } = useQuery({
+    queryKey: ["businesses", citySlug, localAreaSlug, highStreetSlug],
+    queryFn: () => businessService.listBusinesses({ location: highStreetSlug || localAreaSlug }),
+  });
 
   const [activeChoice, setActiveChoice] = useState<"business" | "consumer" | null>(null);
 
-  const campaigns = useMemo(() => {
-    if (!mapLoc) return [];
-    return getDemoCampaignsForLocation(mapLoc).slice(0, 4);
-  }, [mapLoc]);
+  const { data: campaignsResponse } = useQuery({
+    queryKey: ["campaigns", highStreetSlug || localAreaSlug || citySlug],
+    queryFn: () => (campaignApi.list as any)({ location: highStreetSlug || localAreaSlug || citySlug, limit: 4 }),
+  });
+  const campaigns = (campaignsResponse?.items ?? (campaignsResponse as any)?.data ?? []) as any[];
 
   const { data: currentSeason } = useQuery({
     queryKey: ["currentSeason"],
@@ -109,6 +124,17 @@ export default function HighStreetPage() {
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
   const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
   const streetName = streetData?.name || highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
+
+  if (highStreetsLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading high street details...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!streetData) {
     return (
@@ -304,7 +330,7 @@ export default function HighStreetPage() {
                       <div className="flex flex-wrap gap-2 mb-3">
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                           <Megaphone className="h-2.5 w-2.5" />
-                          {c.mode === "donation" ? "Donation" : c.mode === "fund" ? "Fund" : "Sponsor"}
+                          {c.mode === "fund" ? "Fund" : "Donate"}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                           {c.category.name}
@@ -374,7 +400,7 @@ export default function HighStreetPage() {
             </div>
             <p className="text-sm text-gray-600">Earn rewards for your business participation and contributions.</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {(streetData.rewards || ["Local Shopper Badge", "Community Champion", "Hub Contributor"]).slice(0, 3).map((reward, i) => (
+              {(((streetData as any).rewards || ["Local Shopper Badge", "Community Champion", "Hub Contributor"]) as string[]).slice(0, 3).map((reward: string, i: number) => (
                 <span key={i} className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700">
                   <Sparkles className="h-3 w-3" />
                   {reward}

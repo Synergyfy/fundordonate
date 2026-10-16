@@ -4,6 +4,7 @@ import { API_CONFIG, STORAGE_KEYS } from "./config";
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -25,7 +26,7 @@ function dispatchSessionExpired() {
 // Multiple simultaneous 401s share a single refresh attempt.
 // =============================================================================
 
-let refreshTokenPromise: Promise<string> | null = null;
+let refreshTokenPromise: Promise<string | null> | null = null;
 
 // =============================================================================
 // Request Interceptor — Attach access token
@@ -48,47 +49,54 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Do not attempt refresh on auth endpoints to prevent recursion
+    if (
+      !originalRequest ||
+      originalRequest._retry ||
+      originalRequest.url?.includes("/auth/refresh") ||
+      originalRequest.url?.includes("/auth/login") ||
+      originalRequest.url?.includes("/auth/admin/login") ||
+      originalRequest.url?.includes("/auth/sso/callback") ||
+      originalRequest.url?.includes("/auth/sso/direct-login")
+    ) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401) {
       originalRequest._retry = true;
 
-      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-
-      // No tokens at all — user is not authenticated, don't attempt refresh
-      if (!refreshToken && !accessToken) {
-        return Promise.reject(error);
-      }
-
-      // Access token missing but refresh token exists — attempt refresh
-      if (!refreshToken) {
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-        dispatchSessionExpired();
-        if (!isPublicPath(window.location.pathname)) {
-          window.location.href = "/auth/login?reason=session-expired";
-        }
-        return Promise.reject(error);
-      }
+      const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
 
       // Deduplicate: if a refresh is already in progress, wait for it
       if (!refreshTokenPromise) {
         refreshTokenPromise = axios
-          .post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken })
+          .post(
+            `${api.defaults.baseURL}/auth/refresh`,
+            storedRefreshToken ? { refreshToken: storedRefreshToken } : {},
+            { withCredentials: true }
+          )
           .then((res) => {
-            const { accessToken: newAccess, refreshToken: newRefresh } = res.data.data.tokens;
-            localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, newAccess);
-            localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefresh);
-            return newAccess;
+            const data = res.data?.data ?? res.data;
+            const newAccess = data?.tokens?.accessToken || data?.accessToken;
+            const newRefresh = data?.tokens?.refreshToken || data?.refreshToken;
+
+            if (newAccess) {
+              localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, newAccess);
+            }
+            if (newRefresh) {
+              localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefresh);
+            }
+            return (newAccess || "cookie-refreshed") as string;
           })
-          .catch(() => {
-            // Refresh failed — clear everything and signal session expiry
+          .catch((refreshError) => {
+            // Refresh failed — clear local storage and signal session expiry
             localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
             localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
             dispatchSessionExpired();
             if (!isPublicPath(window.location.pathname)) {
               window.location.href = "/auth/login?reason=session-expired";
             }
-            throw new Error("Session expired");
+            throw refreshError;
           })
           .finally(() => {
             refreshTokenPromise = null;
@@ -96,8 +104,10 @@ api.interceptors.response.use(
       }
 
       try {
-        const newToken = await refreshTokenPromise;
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        const token = await refreshTokenPromise;
+        if (token && token !== "cookie-refreshed") {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+        }
         return api(originalRequest);
       } catch {
         return Promise.reject(error);
@@ -112,7 +122,7 @@ api.interceptors.response.use(
 // Public Path Detection
 // =============================================================================
 
-const PUBLIC_PATHS = ["/", "/campaigns", "/auth", "/donate", "/pledge", "/thank-you", "/payment-failed", "/auth/central-hub"];
+const PUBLIC_PATHS = ["/", "/campaigns", "/auth", "/admin/login", "/upgrade", "/donate", "/pledge", "/thank-you", "/payment-failed"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));

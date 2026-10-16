@@ -4,14 +4,18 @@
 // Local Areas → High Streets → HS Overview → Activation Rules → Review & Activate
 // =============================================================================
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Search, ChevronRight, ChevronLeft, MapPin, Check, X, Globe,
   Building2, Users, Store, Target, CheckCircle, RefreshCw, Plus,
   TrendingUp, AlertCircle,
 } from "lucide-react";
-import { getLocalAreasForCity, getHighStreetsForArea } from "@/data/highStreetData";
+import { adminApi } from "@/services/admin";
+import { useAdminSeasons } from "@/services/admin/hook";
+import { getCommunityRecommendations } from "@/services/recommendations";
+
+export type LocationOrigin = "geographic data" | "manual" | "recommendation";
 
 // ───────────────────── Types ─────────────────────
 
@@ -95,7 +99,7 @@ interface ActivationRule {
   consumerThreshold?: number;
 }
 
-// ───────────────────── Demo UK Cities for Search ─────────────────────
+// ───────────────────── UK Cities for Search ─────────────────────
 
 const UK_CITIES = [
   { name: "London", region: "Greater London", lat: 51.5074, lng: -0.1278, population: "8,982,000" },
@@ -165,7 +169,7 @@ export function AddCityWizard() {
     boundaryMode: "detected",
     radiusMiles: 10,
     status: "NOT_ACTIVATED",
-    currentSeason: "autumn-2026",
+    currentSeason: "",
     areaTerminology: "Local Area",
     localAreas: [],
     highStreets: [],
@@ -196,6 +200,57 @@ export function AddCityWizard() {
   const goToStep = (idx: number) => {
     if (idx <= Math.max(...completedSteps, currentStep) + 1) {
       setCurrentStep(idx);
+    }
+  };
+
+  /**
+   * Persist the admin's confirmations into the location registry.
+   * Geographic data only suggests layers — nothing here becomes official
+   * unless the admin walked through the wizard and confirmed it.
+   */
+  const persistConfirmations = async () => {
+    const cityName = (data.cityName || data.selectedCity || "").trim();
+    if (!cityName) return;
+    const citySlug = cityName.toLowerCase().replace(/\s+/g, "-");
+
+    try {
+      const cityLoc = await adminApi.createLocation({
+        name: cityName,
+        type: "CITY",
+        slug: citySlug,
+        metadata: {
+          areaTerminology: data.areaTerminology || "Local Area",
+          boundaryMode: data.boundaryMode,
+          radiusMiles: data.radiusMiles,
+          makingProgressRules: data.makingProgressRules,
+          activeRules: data.activeRules,
+        },
+      });
+
+      for (const area of data.localAreas) {
+        if (area.included) {
+          const areaLoc = await adminApi.createLocation({
+            name: area.name,
+            type: "BOROUGH",
+            slug: area.slug,
+            parentId: cityLoc.id,
+            metadata: { type: area.type, source: area.source },
+          });
+
+          const areaStreets = data.highStreets.filter((hs) => hs.localAreaSlug === area.slug && hs.confirmed);
+          for (const hs of areaStreets) {
+            await adminApi.createLocation({
+              name: hs.name,
+              type: "HIGH_STREET",
+              slug: hs.slug,
+              parentId: areaLoc.id,
+              metadata: { postcodes: hs.postcodes, suggestedBy: hs.suggestedBy },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to persist city creation via adminApi:", err);
     }
   };
 
@@ -312,6 +367,7 @@ export function AddCityWizard() {
             )}
             <button
               onClick={isLastStep ? () => {
+                persistConfirmations();
                 navigate(`/admin/cities/${data.cityName?.toLowerCase().replace(/\s+/g, "-") || "new"}`);
               } : goNext}
               className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
@@ -588,12 +644,24 @@ function StepConfirmCity({ data, update }: { data: CitySetupData; update: (u: Pa
 // ───────────────────── Step 3: City Hub Config ─────────────────────
 
 function StepCityHubConfig({ data, update }: { data: CitySetupData; update: (u: Partial<CitySetupData>) => void }) {
-  const seasons = [
-    { value: "summer-2026", label: "Summer 2026" },
-    { value: "autumn-2026", label: "Autumn 2026", current: true },
-    { value: "winter-2026", label: "Winter 2026" },
-    { value: "spring-2027", label: "Spring 2027" },
-  ];
+  const { data: seasonsData, isLoading: seasonsLoading } = useAdminSeasons({ limit: 100 });
+
+  const seasons = useMemo(() => {
+    return (seasonsData?.items || []).map((s) => ({
+      value: s.id,
+      label: s.name,
+      current: s.status === "ACTIVE",
+    }));
+  }, [seasonsData]);
+
+  useEffect(() => {
+    if (!data.currentSeason && seasons.length > 0) {
+      const active = seasons.find((s) => s.current) || seasons[0];
+      if (active) {
+        update({ currentSeason: active.value });
+      }
+    }
+  }, [data.currentSeason, seasons, update]);
 
   const terminologyOptions = [
     { value: "Borough", desc: "Used for London and similar administrative areas" },
@@ -742,38 +810,14 @@ function StepLocalAreas({ data, update }: { data: CitySetupData; update: (u: Par
   // Area terminology options
   const areaTypes = ["Borough", "District", "Local Area", "Council Area", "Other"];
 
-  // Get discovered local areas from highStreetData
+  // Discovered or initial local areas
   const discoveredAreas = useMemo(() => {
-    const areas = getLocalAreasForCity(citySlug);
-    if (areas.length > 0) {
-      return areas.map((area) => ({
-        name: area.name,
-        slug: area.slug,
-        included: true,
-        type: data.areaTerminology || "Borough",
-        status: "NOT_ACTIVATED",
-        source: "Geographic data",
-        highStreets: area.highStreetsList.map((hs) => ({
-          name: hs.name,
-          slug: hs.slug,
-          localAreaSlug: area.slug,
-          confirmed: false,
-          suggested: true,
-          status: "SUGGESTED",
-          suggestedBy: "Geographic data",
-          postcodes: [],
-        })),
-      }));
-    }
-    // Fallback demo data if city not in highStreetData
     return [
-      { name: `${data.areaTerminology || "Local Area"} 1`, slug: "area-1", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 2`, slug: "area-2", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 3`, slug: "area-3", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 4`, slug: "area-4", included: false, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
-      { name: `${data.areaTerminology || "Local Area"} 5`, slug: "area-5", included: false, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Geographic data", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 1`, slug: "area-1", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 2`, slug: "area-2", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
+      { name: `${data.areaTerminology || "Local Area"} 3`, slug: "area-3", included: true, type: data.areaTerminology || "Borough", status: "NOT_ACTIVATED", source: "Discovered", highStreets: [] },
     ];
-  }, [citySlug, data.areaTerminology]);
+  }, [data.areaTerminology]);
 
   // Initialize local areas if empty
   const localAreas = data.localAreas.length > 0 ? data.localAreas : discoveredAreas;
@@ -1123,14 +1167,25 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
   const [selectedStreet, setSelectedStreet] = useState<HighStreetSetup | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRecsPanel, setShowRecsPanel] = useState(false);
+  const [acceptedRecIds, setAcceptedRecIds] = useState<string[]>([]);
   const [newStreet, setNewStreet] = useState({ name: "", localArea: "", postcode: "" });
   const [newPostcode, setNewPostcode] = useState("");
 
-  // Demo recommendations
-  const DEMO_RECOMMENDATIONS: HighStreetRecommendation[] = [
-    { id: "rec-1", name: "Chapel Walk", postcode: "SW1", localArea: "Westminster", city: data.cityName || "London", businessCount: 4, consumerCount: 3, status: "new" },
-    { id: "rec-2", name: "Market Street", postcode: "N1", localArea: "Islington", city: data.cityName || "London", businessCount: 2, consumerCount: 5, status: "new" },
-  ];
+  // Community recommendations
+  const recommendations: HighStreetRecommendation[] = useMemo(() => {
+    return getCommunityRecommendations()
+      .filter((r) => !data.cityName || r.cityName.toLowerCase() === data.cityName.toLowerCase())
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        postcode: r.postcodes?.[0] || "",
+        localArea: r.areaName || "",
+        city: r.cityName || data.cityName || "",
+        businessCount: 1,
+        consumerCount: 1,
+        status: (r.status === "pending" ? "new" : r.status) as any,
+      }));
+  }, [data.cityName]);
 
   // Get all high streets from included local areas
   const allHighStreets = useMemo(() => {
@@ -1138,31 +1193,17 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     const streets: HighStreetSetup[] = [];
 
     for (const area of includedAreas) {
-      const areaData = getHighStreetsForArea(citySlug, area.slug);
-      if (areaData.length > 0) {
-        for (const hs of areaData) {
-          streets.push({
-            name: hs.name,
-            slug: hs.slug,
-            localAreaSlug: area.slug,
-            confirmed: false,
-            suggested: true,
-            status: "SUGGESTED",
-            suggestedBy: "Geographic data",
-            postcodes: [],
-          });
-        }
-      } else if (area.highStreets.length > 0) {
+      if (area.highStreets && area.highStreets.length > 0) {
         streets.push(...area.highStreets.map((hs) => ({
           ...hs,
           status: hs.confirmed ? "CONFIRMED" : "SUGGESTED",
-          suggestedBy: "Geographic data",
-          postcodes: [],
+          suggestedBy: hs.suggestedBy || "Discovered",
+          postcodes: hs.postcodes || [],
         })));
       }
     }
     return streets;
-  }, [citySlug, data.localAreas]);
+  }, [data.localAreas]);
 
   // Initialize high streets if empty
   const highStreets = data.highStreets.length > 0 ? data.highStreets : allHighStreets;
@@ -1219,6 +1260,35 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     setShowAddModal(false);
   };
 
+  const pendingRecs = recommendations.filter((r) => !acceptedRecIds.includes(r.id));
+
+  const acceptRecommendation = (rec: HighStreetRecommendation) => {
+    const slug = rec.name.toLowerCase().replace(/\s+/g, "-");
+    const list = data.highStreets.length > 0 ? data.highStreets : allHighStreets;
+    if (!list.some((hs) => hs.slug === slug)) {
+      const areaSlug =
+        data.localAreas.find((a) => a.name.toLowerCase() === rec.localArea.toLowerCase())?.slug ??
+        data.localAreas.find((a) => a.included)?.slug ??
+        "";
+      update({
+        highStreets: [
+          ...list,
+          {
+            name: rec.name,
+            slug,
+            localAreaSlug: areaSlug,
+            confirmed: false,
+            suggested: true,
+            status: "SUGGESTED",
+            suggestedBy: `Community recommendation (${rec.businessCount} business, ${rec.consumerCount} consumer)`,
+            postcodes: rec.postcode ? [rec.postcode] : [],
+          },
+        ],
+      });
+    }
+    setAcceptedRecIds((prev) => [...prev, rec.id]);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1243,7 +1313,7 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Users className="h-3.5 w-3.5" />
-            Recommendations ({DEMO_RECOMMENDATIONS.length})
+            Recommendations ({pendingRecs.length})
           </button>
           <button onClick={confirmAll} className="text-xs font-medium text-primary-600 hover:text-primary-700">
             Confirm All
@@ -1340,14 +1410,19 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-sm font-bold text-gray-900">High Street Recommendations</h4>
-              <p className="text-xs text-gray-500">From Business Owners and Consumers</p>
+              <p className="text-xs text-gray-500">From Business Owners and Consumers — accepted streets enter as Suggested until you confirm them</p>
             </div>
             <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-              {DEMO_RECOMMENDATIONS.length} new
+              {pendingRecs.length} new
             </span>
           </div>
           <div className="space-y-2">
-            {DEMO_RECOMMENDATIONS.map((rec) => (
+            {pendingRecs.length === 0 && (
+              <div className="rounded-lg border border-dashed border-amber-300 bg-white/60 p-4 text-center text-xs text-gray-500">
+                All recommendations reviewed.
+              </div>
+            )}
+            {pendingRecs.map((rec) => (
               <div key={rec.id} className="rounded-lg bg-white border border-gray-200 p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1357,8 +1432,11 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
                       Business Owners: {rec.businessCount} · Consumers: {rec.consumerCount}
                     </div>
                   </div>
-                  <button className="rounded bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 transition-colors">
-                    Review
+                  <button
+                    onClick={() => acceptRecommendation(rec)}
+                    className="rounded bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 transition-colors"
+                  >
+                    Accept as Suggested
                   </button>
                 </div>
               </div>
@@ -2050,6 +2128,12 @@ function StepActivationRules({ data, update }: { data: CitySetupData; update: (u
 // ───────────────────── Step 6: Review & Activate ─────────────────────
 
 function StepReview({ data }: { data: CitySetupData }) {
+  const { data: seasonsData } = useAdminSeasons({ limit: 100 });
+  const seasonName = useMemo(() => {
+    const found = (seasonsData?.items || []).find((s) => s.id === data.currentSeason);
+    return found?.name || data.currentSeason || "—";
+  }, [seasonsData, data.currentSeason]);
+
   const includedAreas = data.localAreas.filter((a) => a.included);
   const confirmedStreets = data.highStreets.filter((hs) => hs.confirmed);
   const mpEnabled = data.makingProgressRules.filter((r) => r.enabled);
@@ -2083,7 +2167,7 @@ function StepReview({ data }: { data: CitySetupData }) {
         <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Current Season</h4>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-sm font-medium text-primary-700">
-            {data.currentSeason || "—"}
+            {seasonName}
           </span>
         </div>
       </div>

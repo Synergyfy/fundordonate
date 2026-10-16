@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { seasonApi, type Season, type SeasonStatus } from "@/services/season.service";
+import { seasonApi, type Season, type SeasonStatus } from "@/services/season";
 import {
   Plus, Search, Calendar, TrendingUp,
   MoreVertical, Copy, Edit, Eye, Trash2, Play, Archive,

@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { seasonApi } from "@/services/season.service";
+import { seasonApi } from "@/services/season";
 import {
   User, Building, MapPin, Tag, Image, Settings, CheckCircle, ArrowRight,
   ArrowLeft, ChevronRight, Calendar, Award, FileText, Target,

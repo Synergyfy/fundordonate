@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fundraiserApi } from "@/services/fundraiser.service";
+import { fundraiserApi } from "@/services/fundraiser";
 
 interface Withdrawal {
   id: string;

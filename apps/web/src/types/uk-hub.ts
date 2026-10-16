@@ -11,7 +11,16 @@ export type LocationType =
   | "DISTRICT"
   | "LOCAL_AREA"
   | "HIGH_STREET"
-  | "COMMERCIAL_AREA";
+  | "COMMERCIAL_AREA"
+  | "national"
+  | "city"
+  | "borough"
+  | "district"
+  | "local_area"
+  | "high_street"
+  | "commercial_area"
+  | "london_borough"
+  | "metropolitan_borough";
 
 export type LocationInternalLifecycle =
   | "DRAFT"
@@ -36,6 +45,15 @@ export const LOCATION_TYPE_META: Record<LocationType, { label: string; plural: s
   LOCAL_AREA:      { label: "Local Area",      plural: "Local Areas",     icon: "🗺️", requiredForUKHub: false, requiredForEveryCity: false },
   HIGH_STREET:     { label: "High Street",     plural: "High Streets",    icon: "🛒", requiredForUKHub: false, requiredForEveryCity: false },
   COMMERCIAL_AREA: { label: "Commercial Area", plural: "Commercial Areas", icon: "🏢", requiredForUKHub: false, requiredForEveryCity: false },
+  national:        { label: "National",        plural: "National",        icon: "🇬🇧", requiredForUKHub: true,  requiredForEveryCity: false },
+  city:            { label: "City",            plural: "Cities",          icon: "🏙️", requiredForUKHub: true,  requiredForEveryCity: true  },
+  borough:         { label: "Borough",         plural: "Boroughs",        icon: "🏘️", requiredForUKHub: false, requiredForEveryCity: false },
+  district:        { label: "District",        plural: "Districts",       icon: "📍", requiredForUKHub: false, requiredForEveryCity: false },
+  local_area:      { label: "Local Area",      plural: "Local Areas",     icon: "🗺️", requiredForUKHub: false, requiredForEveryCity: false },
+  high_street:     { label: "High Street",     plural: "High Streets",    icon: "🛒", requiredForUKHub: false, requiredForEveryCity: false },
+  commercial_area: { label: "Commercial Area", plural: "Commercial Areas", icon: "🏢", requiredForUKHub: false, requiredForEveryCity: false },
+  london_borough:  { label: "London Borough",  plural: "London Boroughs",  icon: "🏘️", requiredForUKHub: false, requiredForEveryCity: false },
+  metropolitan_borough: { label: "Metropolitan Borough", plural: "Metropolitan Boroughs", icon: "🏘️", requiredForUKHub: false, requiredForEveryCity: false },
 };
 
 export const LOCATION_PUBLIC_STATUS_META: Record<LocationPublicStatus, { label: string; color: string; bgColor: string; borderColor: string; mapColor: string; description: string }> = {
@@ -83,16 +101,16 @@ export interface HubLocation {
   heroSupportingText?: string | null;
 
   // Activation
-  internalLifecycle: LocationInternalLifecycle;
-  publicStatus: LocationPublicStatus;
+  internalLifecycle?: LocationInternalLifecycle;
+  publicStatus?: LocationPublicStatus;
   statusOverride?: LocationPublicStatus | null;
 
   // Publication
-  isActive: boolean;
-  isPublic: boolean;
+  isActive?: boolean;
+  isPublic?: boolean;
 
   // Map
-  mapVisible: boolean;
+  mapVisible?: boolean;
   latitude?: number | null;
   longitude?: number | null;
   mapZoomLevel?: number | null;
@@ -105,24 +123,45 @@ export interface HubLocation {
   fullPath?: string | null;
 
   // Featured
-  isFeaturedNationally: boolean;
+  isFeaturedNationally?: boolean;
   featuredPriority?: number | null;
   featuredFrom?: string | null;
   featuredUntil?: string | null;
 
   // Progress
-  fundingTarget: number;
-  fundingRaised: number;
+  fundingTarget?: number;
+  fundingRaised?: number;
   activationThreshold?: number | null;
 
   // Founding allocation
-  foundingBusinessTotal: number;
-  foundingBusinessAllocated: number;
-  foundingConsumerTotal: number;
-  foundingConsumerAllocated: number;
+  foundingBusinessTotal?: number;
+  foundingBusinessAllocated?: number;
+  foundingConsumerTotal?: number;
+  foundingConsumerAllocated?: number;
 
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+
+  // Optional visualization & UI properties
+  region?: string;
+  status?: HubStatus;
+  activationProgress?: number;
+  imageOne?: string;
+  imageTwo?: string;
+  activity?: string[];
+  opportunities?: OpportunityRole[];
+  featuredCampaigns?: string[];
+  campaignCount?: number;
+  businessCount?: number;
+  consumerCount?: number;
+  mapX?: number;
+  mapY?: number;
+  campaignSlugs?: string[];
+  communities?: string;
+  localAreas?: number;
+  highStreets?: number;
+  businesses?: number;
+  campaigns?: number;
 }
 
 // ───────────────────── CampaignLocation ─────────────────────
@@ -346,3 +385,65 @@ export interface BreadcrumbItem {
   fullPath: string;
   type: LocationType;
 }
+
+// ───────────────────── Map & Status Display Meta ─────────────────────
+
+export type HubStatus = "active" | "making_progress" | "needs_activation";
+
+export type OpportunityRole = "agent" | "account_manager" | "consultant";
+
+export const HUB_STATUS_META: Record<
+  HubStatus,
+  { label: string; color: string; dotClass: string; textClass: string; bgClass: string }
+> = {
+  active: {
+    label: "Active",
+    color: "#16a34a",
+    dotClass: "bg-secondary-500",
+    textClass: "text-secondary-700",
+    bgClass: "bg-secondary-50 border-secondary-200",
+  },
+  making_progress: {
+    label: "Making Progress",
+    color: "#3b82f6",
+    dotClass: "bg-primary-500",
+    textClass: "text-primary-700",
+    bgClass: "bg-primary-50 border-primary-200",
+  },
+  needs_activation: {
+    label: "Inactive",
+    color: "#f59e0b",
+    dotClass: "bg-amber-500",
+    textClass: "text-amber-700",
+    bgClass: "bg-amber-50 border-amber-200",
+  },
+};
+
+export const OPPORTUNITY_META: Record<
+  OpportunityRole,
+  { label: string; description: string }
+> = {
+  agent: { label: "Agent", description: "Help build local participation and grow Local Light activity in the area." },
+  account_manager: { label: "Account Manager", description: "Manage and grow local Business Contributor relationships in the area." },
+  consultant: { label: "Consultant", description: "Advise on Local Hub development and community activation in the area." },
+};
+
+export function hubLatLng(location: { mapX?: number | null; mapY?: number | null; latitude?: number | null; longitude?: number | null }): { lat: number; lng: number } {
+  if (typeof location.latitude === "number" && typeof location.longitude === "number") {
+    return { lat: location.latitude, lng: location.longitude };
+  }
+  const x = location.mapX ?? 50;
+  const y = location.mapY ?? 50;
+  return {
+    lat: 59 - (y / 100) * 9,
+    lng: -8 + (x / 100) * 10,
+  };
+}
+
+export function getAreaTerminology(citySlug: string): string {
+  const s = (citySlug || "").toLowerCase();
+  if (s === "london") return "Borough";
+  if (s === "manchester" || s === "greater-manchester") return "District";
+  return "Local Area";
+}
+

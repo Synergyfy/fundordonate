@@ -5,15 +5,18 @@
 
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { locationService } from "@/services/location";
+import { hubProgressService } from "@/services/hub-progress";
 import {
-  getNationalHubSummary, getCitiesByStatus, getCities,
-  formatCurrency, formatNumber,
-  resolveLocationFinancials,
-} from "@/data/ukHubData";
-import {
-  HUB_LOCATIONS, HUB_STATUS_META, getDemoCampaignsForLocation,
-  type HubLocation as MapHubLocation, type HubStatus,
-} from "@/data/hubActivation";
+  HUB_STATUS_META,
+  type HubLocation as MapHubLocation,
+  type HubStatus,
+} from "@/types/uk-hub";
+
+const formatCurrency = (n: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
+const formatNumber = (n: number) => new Intl.NumberFormat("en-GB").format(n);
 import { ProgressRing } from "@/components/hub/ProgressRing";
 import { LocationStatusBadge } from "@/components/hub/HubStatusBadge";
 import { UkMap } from "@/components/hub/UkMap";
@@ -65,19 +68,17 @@ const ACTIVATION_LIFECYCLE = [
 // ───────────────────── City Panel ─────────────────────
 
 function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; onClose: () => void }) {
-  const meta = HUB_STATUS_META[location.status];
-  const campaigns = getDemoCampaignsForLocation(location);
-  const fin = resolveLocationFinancials(location.slug, location.name, location.type, location.status, location.activationProgress);
-  const fundingRaised = fin.fundingRaised;
-  const fundingTarget = fin.fundingTarget;
+  const meta = HUB_STATUS_META[location.status as HubStatus] || HUB_STATUS_META.active;
+  const campaigns = (location as any).campaignsList || [];
+  const fundingRaised = location.fundingRaised || 0;
+  const fundingTarget = location.fundingTarget || 200000;
   const fundingPct = safePct(fundingRaised, fundingTarget);
-  const conTotal = fin.foundingConsumerTotal;
-  const conAllocated = fin.foundingConsumerAllocated;
-  const bizAllocated = fin.foundingBusinessAllocated;
+  const conTotal = (location as any).foundingConsumerTotal || 100;
+  const conAllocated = (location as any).foundingConsumerAllocated || Math.floor(conTotal * 0.6);
   const conRemaining = Math.max(0, conTotal - conAllocated);
-  const lifecycle = fin.internalLifecycle;
+  const lifecycle = (location as any).internalLifecycle || "ACTIVE";
   const lifecycleMeta = ACTIVATION_LIFECYCLE.find(s => s.stage.toLowerCase() === lifecycle.toLowerCase());
-  const backers = Math.floor(bizAllocated * 1.5 + conAllocated * 0.8);
+  const backers = Math.floor(conAllocated * 1.5);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -107,7 +108,7 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
           <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full rounded-full" style={{ width: `${location.activationProgress}%`, backgroundColor: meta.color }} />
           </div>
-          <p className="mt-1 text-[11px] text-gray-400">Admin trigger: {fin.activationThreshold ?? 80}% funding + founding allocation.</p>
+          <p className="mt-1 text-[11px] text-gray-400">Admin trigger: {(location as any).activationThreshold ?? 80}% funding + founding allocation.</p>
         </div>
 
         {/* Funding */}
@@ -157,7 +158,7 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
         </div>
 
         {/* Activity */}
-        {location.activity.length > 0 && (
+        {location.activity && location.activity.length > 0 && (
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-2">What is happening</h3>
             <ul className="space-y-1.5">
@@ -176,7 +177,7 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-2">Local Campaigns ({campaigns.length})</h3>
             <ul className="space-y-1.5">
-              {campaigns.slice(0, 3).map((c) => (
+              {campaigns.slice(0, 3).map((c: any) => (
                 <li key={c.slug}>
                   <Link to={`/campaigns/${c.slug}`} className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-gray-700 hover:border-green-200 hover:bg-green-50/40 transition-colors">
                     <span className="line-clamp-1">{c.title}</span>
@@ -188,7 +189,7 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
           </div>
         )}
 
-        {location.communities && <p className="text-xs text-gray-400">📍 {location.communities}</p>}
+        {(location as any).communities && <p className="text-xs text-gray-400">📍 {(location as any).communities}</p>}
       </div>
 
       <div className="sticky bottom-0 border-t bg-white p-5">
@@ -223,25 +224,46 @@ function MapLegend() {
 // ───────────────────── Main Page ─────────────────────
 
 export default function ConsumerHubPage() {
-  const summary = getNationalHubSummary();
-  const allCities = getCities();
+  const { data: summaryData } = useQuery({
+    queryKey: ["nationalHubSummary"],
+    queryFn: () => hubProgressService.getNationalSummary(),
+  });
+
+  const { data: citiesData } = useQuery({
+    queryKey: ["hubCities"],
+    queryFn: () => locationService.fetchHubCities(),
+  });
+
+  const allCities = (citiesData || []) as MapHubLocation[];
+  const summary = summaryData || {
+    active: 0,
+    makingProgress: 0,
+    needsActivation: 0,
+    totalCities: 0,
+    totalFundingRaised: 0,
+    totalFundingTarget: 1,
+    overallProgress: 0,
+    totalCampaigns: 0,
+    totalBusinesses: 0,
+  };
+
   const [activeTab, setActiveTab] = useState<HubStatus | "all">("all");
   const [selectedMapSlug, setSelectedMapSlug] = useState<string | null>(null);
 
   const selectedCity = useMemo(
-    () => (selectedMapSlug ? HUB_LOCATIONS.find((l) => l.slug === selectedMapSlug) ?? null : null),
-    [selectedMapSlug]
-  ) as MapHubLocation | null;
+    () => (selectedMapSlug ? allCities.find((l) => l.slug === selectedMapSlug) ?? null : null),
+    [selectedMapSlug, allCities]
+  );
 
-  const conTotalAll = allCities.reduce((s, c) => s + c.foundingConsumerTotal, 0);
-  const conAllocAll = allCities.reduce((s, c) => s + c.foundingConsumerAllocated, 0);
+  const conTotalAll = allCities.reduce((s, c) => s + ((c as any).foundingConsumerTotal || 100), 0);
+  const conAllocAll = allCities.reduce((s, c) => s + ((c as any).foundingConsumerAllocated || 60), 0);
   const conPct = safePct(conAllocAll, conTotalAll);
 
   const tabCounts = useMemo(() => ({
     all: allCities.length,
-    active: getCitiesByStatus("ACTIVE").length,
-    making_progress: getCitiesByStatus("MAKING_PROGRESS").length,
-    needs_activation: getCitiesByStatus("NEEDS_ACTIVATION").length,
+    active: allCities.filter((c) => (c.status as string)?.toLowerCase() === "active").length,
+    making_progress: allCities.filter((c) => (c.status as string)?.toLowerCase() === "making_progress").length,
+    needs_activation: allCities.filter((c) => (c.status as string)?.toLowerCase() === "needs_activation").length,
   }), [allCities]);
 
   return (
@@ -268,8 +290,8 @@ export default function ConsumerHubPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
             { label: "Consumer Spots Filled", value: `${conAllocAll} / ${conTotalAll}`, tip: "Total consumer founding spots filled across all cities." },
-            { label: "Active Cities", value: summary.active, tip: "Cities with active consumer founding programmes." },
-            { label: "Progress Cities", value: summary.makingProgress, tip: "Cities where consumer founding is growing." },
+            { label: "Active Cities", value: (summary as any).active ?? (summary as any).activeCities ?? 0, tip: "Cities with active consumer founding programmes." },
+            { label: "Progress Cities", value: (summary as any).makingProgress ?? (summary as any).makingProgressCities ?? 0, tip: "Cities where consumer founding is growing." },
           ].map(s => (
             <Tooltip key={s.label} content={s.tip} position="bottom">
               <div className="rounded-xl border bg-white p-3 text-center shadow-sm cursor-default">
@@ -335,7 +357,7 @@ export default function ConsumerHubPage() {
         <div className="flex flex-col gap-4 lg:flex-row">
           <div className="relative flex-1 min-w-0">
             <div className="overflow-hidden rounded-xl border bg-white shadow-sm" style={{ height: "60vh", minHeight: 400 }}>
-              <UkMap locations={HUB_LOCATIONS} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
+              <UkMap locations={allCities} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
             </div>
             <MapLegend />
           </div>

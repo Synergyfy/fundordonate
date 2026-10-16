@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { campaignApi } from "@/services/campaign.service";
+import { campaignApi } from "@/services/campaign";
 import api from "@/lib/api";
 
 interface Transaction {
@@ -20,6 +20,10 @@ interface Transaction {
 export function ThankYouPage() {
   const [searchParams] = useSearchParams();
   const uid = searchParams.get("uid");
+  const reference = searchParams.get("reference");
+  const amountParam = searchParams.get("amount");
+  const campaignParam = searchParams.get("campaign");
+  const statusParam = searchParams.get("status");
   const type = searchParams.get("type") || "donation";
   const method = searchParams.get("method");
   const [transaction, setTransaction] = useState<Transaction | null>(null);
@@ -29,6 +33,25 @@ export function ThankYouPage() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    // New MCOM Pay flow: the charge reference is passed directly, so we can
+    // render the confirmation without a legacy donation/pledge lookup.
+    if (reference) {
+      setTransaction({
+        uid: reference,
+        amount: Number(amountParam) || 0,
+        status: statusParam || "completed",
+        createdAt: new Date().toISOString(),
+        campaign: {
+          id: "",
+          title: campaignParam || "Campaign",
+          slug: "",
+        },
+      });
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     if (!uid) {
       setError("No transaction found");
       setLoading(false);
@@ -47,7 +70,7 @@ export function ThankYouPage() {
       }
     };
     fetchTransaction();
-  }, [uid, type]);
+  }, [uid, reference, amountParam, campaignParam, statusParam, type]);
 
   const handleDownloadReceipt = async () => {
     if (!uid) return;
@@ -114,9 +137,14 @@ export function ThankYouPage() {
         <div className="text-center">
           <h1 className="text-5xl font-bold text-gray-200">404</h1>
           <p className="mt-3 text-gray-600">{error || "Transaction not found"}</p>
-          <Link to="/campaigns" className="btn-primary mt-5 inline-block">
-            Browse Campaigns
-          </Link>
+          <div className="mt-5 flex justify-center gap-3">
+            <Link to="/campaigns" className="btn-primary inline-block">
+              Browse Campaigns
+            </Link>
+            <Link to="/consumer" className="btn-secondary inline-block">
+              Go to Dashboard
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -170,7 +198,7 @@ export function ThankYouPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Amount</span>
-              <span className="font-semibold text-gray-900">${transaction.amount.toLocaleString()}</span>
+              <span className="font-semibold text-gray-900">£{(transaction.amount / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Status</span>
@@ -233,7 +261,8 @@ export function ThankYouPage() {
           </div>
         </div>
 
-        {/* Receipt & E-Card */}
+        {/* Receipt & E-Card (legacy uid-backed transactions only) */}
+        {uid && (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-gray-900">Receipt & E-Card</h3>
           <div className="mt-3 space-y-3">
@@ -264,14 +293,15 @@ export function ThankYouPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Actions */}
         <div className="mt-4 flex gap-3">
-          <Link to={`/campaigns/${transaction.campaign.slug}`} className="btn-primary flex-1 text-center text-sm">
+          <Link to={`/consumer/explore/campaign/${transaction.campaign.slug}`} className="btn-primary flex-1 text-center text-sm">
             View Campaign
           </Link>
-          <Link to="/campaigns" className="btn-secondary flex-1 text-center text-sm">
-            Browse More
+          <Link to="/consumer" className="btn-secondary flex-1 text-center text-sm">
+            Go to Dashboard
           </Link>
         </div>
 

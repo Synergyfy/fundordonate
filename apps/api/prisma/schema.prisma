@@ -1,9 +1,13 @@
+// FundorDonate API — Prisma schema
+// Provider: PostgreSQL. Auth is federated through MCOM Solutions (Central Hub
+// SSO); local credentials exist only for platform administrators.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,43 +16,46 @@ datasource db {
 // =============================================================================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  username      String    @unique
-  password      String
-  firstName     String?
-  lastName      String?
-  avatar        String?
-  bio           String?
-  role          String    @default("donor") // admin, fundraiser, collaborator, backer, donor
-  userType      String    @default("consumer") // consumer, business, admin
-  businessId    String?   // links user to a Business entity (future)
-  emailVerified Boolean   @default(false)
-  notifications String    @default("{}")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String?  @unique
+  password  String? // local password — admins only; SSO users have none
+  firstName String?
+  lastName  String?
+  avatar    String?
+  role          String   @default("donor") // admin | fundraiser | collaborator | backer | donor
+  userType      String   @default("consumer") // admin | business | consumer
+  emailVerified Boolean  @default(true) // SSO emails are verified by MCOM
 
-  // Relations
-  campaigns             Campaign[]
-  fundraiserCampaigns   Campaign[]           @relation("FundraiserCampaigns")
-  donations             Donation[]
-  pledges               Pledge[]
-  bookmarks             Bookmark[]
-  activities            Activity[]
-  createdActivities     Activity[]           @relation("ActivityCreator")
-  comments              Comment[]
-  wallet                Wallet?
-  withdrawalRequests    WithdrawalRequest[]
-  collaborators         CampaignCollaborator[]
-  rewardEntitlements    RewardEntitlement[]
-  refreshTokens         RefreshToken[]
-  passwordResetTokens   PasswordResetToken[]
-  verificationTokens    EmailVerificationToken[]
-  memberships           UserMembership[]
-  // UK Hub relations
-  foundingMemberships   FoundingMembership[]
-  backerStatuses        BackerStatus[]
+  // ── MCOM Central Hub linkage ──
+  mcomUserId         String?   @unique // Central user UUID (sub)
+  mcomBusinessId     String? // Central business profile id
+  mcomAccessToken    String? // encrypted Central OAuth access token
+  mcomRefreshToken   String? // encrypted Central OAuth refresh token
+  mcomTokenExpiresAt DateTime?
+  mcomLinkedAt       DateTime?
+  lastSsoSyncAt      DateTime?
 
+  // ── Cached MCOM membership / entitlement snapshot ──
+  membershipLevel    String?
+  membershipPlanName String?
+  membershipStatus   String?
+  membershipTier     String?
+  hasPaidVerificationFee Boolean @default(false)
+  trialAccessExpiresAt    DateTime?
+  appPlan            Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  subscription  Subscription?
+  businesses    Business[]     @relation("BusinessOwner")
+  contributions Contribution[] @relation("UserContributions")
+  auditLogs     AuditLog[]
+
+  @@index([mcomUserId])
+  @@index([userType])
   @@map("users")
 }
 
@@ -67,1189 +74,589 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-model PasswordResetToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token])
-  @@map("password_reset_tokens")
-}
-
-model EmailVerificationToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token])
-  @@map("email_verification_tokens")
-}
-
 // =============================================================================
-// CAMPAIGN
+// SUBSCRIPTION / ENTITLEMENT
 // =============================================================================
 
-model Campaign {
-  id              String   @id @default(uuid())
-  slug            String   @unique
-  permalink       String?  @unique
-  title           String
-  shortDescription String?
-  description     String?
-  goalAmount      Int
-  raisedAmount    Int      @default(0)
-  deadline        DateTime
-  status          String   @default("draft") // draft, submitted, pending_review, approved, rejected, published, active, paused, completed, cancelled, expired, archived
-  mode            String   @default("donation") // donation, crowdfunding, fund, sponsor
-  featuredImage   String?
-  videoUrl        String?
-  platformFee     Int?
-  settings        String   @default("{}")
-
-  // FundOrDonate Architecture Fields
-  creatorType     String   @default("admin") // admin, business, fundraiser, consumer
-  ownerContribution Int    @default(0) // business owner's own contribution (in cents)
-  campaignTarget  Int      @default(0) // total campaign target (in cents), 0 means use goalAmount
-  approvedById    String?
-  publishedById   String?
-  approvedAt      DateTime?
-  publishedAt     DateTime?
-  submittedAt     DateTime?
-  rejectedAt      DateTime?
-   rejectionReason String?
-
-  // Campaign Hierarchy
-  parentId        String?  // parent campaign ID (campaign-inside-campaign)
-  parent          Campaign?  @relation("CampaignHierarchy", fields: [parentId], references: [id])
-  children        Campaign[] @relation("CampaignHierarchy")
-
-  // Campaign Hierarchy Level
-  hierarchyLevel  String?  // national, city, borough, high_street, business
-  locationId      String?  // FK to HubLocation — binds campaign to a specific location in the hierarchy
-
-  // Campaign Context
-  locationName    String?  // city, borough, high street, or UK location name (string label)
-  isEvergreen     Boolean  @default(false) // evergreen (always available) vs seasonal
-
-  // Participation Configuration
-  participationTypes String @default("[]") // JSON array: ["fund","donate","sponsor"] — which modes this campaign supports
-  backerTiersEnabled Boolean @default(false) // whether this campaign shows Standard/Pro/Pro+ selection
-  recurringEnabled   Boolean @default(false) // whether monthly/recurring contributions are allowed
-
-  // Self-Funding Configuration
-  selfFundingLevel   String?  // bronze, silver, gold, platinum — only set for self-funding campaigns
-  isSelfFunding      Boolean  @default(false) // whether this is a self-funding campaign
-
-  // Share/QR Architecture
-  shareCode       String?  @unique // stable short code for share URLs and QR codes
-
-  // Taxonomy & Classification
-  campaignTypeId  String?
-  seasonId        String?
-
-  // ── Reward Configuration ──
-  qualificationMode String @default("highest") // highest | cumulative — how rewards are granted
-  hasRewards        Boolean @default(false)
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Foreign Keys
-  authorId        String
-  fundraiserId    String?
-  categoryId      String?
-  fundId          String?
-  membershipPlanId String?
-
-  // Relations
-  author              User                  @relation(fields: [authorId], references: [id])
-  fundraiser          User?                 @relation("FundraiserCampaigns", fields: [fundraiserId], references: [id])
-  category            Category?             @relation(fields: [categoryId], references: [id])
-  fund                Fund?                 @relation(fields: [fundId], references: [id])
-  campaignType        CampaignType?         @relation(fields: [campaignTypeId], references: [id])
-  season              CampaignSeason?       @relation(fields: [seasonId], references: [id])
-  membershipPlan      MembershipPlan?       @relation(fields: [membershipPlanId], references: [id])
-  groups              CampaignGroupMembership[]
-  collections         CampaignCollectionMembership[]
-  events              CampaignEventMembership[]
-  images              CampaignImage[]
-  tags                CampaignTag[]
-  collaborators       CampaignCollaborator[]
-  rewards             Reward[]
-  rewardEntitlements  RewardEntitlement[]
-  donations           Donation[]
-  pledges             Pledge[]
-  bookmarks           Bookmark[]
-  activities          Activity[]
-  posts               CampaignPost[]
-  comments            Comment[]
-  snapshots           CampaignSnapshot[]
-  walletTransactions  WalletTransaction[]
-  withdrawalItems     WithdrawalItem[]
-  shares              CampaignShare[]
-  // UK Hub relations
-  campaignLocations   CampaignLocation[]
-  foundingProgrammes  FoundingProgramme[]
-  foundingMemberships FoundingMembership[]
-  backerStatuses      BackerStatus[]
-  location            HubLocation?  @relation("CampaignLocationHierarchy", fields: [locationId], references: [id])
-
-  @@index([authorId])
-  @@index([fundraiserId])
-  @@index([categoryId])
-  @@index([fundId])
-  @@index([campaignTypeId])
-  @@index([seasonId])
-  @@index([membershipPlanId])
-  @@index([parentId])
-  @@index([locationId])
-  @@index([hierarchyLevel])
-  @@index([status])
-  @@index([mode])
-  @@index([deadline])
-  @@index([createdAt])
-  @@index([status, mode]) // compound: filter by status+mode
-  @@index([authorId, status]) // compound: author's published campaigns
-  @@map("campaigns")
-}
-
-model CampaignImage {
-  id        String   @id @default(uuid())
-  url       String
-  alt       String?
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId])
-  @@map("campaign_images")
-}
-
-model CampaignCollaborator {
-  campaignId     String
-  collaboratorId String
-  createdAt      DateTime @default(now())
-
-  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  collaborator User     @relation(fields: [collaboratorId], references: [id])
-
-  @@id([campaignId, collaboratorId])
-  @@index([collaboratorId])
-  @@map("campaign_collaborators")
-}
-
-model CampaignSnapshot {
-  id        String   @id @default(uuid())
-  snapshot  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@unique([campaignId])
-  @@map("campaign_snapshots")
-}
-
-// =============================================================================
-// MEMBERSHIP
-// =============================================================================
-
-model MembershipPlan {
-  id          String   @id @default(uuid())
-  name        String   // e.g. "Bronze Pro+", "Silver Standard"
-  slug        String   @unique
-  tier        String   // bronze, silver, gold, platinum
-  level       String   // standard, pro, pro+
-  description String?
-  price       Int      @default(0) // price in cents
-  duration    Int?     // duration in days, null = lifetime
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-  entitlements String  @default("{}") // JSON: campaign eligibility, limits, rewards, etc.
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  memberships UserMembership[]
-  campaigns   Campaign[]
-
-  @@unique([tier, level])
-  @@index([status])
-  @@index([tier])
-  @@map("membership_plans")
-}
-
-model UserMembership {
-  id          String   @id @default(uuid())
-  status      String   @default("active") // active, expired, cancelled
-  startDate   DateTime @default(now())
-  endDate     DateTime?
-  autoRenew   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId   String
-  user     User   @relation(fields: [userId], references: [id])
-  planId   String
-  plan     MembershipPlan @relation(fields: [planId], references: [id])
-
-  @@index([userId])
-  @@index([planId])
-  @@index([status])
-  @@index([userId, status]) // compound: user's active memberships
-  @@map("user_memberships")
-}
-
-// =============================================================================
-// CAMPAIGN TAXONOMY
-// =============================================================================
-
-model CampaignType {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-
-  // Opportunity Configuration
-  isOpportunity    Boolean  @default(false) // whether this type represents an approved campaign opportunity
-  eligibleTiers    String   @default("[]") // JSON array: ["bronze","silver","gold","platinum"]
-  eligibleLevels   String   @default("[]") // JSON array: ["standard","pro","pro+"]
-  parentInitiative String?  // name of the parent initiative this opportunity belongs to
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns Campaign[]
-
-  @@map("campaign_types")
-}
-
-model CampaignSeason {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  startDate   DateTime?
-  endDate     DateTime?
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns Campaign[]
-
-  @@index([status])
-  @@index([startDate, endDate])
-  @@map("campaign_seasons")
-}
-
-model SpilloverRule {
-  id                    String   @id @default(uuid())
-  campaignId            String?
-  seasonId              String?
-  action                String   // redistribute_next, hold_for_next_season, refund_to_donors, donate_to_pool, release_to_owner
-  priority              Int      @default(0) // lower = higher priority
-  thresholdPercentage   Float    @default(100) // % of target reached before spillover activates
-  allocationPercentage  Float    @default(100) // % of surplus this rule applies to
-  targetCampaignId      String?
-  targetSeasonId        String?
-  isEnabled             Boolean  @default(true)
-  description           String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  season   CampaignSeason? @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId])
-  @@index([seasonId])
-  @@index([isEnabled, priority])
-  @@map("spillover_rules")
-}
-
-model SurplusRecord {
-  id                  String   @id @default(uuid())
-  campaignId          String
-  goalAmount          Int      // pence
-  raisedAmount        Int      // pence
-  surplusAmount       Int      // pence (raised - goal)
-  action              String   // redistribute_next, hold_for_next_season, refund_to_donors, donate_to_pool, release_to_owner
-  targetId            String?  // target campaign/season ID
-  redistributedAmount Int      @default(0) // pence
-  status              String   @default("pending") // pending, completed, failed
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId])
-  @@index([status])
-  @@map("surplus_records")
-}
-
-model SeasonTransitionLog {
-  id                    String   @id @default(uuid())
-  seasonId              String
-  trigger               String   // date_based, campaign_completion, manual
-  affectedCampaignCount Int      @default(0)
-  totalSurplusDistributed Int    @default(0) // pence
-  actions               String   @default("[]") // JSON array of actions taken
-  initiatedBy           String?
-  createdAt             DateTime @default(now())
-
-  season CampaignSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  @@index([seasonId])
-  @@map("season_transition_logs")
-}
-
-model CampaignGroup {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  image       String?
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns CampaignGroupMembership[]
-
-  @@map("campaign_groups")
-}
-
-model CampaignGroupMembership {
-  campaignId  String
-  groupId     String
-  createdAt   DateTime @default(now())
-
-  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  group    CampaignGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@id([campaignId, groupId])
-  @@index([groupId])
-  @@map("campaign_group_memberships")
-}
-
-model CampaignCollection {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  image       String?
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns CampaignCollectionMembership[]
-
-  @@map("campaign_collections")
-}
-
-model CampaignCollectionMembership {
-  campaignId   String
-  collectionId String
-  createdAt    DateTime @default(now())
-
-  campaign   Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  collection CampaignCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-
-  @@id([campaignId, collectionId])
-  @@index([collectionId])
-  @@map("campaign_collection_memberships")
-}
-
-model CampaignEvent {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  startDate   DateTime?
-  endDate     DateTime?
-  status      String   @default("active") // active, inactive
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns CampaignEventMembership[]
-
-  @@index([status])
-  @@index([startDate, endDate])
-  @@map("campaign_events")
-}
-
-model CampaignEventMembership {
-  campaignId String
-  eventId    String
-  createdAt  DateTime @default(now())
-
-  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  event    CampaignEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@id([campaignId, eventId])
-  @@index([eventId])
-  @@map("campaign_event_memberships")
-}
-
-// =============================================================================
-// CAMPAIGN ENGAGEMENT
-// =============================================================================
-
-model CampaignPost {
-  id        String   @id @default(uuid())
-  title     String
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId])
-  @@index([createdAt])
-  @@map("campaign_posts")
-}
-
-model Comment {
-  id        String   @id @default(uuid())
-  content   String
-  status    String   @default("approved") // approved, pending, spam
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId String
-  userId     String
-  parentId   String?
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
-  parent   Comment? @relation("CommentReplies", fields: [parentId], references: [id])
-  replies  Comment[] @relation("CommentReplies")
-
-  @@index([campaignId])
-  @@index([userId])
-  @@index([parentId])
-  @@index([status])
-  @@map("comments")
-}
-
-model Bookmark {
-  createdAt DateTime @default(now())
-
-  campaignId String
-  userId     String
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
-
-  @@id([campaignId, userId])
-  @@index([userId])
-  @@map("bookmarks")
-}
-
-model Activity {
-  id        String   @id @default(uuid())
-  type      String
-  data      String   @default("{}")
-  createdAt DateTime @default(now())
-
-  campaignId  String?
-  pledgeId    String?
-  donationId  String?
-  userId      String?
-  createdById String?
-
-  campaign   Campaign? @relation(fields: [campaignId], references: [id])
-  pledge     Pledge?   @relation(fields: [pledgeId], references: [id])
-  donation   Donation? @relation(fields: [donationId], references: [id])
-  user       User?     @relation(fields: [userId], references: [id])
-  createdBy  User?     @relation("ActivityCreator", fields: [createdById], references: [id])
-
-  @@index([campaignId])
-  @@index([pledgeId])
-  @@index([donationId])
-  @@index([userId])
-  @@index([createdById])
-  @@index([type])
-  @@index([createdAt])
-  @@map("activities")
-}
-
-// =============================================================================
-// CATEGORIES & TAGS
-// =============================================================================
-
-model Category {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  description String?
-  image       String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  campaigns Campaign[]
-
-  @@map("categories")
-}
-
-model Tag {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  slug      String   @unique
-  createdAt DateTime @default(now())
-
-  campaignTags CampaignTag[]
-
-  @@map("tags")
-}
-
-model CampaignTag {
-  campaignId String
-  tagId      String
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([campaignId, tagId])
-  @@index([tagId])
-  @@map("campaign_tags")
-}
-
-// =============================================================================
-// REWARDS — Trigger-based reward system
-// =============================================================================
-
-model Reward {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  campaignId  String
-  order       Int      @default(0)
-
-  // ── Trigger ──
-  triggerType   String   @default("contribution") // contribution (phase 1)
-  triggerConfig Json     @default("{}") // { mode: "min"|"range"|"exact", min: 5000, max: 9999 }
-
-  // ── Audience ──
-  audience String @default("both") // business | consumer | both
-
-  // ── Availability ──
-  quantityType      String   @default("unlimited") // unlimited | limited
-  quantityLimit     Int?
-  quantityClaimed   Int      @default(0)
-  availableFrom     DateTime?
-  availableUntil    DateTime?
-  claimDeadlineDays Int      @default(30)
-
-  // ── Fulfilment ──
-  fulfilmentType   String  @default("manual") // internal | mcom_vcard | external_link | webhook | manual | instruction
-  fulfilmentConfig Json?   // { url?, webhookUrl?, instructions? }
-
-  // ── Display & Type ──
-  image      String?
-  rewardType String @default("standard") // standard | ecard | cashback | points | discount
-  currency   String @default("GBP")
-
-  // ── Status ──
-  status    String   @default("active") // active | inactive
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ── Relations ──
-  campaign     Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  pledges      Pledge[]
-  items        RewardItem[]
-  entitlements RewardEntitlement[]
-
-  @@index([campaignId])
-  @@index([triggerType])
-  @@map("rewards")
-}
-
-model RewardItem {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  image       String?
-
-  // ── Item Type ──
-  physicalType String @default("digital") // physical | digital
-
-  // ── Digital Asset ──
-  assetType     String? // file | url
-  assetUrl      String?
-  assetFileName String?
-
-  // ── Quantity & Order ──
-  quantity Int @default(1)
-  order    Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ── Relations ──
-  rewardId String
-  reward   Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-
-  @@index([rewardId])
-  @@map("reward_items")
-}
-
-model RewardEntitlement {
-  id     String @id @default(uuid())
-  userId String
-  rewardId String
-  campaignId String
-
-  // ── Trigger Context ──
-  triggerValue Json // { contributionAmount: 5000, pledgeId: "...", triggeredAt: "..." }
-
-  // ── Lifecycle ──
-  status     String    @default("earned") // earned | claimed | fulfilled | expired
-  earnedAt   DateTime  @default(now())
-  claimedAt  DateTime?
-  fulfilledAt DateTime?
-  expiresAt  DateTime?
-
-  // ── Fulfilment Reference ──
-  claimReference String? // external reference after fulfilment
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ── Relations ──
-  user     User     @relation(fields: [userId], references: [id])
-  reward   Reward   @relation(fields: [rewardId], references: [id])
-  campaign Campaign @relation(fields: [campaignId], references: [id])
-
-  @@unique([userId, rewardId]) // one entitlement per user per reward
-  @@index([userId])
-  @@index([rewardId])
-  @@index([campaignId])
-  @@index([status])
-  @@map("reward_entitlements")
-}
-
-// =============================================================================
-// FUNDS
-// =============================================================================
-
-model Fund {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  isDefault   Boolean  @default(false)
-  status      String   @default("active") // active, inactive
-  createdAt   DateTime @default(now())
-  createdBy   String?
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?
-
-  campaigns Campaign[]
-  donations Donation[]
-
-  @@index([status])
-  @@map("funds")
-}
-
-// =============================================================================
-// DONATIONS
-// =============================================================================
-
-model Donation {
-  id                     String   @id @default(uuid())
-  uid                    String   @unique
-  amount                 Int
-  recoveryFee            Int      @default(0)
-  processingFee          Int      @default(0)
-  tributeType            String?  // in_honor, in_memory
-  tributeSalutation      String?
-  tributeTo              String?
-  tributeNotificationEmail   String?
-  tributeNotificationMessage String?
-  notes                  String?
-  status                 String   @default("pending") // pending, completed, failed, refunded
-  transactionId          String?
-  paymentEngine          String?  // native, woocommerce
-  paymentMethod          String?
-  paymentStatus          String?
-  isAnonymous            Boolean  @default(false)
-  isManual               Boolean  @default(false)
-  userInfo               String   @default("{}")
-
-  // FundOrDonate Contribution Architecture
-  contributionType      String   @default("external") // owner, external
-  currency              String   @default("GBP")
-
-  // Hierarchy Attribution
-  hierarchyLevel        String?  // national, city, borough, high_street, business
-  locationId            String?  // FK to HubLocation
-  parentCampaignId      String?  // FK to Campaign — the campaign one level up
-
-  createdAt              DateTime @default(now())
-  createdBy              String?
-  updatedAt              DateTime @updatedAt
-  updatedBy              String?
-
-  // Foreign Keys
-  campaignId String
-  fundId     String?
-  userId     String?
-
-  // Relations
-  campaign           Campaign             @relation(fields: [campaignId], references: [id])
-  fund               Fund?                @relation(fields: [fundId], references: [id])
-  user               User?                @relation(fields: [userId], references: [id])
-  activities         Activity[]
-  walletTransactions WalletTransaction[]
-
-  @@index([campaignId])
-  @@index([fundId])
-  @@index([userId])
-  @@index([status])
-  @@index([transactionId])
-  @@index([hierarchyLevel])
-  @@index([locationId])
-  @@index([createdAt])
-  @@index([campaignId, status]) // compound: campaign donations by status
-  @@index([userId, createdAt]) // compound: user donation history
-  @@map("donations")
-}
-
-// =============================================================================
-// PLEDGES (Crowdfunding Mode)
-// =============================================================================
-
-model Pledge {
-  id                 String   @id @default(uuid())
-  uid                String   @unique
-  status             String   @default("pending") // pending, completed, failed, cancelled
-  pledgeOption       String?
-  amount             Int
-  bonusSupportAmount Int      @default(0)
-  shippingCost       Int      @default(0)
-  recoveryFee        Int      @default(0)
-  processingFee      Int      @default(0)
-  notes              String?
-  transactionId      String?
-  paymentEngine      String?  // native, woocommerce
-  paymentMethod      String?
-  paymentStatus      String?
-  isManual           Boolean  @default(false)
-  rewardInfo         String   @default("{}")
-  userInfo           String   @default("{}")
-  createdAt          DateTime @default(now())
-  createdBy          String?
-  updatedAt          DateTime @updatedAt
-  updatedBy          String?
-
-  // Hierarchy Attribution
-  hierarchyLevel     String?  // national, city, borough, high_street, business
-  locationId         String?  // FK to HubLocation
-  parentCampaignId   String?  // FK to Campaign — the campaign one level up
-
-  // Foreign Keys
-  campaignId String
-  userId     String?
-  rewardId   String?
-
-  // Relations
-  campaign           Campaign             @relation(fields: [campaignId], references: [id])
-  user               User?                @relation(fields: [userId], references: [id])
-  reward             Reward?              @relation(fields: [rewardId], references: [id])
-  activities         Activity[]
-  walletTransactions WalletTransaction[]
-
-  @@index([campaignId])
-  @@index([userId])
-  @@index([rewardId])
-  @@index([status])
-  @@index([transactionId])
-  @@index([hierarchyLevel])
-  @@index([locationId])
-  @@index([createdAt])
-  @@index([campaignId, status]) // compound: campaign pledges by status
-  @@index([userId, createdAt]) // compound: user pledge history
-  @@map("pledges")
-}
-
-// =============================================================================
-// WALLET & TRANSACTIONS
-// =============================================================================
-
-model Wallet {
-  id              String   @id @default(uuid())
-  balance         Int      @default(0)
-  requestedAmount Int      @default(0)
-  withdrawAmount  Int      @default(0)
-  platformFee     Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  userId       String @unique
-  user         User   @relation(fields: [userId], references: [id])
-  transactions WalletTransaction[]
-
-  @@map("wallets")
-}
-
-model WalletTransaction {
-  id            String   @id @default(uuid())
-  amount        Int
-  action        String   // credit, debit
-  type          String   // earning, platform_fee, withdrawal_request, withdrawal_approval, withdrawal_rejection
-  status        String   @default("pending") // pending, completed
-  referenceId   String?
-  referenceType String?  // pledge, donation, withdrawal_request
-  createdAt     DateTime @default(now())
-
-  // Foreign Keys
-  walletId   String
-  campaignId String?
-  pledgeId   String?
-  donationId String?
-
-  // Relations
-  wallet   Wallet    @relation(fields: [walletId], references: [id])
-  campaign Campaign? @relation(fields: [campaignId], references: [id])
-  pledge   Pledge?   @relation(fields: [pledgeId], references: [id])
-  donation Donation? @relation(fields: [donationId], references: [id])
-
-  @@index([walletId])
-  @@index([campaignId])
-  @@index([pledgeId])
-  @@index([donationId])
-  @@index([type])
-  @@index([status])
-  @@index([referenceType, referenceId])
-  @@index([createdAt])
-  @@map("wallet_transactions")
-}
-
-// =============================================================================
-// WITHDRAWALS
-// =============================================================================
-
-model WithdrawalRequest {
-  id         String   @id @default(uuid())
-  amount     Int
-  method     String   // paypal, bank, others
-  status     String   @default("pending") // pending, approved, rejected
-  note       String?
-  attachment String?
-  payoutInfo String   @default("{}")
-  createdAt  DateTime @default(now())
-  updatedBy  String?
-  updatedAt  DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-  items  WithdrawalItem[]
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([userId, status]) // compound: user's pending withdrawals
-  @@map("withdrawal_requests")
-}
-
-model WithdrawalItem {
-  amount    Int
-
-  withdrawalRequestId String
-  campaignId          String
-
-  withdrawalRequest WithdrawalRequest @relation(fields: [withdrawalRequestId], references: [id], onDelete: Cascade)
-  campaign          Campaign          @relation(fields: [campaignId], references: [id])
-
-  @@id([withdrawalRequestId, campaignId])
-  @@index([campaignId])
-  @@map("withdrawal_items")
-}
-
-// =============================================================================
-// MCOM INTEGRATION
-// =============================================================================
-
-model ExternalReference {
-  id           String   @id @default(uuid())
-  provider     String   // central_hub, vcard, terminal, mcom_rewards, mcom_mall
-  entityType   String   // user, campaign, donation, reward, ecard, pledge
-  entityId     String   // internal FundOrDonate entity ID
-  externalId   String   // external MCOM entity ID
-  externalData String   @default("{}") // JSON: metadata from external system
-  status       String   @default("pending") // pending, active, failed, revoked, cancelled
+model Subscription {
+  id      String @id @default(uuid())
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId   String?
+  planName String?
+  source   String? // membership | trial | direct
+  status   String  @default("inactive")
+  quotas   Json    @default("{}")
+  limits   Json    @default("{}")
+  features String[] @default([])
+
+  isTrial         Boolean   @default(false)
+  tasksToComplete Json      @default("[]")
+  membershipPlanName String?
+  expiresAt       DateTime?
+  isActive        Boolean   @default(false)
+
+  lastSyncedAt DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([provider, entityType, entityId])
-  @@unique([provider, entityType, externalId])
-  @@index([entityType, entityId])
-  @@index([provider])
-  @@index([externalId])
-  @@index([status])
-  @@map("external_references")
+  @@index([planId])
+  @@index([isActive])
+  @@map("subscriptions")
 }
 
 // =============================================================================
-// QR / LINK / SHARE
+// HUB LOCATION HIERARCHY (Spec Part 2 & Part 11)
 // =============================================================================
 
-model CampaignShare {
-  id          String   @id @default(uuid())
-  code        String   @unique // short share code for URLs/QR
-  shareType   String   // link, qr, referral, social
-  source      String?  // where the share originated
-  metadata    String   @default("{}") // JSON: tracking data
-  createdAt   DateTime @default(now())
-
-  campaignId  String
-  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId])
-  @@index([code])
-  @@index([shareType])
-  @@map("campaign_shares")
+enum HubLocationType {
+  NATIONAL
+  CITY
+  BOROUGH
+  DISTRICT
+  LOCAL_AREA
+  HIGH_STREET
+  COMMERCIAL_AREA
 }
-
-// =============================================================================
-// UK HUB ACTIVATION
-// =============================================================================
 
 model HubLocation {
-  id                String   @id @default(uuid())
-  name              String
-  slug              String   @unique
-  type              String   // NATIONAL, CITY, BOROUGH, DISTRICT, LOCAL_AREA, HIGH_STREET, COMMERCIAL_AREA
-  parentId          String?
-  parent            HubLocation?  @relation("LocationHierarchy", fields: [parentId], references: [id])
-  children          HubLocation[] @relation("LocationHierarchy")
-
-  // Content
-  shortDescription  String?
-  description       String?
-  heroHeadline      String?
+  id                 String          @id @default(uuid())
+  name               String
+  slug               String          @unique
+  type               HubLocationType @default(CITY)
+  parentId           String?
+  parent             HubLocation?    @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children           HubLocation[]   @relation("LocationHierarchy")
+  shortDescription   String?
+  description        String?         @db.Text
+  heroHeadline       String?
   heroSupportingText String?
+  postcodePrefix     String?
+  latitude           Float?
+  longitude          Float?
+  isActive           Boolean         @default(true)
+  targetAmount       BigInt          @default(0)
+  activationStatus   String          @default("PENDING") // PENDING | IN_PROGRESS | ACTIVATED | PAUSED
+  metadata           Json            @default("{}")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
-  // Activation
-  internalLifecycle String   @default("DRAFT")
-  publicStatus      String   @default("NEEDS_ACTIVATION")
-  statusOverride    String?
+  businesses         Business[]
+  events             PlatformEvent[]
 
-  // Publication
-  isActive          Boolean  @default(false)
-  isPublic          Boolean  @default(false)
-
-  // Map
-  mapVisible        Boolean  @default(false)
-  latitude          Float?
-  longitude         Float?
-  mapZoomLevel      Int?     @default(10)
-
-  // Media
-  primaryImage      String?
-  secondaryImage    String?
-
-  // Hierarchy path
-  fullPath          String?  @unique
-
-  // Featured
-  isFeaturedNationally Boolean @default(false)
-  featuredPriority     Int?    @default(0)
-  featuredFrom         DateTime?
-  featuredUntil        DateTime?
-
-  // Progress
-  fundingTarget        Int    @default(0)
-  fundingRaised        Int    @default(0)
-  activationThreshold  Int?   @default(80)
-
-  // Founding allocation
-  foundingBusinessTotal     Int  @default(0)
-  foundingBusinessAllocated Int  @default(0)
-  foundingConsumerTotal     Int  @default(0)
-  foundingConsumerAllocated Int  @default(0)
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  campaigns           CampaignLocation[]
-  campaignHierarchy   Campaign[]          @relation("CampaignLocationHierarchy")
-  foundingProgrammes  FoundingProgramme[]
-  foundingMemberships FoundingMembership[]
-  backerStatuses      BackerStatus[]
-  activity            HubActivity[]
-  events              HubEvent[]
-  statusHistory       LocationStatusHistory[]
-
-  @@index([type])
   @@index([parentId])
+  @@index([type])
   @@index([slug])
-  @@index([fullPath])
-  @@index([isPublic, isActive])
-  @@index([type, publicStatus])
-  @@index([isFeaturedNationally])
   @@map("hub_locations")
 }
 
-model CampaignLocation {
-  id              String   @id @default(uuid())
-  campaignId      String
-  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  locationId      String
-  location        HubLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  relationshipType String @default("PRIMARY")
-  visibility      String   @default("VISIBLE")
-  createdAt       DateTime @default(now())
+// =============================================================================
+// BUSINESS & LOCATION DOMAIN
+// =============================================================================
 
-  @@unique([campaignId, locationId])
-  @@index([campaignId])
-  @@index([locationId])
-  @@index([locationId, relationshipType])
-  @@map("campaign_locations")
+enum BusinessStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
 }
 
-model FoundingProgramme {
-  id                String   @id @default(uuid())
-  locationId        String
-  location          HubLocation @relation(fields: [locationId], references: [id])
-  audience          String   // BUSINESS, CONSUMER
-  status            String   @default("DRAFT")
+enum MembershipTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum PreferredAudience {
+  CONSUMER
+  BUSINESS
+  BOTH
+}
+
+model Business {
+  id                   String            @id @default(uuid())
+  ownerId              String
+  owner                User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name                 String
+  slug                 String            @unique
+  registrationNumber   String?
+  businessType         String            // "Restaurant & Cafe", "Retail & Shop", etc.
+  category             String            // e.g. "Food & Drink"
+  subcategories        String[]          @default([])
+  description          String?           @db.Text
+  email                String
+  phone                String?
+  website              String?
+  logoUrl              String?
+  coverImageUrl        String?
+  status               BusinessStatus    @default(ACTIVE)
+  membershipTier       MembershipTier    @default(BRONZE)
+  membershipExpiry     DateTime?
+  preferredAudience    PreferredAudience @default(BOTH)
+  campaignGoal         String?
+  auditReference       String?           // AUD-xxxxxx from Public Pre-Audit
+  preAuditAnswers      Json              @default("{}") // Pre-audit cached answer tree
+  
+  // Location Hierarchy Linkage
+  locationId           String?
+  location             HubLocation?      @relation(fields: [locationId], references: [id])
+  city                 String
+  localArea            String
+  highStreet           String
+  address              String?
+  postcode             String
+  
+  // Relations
+  campaigns            BusinessCampaign[]
+  contributions        Contribution[]
+  settings             BusinessSettings?
+  payouts              PayoutRequest[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([city, localArea, highStreet])
+  @@index([membershipTier])
+  @@index([locationId])
+  @@map("businesses")
+}
+
+model BusinessSettings {
+  id                  String   @id @default(uuid())
+  businessId          String   @unique
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  emailAlerts         Boolean  @default(true)
+  campaignUpdates     Boolean  @default(true)
+  leaderboardChanges  Boolean  @default(true)
+  rewardsEarned       Boolean  @default(true)
+  newBackers          Boolean  @default(false)
+  weeklyDigest        Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("business_settings")
+}
+
+// =============================================================================
+// CAMPAIGN TEMPLATE & BUSINESS INSTANCE DOMAIN
+// =============================================================================
+
+enum TemplateOrigin {
+  AUDIT
+  DIRECT
+}
+
+enum TemplateApprovalMode {
+  AUTOMATIC
+  ADMIN_REVIEW
+}
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum BusinessCampaignStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model CampaignTemplate {
+  id                      String               @id @default(uuid())
+  name                    String
+  slug                    String               @unique
+  tagline                 String
+  seasonId                String?
+  season                  Season?              @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  origin                  TemplateOrigin       @default(DIRECT)
+  approvalMode            TemplateApprovalMode @default(ADMIN_REVIEW)
+  status                  TemplateStatus       @default(DRAFT)
+  category                String?              // donation | crowdfunding | fund
+  audience                String               @default("BOTH") // BUSINESS | CONSUMER | BOTH
+  minEligibilityTier      MembershipTier       @default(BRONZE)
+  minContributionRequired Boolean              @default(false)
+  minContributionAmount   Int                  @default(0) // In pence
+  selfFundingEnabled      Boolean              @default(true)
+  selfFundingMode         String               @default("optional") // "optional" | "required"
+  selfFundingAmount       Int                  @default(10000) // In pence (£100.00)
+  selfFundingRewardName   String?
+  // How a claiming business's own MCOM Rewards (business-owned) interact with
+  // this template's rewards: "disabled" | "coexist" | "replace".
+  // ("enabled" is a legacy alias for "coexist".)
+  businessRewardsMode     String               @default("disabled")
+  
+  // Configurations
+  fieldsConfig            Json                 @default("[]") // Blueprint of fields, locks, questions
+  rewardsConfig           Json                 @default("[]") // Reward configs
+  mcomAssetsConfig        Json                 @default("[]") // Assets/collateral
+  requirementsConfig      Json                 @default("[]") // Eligibility requirements
+  config                  Json                 @default("{}") // Full wizard config (sections, funding, location, visibility, access, contribution rules)
+  
+  isActive                Boolean              @default(true)
+  version                 Int                  @default(1)
+  createdById             String?
+  updatedById             String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  instances               BusinessCampaign[]
+
+  @@index([isActive, seasonId])
+  @@index([status, seasonId])
+  @@map("campaign_templates")
+}
+
+model BusinessCampaign {
+  id                   String                 @id @default(uuid())
+  businessId           String
+  business             Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  templateId           String
+  template             CampaignTemplate       @relation(fields: [templateId], references: [id])
+  title                String
+  description          String?                @db.Text
+  status               BusinessCampaignStatus @default(DRAFT)
+  targetAmount         Int                    // In pence
+  raisedAmount         Int                    @default(0) // In pence
+  businessContribution Int                    @default(0) // In pence (Self-funding)
+  rewardTriggered      String?
+  startDate            DateTime?
+  endDate              DateTime?
+  backerCount          Int                    @default(0)
+  
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  answers              CampaignFieldAnswer[]
+  requestedChanges     CampaignRequestedChange[]
+  contributions        Contribution[]
+  rewardAttachments    CampaignRewardAttachment[]
+
+  @@index([businessId, status])
+  @@index([templateId])
+  @@index([status, endDate])
+  @@map("business_campaigns")
+}
+
+model CampaignFieldAnswer {
+  id          String           @id @default(uuid())
+  campaignId  String
+  campaign    BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fieldId     String           // identifier matching template field ID
+  value       String           @db.Text
+  source      String           @default("business_input") // "business_input", "audit", "template", etc.
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([campaignId, fieldId])
+  @@index([campaignId])
+  @@map("campaign_field_answers")
+}
+
+model CampaignRequestedChange {
+  id          String           @id @default(uuid())
+  campaignId  String
+  campaign    BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fieldId     String
+  label       String
+  note        String           @db.Text
+  resolved    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([campaignId, resolved])
+  @@map("campaign_requested_changes")
+}
+
+// =============================================================================
+// CONTRIBUTIONS & TRANSACTION LEDGER
+// =============================================================================
+
+enum ContributionType {
+  IN_STORE
+  ONLINE
+  FUNDING_SPLIT
+  SELF_FUNDING
+}
+
+enum ContributionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Contribution {
+  id              String             @id @default(uuid())
+  businessId      String
+  business        Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  campaignId      String
+  campaign        BusinessCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  backerId        String?
+  backer          User?              @relation("UserContributions", fields: [backerId], references: [id])
+  type            ContributionType
+  status          ContributionStatus @default(COMPLETED)
+  amount          Int                // In pence
+  reference       String             @unique // POS-001, WEB-042, SPLIT-012
+  gateway         String?            // "stripe", "paypal", "mcom_wallet", "pos_terminal"
+  paymentIntentId String?
+  mcomChargeId    String?            @unique
+  metadata        Json               @default("{}")
+  createdAt       DateTime           @default(now())
+
+  @@index([businessId, createdAt(sort: Desc)])
+  @@index([campaignId, status])
+  @@index([type])
+  @@map("contributions")
+}
+
+// =============================================================================
+// REWARDS & GAMIFICATION
+//
+// Legacy `RewardDefinition` / `BusinessEarnedReward` models retired — campaign
+// rewards are authored on `CampaignTemplate.rewardsConfig` and issued/tracked
+// via `RewardIssuance` (MCOM Rewards mirror + local rewards).
+// =============================================================================
+
+// =============================================================================
+// SEASONS & CAMPAIGN CYCLES
+// =============================================================================
+
+model Season {
+  id                            String             @id @default(uuid())
+  name                          String
+  programmeName                 String?
+  referenceCode                 String?            @unique
+  description                   String?            @db.Text
+  publicDescription             String?            @db.Text
+  internalNotes                 String?            @db.Text
+  status                        String             @default("DRAFT") // DRAFT | SCHEDULED | ACTIVE | CLOSING | REVIEW | COMPLETED | ARCHIVED
+  startDate                     DateTime
+  endDate                       DateTime
+  durationDays                  Int                @default(90)
+
+  // Targets in pence
+  overallTarget                 BigInt             @default(0)
+  nationalTarget                BigInt             @default(0)
+  cityTargetDefault             BigInt             @default(0)
+  localAreaTargetDefault        BigInt             @default(0)
+  highStreetTargetDefault       BigInt             @default(0)
+  businessCampaignTargetDefault BigInt             @default(0)
+
+  // Aggregate metrics cache
+  totalRaised                   BigInt             @default(0)
+  totalContributions            Int                @default(0)
+  activeCampaigns               Int                @default(0)
+  totalParticipants             Int                @default(0)
+
+  // Configuration snapshots
+  activationScope               Json               @default("{}")
+  participationConfig           Json               @default("{}")
+  engagementConfig              Json               @default("{}")
+  spilloverConfig               Json               @default("{}")
+  communicationConfig           Json               @default("{}")
+
+  createdById                   String?
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+  activatedAt                   DateTime?
+  completedAt                   DateTime?
+  archivedAt                    DateTime?
+
+  templates                     CampaignTemplate[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("seasons")
+}
+
+// =============================================================================
+// PLATFORM EVENTS
+// =============================================================================
+
+model PlatformEvent {
+  id          String       @id @default(uuid())
+  title       String
+  description String?      @db.Text
+  scope       String       @default("NATIONAL") // NATIONAL | CITY | LOCAL
+  locationId  String?
+  location    HubLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  eventDate   DateTime
+  endDate     DateTime?
+  venue       String?
+  isPublished Boolean      @default(true)
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([eventDate])
+  @@index([scope, locationId])
+  @@index([isPublished])
+  @@map("platform_events")
+}
+
+// =============================================================================
+// PLATFORM SETTINGS
+// =============================================================================
+
+model PlatformSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  category    String   @default("general") // general | payment | fee | security | notifications
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("platform_settings")
+}
+
+// =============================================================================
+// AUDIT LOGS
+// =============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  details    Json     @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// REWARD FULFILMENT
+//
+// Legacy `RewardFulfilment` retired — reward delivery/lifecycle now lives on
+// `RewardIssuance` (status/code/expiry mirrored from MCOM Rewards).
+// =============================================================================
+
+// (removed model RewardFulfilment)
+
+// =============================================================================
+// MCOM REWARD ISSUANCES (mirror of rewards issued by the MCOM Rewards engine)
+// =============================================================================
+
+/**
+ * Local mirror of a reward issued by the MCOM Rewards provider API. The reward
+ * catalogue + fulfilment live in MCOM Rewards; FundOrDonate stores the
+ * reference (issuance id, code, status) for display and reconciliation.
+ */
+model RewardIssuance {
+  id                 String    @id @default(uuid())
+  /** Provider issuance id (unique per issuance in MCOM Rewards). */
+  externalIssuanceId String    @unique
+  mcomRewardId       String
+  rewardTitle        String?
+  rewardType         String?
+  /** Correlation ref sent to the provider (e.g. campaignId). */
+  externalRef        String?
+  /** Stable idempotency key used when issuing. */
+  idempotencyKey     String    @unique
+  campaignId         String?
+  /** Reward rule (config id within the campaign) this issuance satisfies. */
+  rewardConfigId     String?
+  /** Business-owned MCOM reward id when issued from a business's own reward. */
+  businessRewardId   String?
+  contributionId     String?
+  userId             String?
+  mcomUserId         String?
+  recipientEmail     String?
+  recipientName      String?
+  // PENDING (reserved, provider call in flight) | ISSUED | REDEEMED | EXPIRED | REVOKED | FAILED
+  status             String    @default("ISSUED")
+  code               String?
+  value              Int?
+  quantity           Int       @default(1)
+  metadata           Json?
+  expiresAt          DateTime?
+  redeemedAt         DateTime?
+  revokedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([campaignId])
+  @@index([campaignId, rewardConfigId])
+  @@index([externalRef])
+  @@index([userId])
+  @@index([mcomRewardId])
+  @@index([businessRewardId])
+  @@index([status])
+  @@map("reward_issuances")
+}
+
+/// A business-owned MCOM Rewards reward attached to a campaign the business
+/// runs. Coexists with the template-level rewards (`CampaignTemplate.
+/// rewardsConfig`); the trigger engine evaluates these independently (each on
+/// its own `conditions`) and issues them via the MCOM business-reward endpoint.
+model CampaignRewardAttachment {
+  id                String           @id @default(uuid())
+  campaignId        String
+  campaign          BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// MCOM Rewards business-reward id (from `/partner/business-rewards`).
+  businessRewardId  String
+  /// Snapshot for display (kept in sync on attach).
   title             String
   description       String?
-  totalAllocation   Int      @default(0)
-  allocatedCount    Int      @default(0)
-  opensAt           DateTime?
-  closesAt          DateTime?
-  campaignId        String?
-  campaign          Campaign? @relation(fields: [campaignId], references: [id])
-  contributionConfig String  @default("{}")
-  benefitConfig     String   @default("[]")
-  eligibilityConfig String   @default("{}")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  image             String?
+  rewardType        String?
+  /// Eligibility conditions: [{ id, mode, minPence, maxPence, exactPence }].
+  conditions        Json             @default("[]")
+  /// Evaluation mode for this attachment: "independent" | "cumulative".
+  qualificationMode String           @default("independent")
+  enabled           Boolean          @default(true)
+  /// Local cap mirror (null = provider's own cap is authoritative).
+  maxQuantity       Int?
+  expiresAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  memberships       FoundingMembership[]
-
-  @@index([locationId])
-  @@index([locationId, audience])
-  @@index([status])
+  @@unique([campaignId, businessRewardId])
   @@index([campaignId])
-  @@map("founding_programmes")
+  @@map("campaign_reward_attachments")
 }
 
-model FoundingMembership {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
-  programmeId       String
-  programme         FoundingProgramme @relation(fields: [programmeId], references: [id])
-  locationId        String
-  location          HubLocation @relation(fields: [locationId], references: [id])
-  campaignId        String?
-  campaign          Campaign? @relation(fields: [campaignId], references: [id])
-  status            String   @default("ACTIVE")
-  contributionAmount Int?
-  grantedAt         DateTime @default(now())
-  benefitsVersion   String?
+// =============================================================================
+// PAYOUT REQUESTS
+// =============================================================================
 
-  @@unique([userId, programmeId])
-  @@index([userId])
-  @@index([programmeId])
-  @@index([locationId])
-  @@map("founding_memberships")
+model PayoutRequest {
+  id                 String    @id @default(uuid())
+  businessId         String
+  business           Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  amount             Int       // In pence
+  currency           String    @default("GBP")
+  status             String    @default("PENDING") // PENDING | APPROVED | REJECTED | COMPLETED
+  method             String    @default("bank_transfer")
+  destinationDetails Json      @default("{}")
+  processedAt        DateTime?
+  rejectionReason    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([businessId, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("payout_requests")
 }
 
-model BackerStatus {
-  id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
-  statusType        String   @default("BACKER")
-  sourceCampaignId  String?
-  sourceCampaign    Campaign? @relation(fields: [sourceCampaignId], references: [id])
-  locationId        String?
-  location          HubLocation? @relation(fields: [locationId], references: [id])
-  grantedAt         DateTime @default(now())
-  visibility        String   @default("COUNTED")
-  metadata          String   @default("{}")
-
-  @@unique([userId, sourceCampaignId])
-  @@index([userId])
-  @@index([locationId])
-  @@index([sourceCampaignId])
-  @@map("backer_statuses")
-}
-
-model HubActivity {
-  id              String   @id @default(uuid())
-  locationId      String
-  location        HubLocation @relation(fields: [locationId], references: [id])
-  activityType    String   // ANNOUNCEMENT, MILESTONE, CAMPAIGN_UPDATE, FOUNDING_MILESTONE, LAUNCH, COMMUNITY
-  title           String
-  content         String?
-  media           String?
-  publicationStatus String @default("DRAFT")
-  publishedAt     DateTime?
-  visibilityScope String   @default("LOCATION")
-  createdAt       DateTime @default(now())
-
-  @@index([locationId])
-  @@index([locationId, activityType])
-  @@index([publicationStatus])
-  @@map("hub_activity")
-}
-
-model HubEvent {
-  id              String   @id @default(uuid())
-  locationId      String
-  location        HubLocation @relation(fields: [locationId], references: [id])
-  title           String
-  description     String?
-  eventDate       DateTime?
-  status          String   @default("DRAFT")
-  ctaLabel        String?
-  ctaUrl          String?
-  eligibleAudience String?  // JSON: which founding/backer audiences
-  createdAt       DateTime @default(now())
-
-  @@index([locationId])
-  @@index([eventDate])
-  @@map("hub_events")
-}
-
-model LocationStatusHistory {
-  id              String   @id @default(uuid())
-  locationId      String
-  location        HubLocation @relation(fields: [locationId], references: [id])
-  previousStatus  String?
-  newStatus       String
-  previousLifecycle String?
-  newLifecycle    String?
-  changedByUserId String?
-  reason          String?
-  createdAt       DateTime @default(now())
-
-  @@index([locationId])
-  @@index([createdAt])
-  @@map("location_status_history")
-}

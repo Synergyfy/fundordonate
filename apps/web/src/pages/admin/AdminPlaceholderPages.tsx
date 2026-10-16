@@ -22,7 +22,7 @@ export function SeasonReviewPage() {
 // ─── UK Activation ──────────────────────────────────────────────────────────
 
 export function LocalAreasPage() {
-  return <AdminPlaceholderPage title="Local Areas" description="Manage boroughs, districts, and local authority areas." groupName="UK Activation" />;
+  return <AdminPlaceholderPage title="Local Areas" description="Manage each city's local areas — Borough, District, Local Area, or whatever the city uses." groupName="UK Activation" />;
 }
 
 export function HighStreetsPage() {
@@ -43,16 +43,6 @@ export function FoundingMembersPage() {
 
 export function MembershipPage() {
   return <AdminPlaceholderPage title="Membership" description="Manage membership programmes and subscriptions." groupName="People & Participation" />;
-}
-
-// ─── Businesses & Community ─────────────────────────────────────────────────
-
-export function BusinessCampaignsPage() {
-  return <AdminPlaceholderPage title="Business Campaigns" description="Manage campaigns created by businesses." groupName="Businesses & Community" />;
-}
-
-export function InStoreContributionsPage() {
-  return <AdminPlaceholderPage title="In-Store & Community" description="Track in-store donations and community contributions." groupName="Businesses & Community" />;
 }
 
 // ─── Engagement ─────────────────────────────────────────────────────────────
@@ -107,6 +97,10 @@ export function SupportPage() {
 
 export function ModerationPage() {
   return <AdminPlaceholderPage title="Moderation" description="Review flagged content and manage moderation." groupName="Content & Communication" />;
+}
+
+export function CampaignCommsPage() {
+  return <AdminPlaceholderPage title="Campaign Communications" description="Manage campaign emails, updates and broadcasts." groupName="Content & Communication" />;
 }
 
 // ─── Analytics & Reporting ──────────────────────────────────────────────────
