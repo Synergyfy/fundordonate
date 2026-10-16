@@ -45,9 +45,12 @@ export default () => ({
     // Ecosystem peer: MCOM Rewards provider API (direct app-to-app, service mesh).
     rewardsBaseUrl: process.env.MCOM_REWARDS_BASE_URL ?? "http://localhost:4000",
     rewardsAudience: process.env.MCOM_REWARDS_AUDIENCE ?? "mcom-rewards",
-    // Shared HMAC secret for inbound MCOM Rewards lifecycle webhooks.
-    // Must match the value configured on the MCOM Rewards side.
-    rewardsWebhookSecret: process.env.MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET,
+    // Inbound lifecycle events: MCOM Rewards calls FundOrDonate with an RS256
+    // service token (audience "fundordonate"), verified offline via Central's
+    // JWKS. No shared HMAC secret is used between the apps.
+    eventIssuer: process.env.MCOM_REWARDS_EVENT_ISSUER ?? "mcom-solutions",
+    eventAudience: process.env.MCOM_REWARDS_EVENT_AUDIENCE ?? "fundordonate",
+    jwksUrl: process.env.MCOM_SOLUTIONS_JWKS_URL,
   },
   rewards: {
     // Periodic reconciliation safety net (mirror drift repair).

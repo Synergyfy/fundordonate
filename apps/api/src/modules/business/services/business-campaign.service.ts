@@ -6,13 +6,17 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
 import {
+  Business,
   BusinessCampaign,
   BusinessCampaignStatus,
+  BusinessStatus,
   CampaignTemplate,
+  MembershipTier,
   TemplateApprovalMode,
 } from "@prisma/client";
 import { CampaignQueryDto } from "../dto/campaign-query.dto";
 import { SaveCampaignAnswersDto } from "../dto/save-campaign-answers.dto";
+import { normalizeBusinessRewardsMode } from "@/modules/rewards/reward-config.util";
 
 export interface TemplateRequirementCheck {
   id: string;
@@ -29,6 +33,10 @@ export interface BusinessTemplateView {
   origin: string;
   approval: string;
   status: "available" | "locked";
+  /** Human label for the configured access model (e.g. "Automatic"). */
+  accessType: string;
+  /** The platform contribution (pence) required to unlock, if configured. */
+  contributionRequirement: { required: boolean; amount: number };
   requirements: TemplateRequirementCheck[];
   selfFunding: {
     enabled: boolean;
@@ -39,14 +47,43 @@ export interface BusinessTemplateView {
   fields: any[];
   rewards: any[];
   mcomAssets: any[];
+  businessRewardsMode: string;
 }
+
+/** The template's `config.access` block, as authored in the wizard. */
+interface TemplateAccessConfig {
+  type?: string;
+  eligibility?: string[];
+  minContribution?: string | number;
+}
+
+/** The membership tiers, lowest → highest. */
+const TIER_HIERARCHY: MembershipTier[] = [
+  MembershipTier.BRONZE,
+  MembershipTier.SILVER,
+  MembershipTier.GOLD,
+  MembershipTier.PLATINUM,
+];
+
+const gbp = (pence: number) =>
+  new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: pence % 100 === 0 ? 0 : 2,
+  }).format(pence / 100);
 
 @Injectable()
 export class BusinessCampaignService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Evaluates templates against business profile and splits into available vs locked.
+   * Evaluates the active templates against the business profile and splits them
+   * into available vs locked.
+   *
+   * Availability is driven **entirely by the template's own access rules**
+   * (`config.access.eligibility`) plus the membership-tier gate — nothing is
+   * hardcoded. This keeps the Campaign Centre in lock-step with what an admin
+   * configures in the template wizard.
    */
   async getTemplates(businessId: string): Promise<BusinessTemplateView[]> {
     const business = await this.prisma.business.findUnique({
@@ -57,42 +94,23 @@ export class BusinessCampaignService {
       throw new NotFoundException("Business not found");
     }
 
-    const templates = await this.prisma.campaignTemplate.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
+    const [templates, contributionAgg] = await Promise.all([
+      this.prisma.campaignTemplate.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      // Total the business has already contributed to the platform — used by
+      // the `min_contribution` eligibility rule.
+      this.prisma.contribution.aggregate({
+        where: { businessId, status: "COMPLETED" },
+        _sum: { amount: true },
+      }),
+    ]);
 
-    const tierHierarchy = ["BRONZE", "SILVER", "GOLD", "PLATINUM"];
-    const businessTierIndex = tierHierarchy.indexOf(business.membershipTier);
+    const contributedPence = contributionAgg._sum.amount ?? 0;
 
     return templates.map((tpl) => {
-      const minTierIndex = tierHierarchy.indexOf(tpl.minEligibilityTier);
-      const tierMet = businessTierIndex >= minTierIndex;
-      const preAuditMet = !!business.auditReference;
-      const businessAccountMet = true;
-
-      const requirements: TemplateRequirementCheck[] = [
-        {
-          id: "business_account",
-          label: "Active Business Account",
-          hint: "Your business must have an active status on FundOrDonate",
-          met: businessAccountMet,
-        },
-        {
-          id: "pre_audit",
-          label: "Public Pre-Audit Completed",
-          hint: "Your location and business profile must be verified",
-          met: preAuditMet,
-        },
-        {
-          id: "campaign_eligibility",
-          label: `Membership Tier (${tpl.minEligibilityTier} or higher)`,
-          hint: `Requires ${tpl.minEligibilityTier} membership`,
-          met: tierMet,
-        },
-      ];
-
-      const allMet = requirements.every((r) => r.met);
+      const access = this.evaluateAccess(business, tpl, contributedPence);
 
       return {
         id: tpl.id,
@@ -101,19 +119,177 @@ export class BusinessCampaignService {
         season: tpl.seasonId ?? "Current Season",
         origin: tpl.origin.toLowerCase(),
         approval: tpl.approvalMode.toLowerCase(),
-        status: allMet ? "available" : "locked",
-        requirements,
+        status: access.allMet ? "available" : "locked",
+        accessType: access.accessType,
+        contributionRequirement: {
+          required: access.contributionRequiredPence > 0,
+          amount: access.contributionRequiredPence,
+        },
+        requirements: access.requirements,
         selfFunding: {
           enabled: tpl.selfFundingEnabled,
           mode: tpl.selfFundingMode,
           amount: tpl.selfFundingAmount,
           rewardName: tpl.selfFundingRewardName,
         },
+        businessRewardsMode: normalizeBusinessRewardsMode(tpl.businessRewardsMode),
         fields: (tpl.fieldsConfig as any[]) || [],
         rewards: (tpl.rewardsConfig as any[]) || [],
         mcomAssets: (tpl.mcomAssetsConfig as any[]) || [],
       };
     });
+  }
+
+  // ── Access evaluation ─────────────────────────────────────────────────────
+
+  /** The `config.access` block authored in the template wizard (or `{}`). */
+  private templateAccess(template: CampaignTemplate): TemplateAccessConfig {
+    const access = (template.config as Record<string, unknown> | null)?.access;
+    return access && typeof access === "object"
+      ? (access as TemplateAccessConfig)
+      : {};
+  }
+
+  /**
+   * The eligibility rules to enforce. Defaults to "verified business account
+   * only" for templates predating the wizard's access step — so nothing is
+   * required that the admin did not explicitly select.
+   */
+  private templateEligibilityRules(template: CampaignTemplate): string[] {
+    const rules = this.templateAccess(template).eligibility;
+    return Array.isArray(rules) && rules.length > 0
+      ? rules.filter((r): r is string => typeof r === "string")
+      : ["business_account"];
+  }
+
+  /** The minimum platform contribution (pence) the min_contribution rule needs. */
+  private requiredContributionPence(template: CampaignTemplate): number {
+    if (template.minContributionAmount > 0) return template.minContributionAmount;
+    const pounds = Number(this.templateAccess(template).minContribution ?? 0);
+    return Number.isFinite(pounds) && pounds > 0 ? Math.round(pounds * 100) : 0;
+  }
+
+  /**
+   * Evaluates a template's access rules against a business and returns the
+   * ordered requirement checklist (shown to the business), whether every
+   * requirement is met, the access model label, and the qualifying contribution.
+   */
+  private evaluateAccess(
+    business: Business,
+    template: CampaignTemplate,
+    contributedPence: number,
+  ): {
+    requirements: TemplateRequirementCheck[];
+    allMet: boolean;
+    accessType: string;
+    contributionRequiredPence: number;
+  } {
+    const rules = this.templateEligibilityRules(template);
+    const requirements: TemplateRequirementCheck[] = [];
+
+    const membershipActive =
+      (business.membershipExpiry?.getTime() ?? 0) > Date.now() ||
+      business.membershipTier !== MembershipTier.BRONZE;
+
+    for (const rule of rules) {
+      switch (rule) {
+        case "business_account":
+          requirements.push({
+            id: "business_account",
+            label: "Verified business account",
+            hint: "Your business account must be active on FundOrDonate.",
+            met: business.status === BusinessStatus.ACTIVE,
+          });
+          break;
+        case "pre_audit":
+          requirements.push({
+            id: "pre_audit",
+            label: "Public Pre-Audit completed",
+            hint: "Complete your FundOrDonate public pre-audit and business verification.",
+            met: !!business.auditReference,
+          });
+          break;
+        case "membership_active":
+          requirements.push({
+            id: "membership_active",
+            label: "Active membership",
+            hint: "Hold an active FundOrDonate membership tier.",
+            met: membershipActive,
+          });
+          break;
+        case "package_tier":
+          requirements.push({
+            id: "package_tier",
+            label: "Purchased package tier",
+            hint: "Hold the required FundOrDonate package tier.",
+            met: membershipActive,
+          });
+          break;
+        case "min_contribution": {
+          const required = this.requiredContributionPence(template);
+          requirements.push({
+            id: "min_contribution",
+            label: `Minimum platform contribution (${gbp(required)})`,
+            hint: "Contribute at least this amount to the platform to unlock the template.",
+            met: required <= 0 || contributedPence >= required,
+          });
+          break;
+        }
+        case "admin_approval":
+          // No per-business grant store exists: this is not a template lock.
+          // Selecting it means an admin reviews the *campaign* after claiming
+          // (reflected by `approvalMode`), so it never blocks the template.
+          requirements.push({
+            id: "admin_approval",
+            label: "Admin approval",
+            hint: "An admin reviews your campaign after you claim this template.",
+            met: true,
+          });
+          break;
+        default:
+          break;
+      }
+    }
+
+    // Membership-tier gate — enforced whenever the template targets above the
+    // base tier (also covers legacy templates that have no access config).
+    requirements.push(this.tierRequirement(business, template));
+
+    return {
+      requirements,
+      allMet: requirements.every((r) => r.met),
+      accessType: this.templateAccess(template).type ?? "automatic",
+      contributionRequiredPence: rules.includes("min_contribution")
+        ? this.requiredContributionPence(template)
+        : 0,
+    };
+  }
+
+  /** The membership-tier gate, or a no-op check when the base tier suffices. */
+  private tierRequirement(
+    business: Business,
+    template: CampaignTemplate,
+  ): TemplateRequirementCheck {
+    const minTier = template.minEligibilityTier;
+    const minIndex = TIER_HIERARCHY.indexOf(minTier);
+    const businessIndex = TIER_HIERARCHY.indexOf(business.membershipTier);
+
+    // Base tier (BRONZE) accepts everyone; only above-base tiers gate access.
+    if (minIndex <= 0) {
+      return {
+        id: "campaign_eligibility",
+        label: `Membership tier (${minTier} or higher)`,
+        hint: "Your membership tier satisfies this template.",
+        met: true,
+      };
+    }
+
+    return {
+      id: "campaign_eligibility",
+      label: `Membership tier (${minTier} or higher)`,
+      hint: `Requires ${minTier} membership or higher.`,
+      met: businessIndex >= minIndex,
+    };
   }
 
   /**
@@ -137,6 +313,27 @@ export class BusinessCampaignService {
 
     if (!template || !template.isActive) {
       throw new NotFoundException("Campaign template not found or inactive");
+    }
+
+    // Enforce the template's access rules server-side (the UI hides the claim
+    // button when locked, but the API must not be bypassable).
+    const contributionAgg = await this.prisma.contribution.aggregate({
+      where: { businessId, status: "COMPLETED" },
+      _sum: { amount: true },
+    });
+    const access = this.evaluateAccess(
+      business,
+      template,
+      contributionAgg._sum.amount ?? 0,
+    );
+    if (!access.allMet) {
+      const unmet = access.requirements
+        .filter((r) => !r.met)
+        .map((r) => r.label)
+        .join(", ");
+      throw new ForbiddenException(
+        `You are not yet eligible for this template. Outstanding requirement(s): ${unmet}.`,
+      );
     }
 
     // Create the BusinessCampaign in DRAFT status
@@ -299,6 +496,9 @@ export class BusinessCampaignService {
           amount: campaign.template.selfFundingAmount,
           rewardName: campaign.template.selfFundingRewardName,
         },
+        businessRewardsMode: normalizeBusinessRewardsMode(
+          campaign.template.businessRewardsMode,
+        ),
         fields: (campaign.template.fieldsConfig as any[]) || [],
         rewards: (campaign.template.rewardsConfig as any[]) || [],
         mcomAssets: (campaign.template.mcomAssetsConfig as any[]) || [],

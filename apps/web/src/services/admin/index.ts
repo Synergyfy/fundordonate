@@ -248,7 +248,15 @@ export const adminService = {
 
   /** Browse the MCOM Rewards catalogue (proxied through the service mesh). */
   async getMcomRewards(
-    params: { page?: number; limit?: number; search?: string; rewardType?: string; audience?: string } = {},
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      rewardType?: string;
+      audience?: string;
+      /** Filter by source, e.g. "mcom vault" for admin/MCOM-created rewards. */
+      source?: string;
+    } = {},
   ): Promise<McomRewardCataloguePage> {
     return api.get("/admin/mcom-rewards", { params });
   },

@@ -78,6 +78,7 @@ import {
 import {
   adaptAdminTemplateToMaster,
   buildTemplatePayload,
+  type BusinessRewardsMode,
   type MasterTemplate,
   type TemplateLifecycle,
 } from "@/services/templates";
@@ -180,6 +181,7 @@ function mcomItemToLibraryReward(item: McomCatalogueReward): LibraryReward {
     valueGbp: item.value ?? null,
     audience: mcomRewardAudience(item.audience),
     source: "mcom",
+    mcomSource: item.source,
     status: "active",
     defaultDelivery: "mcom_asset",
     uses: 0,
@@ -397,7 +399,7 @@ const ELIGIBILITY_RULES: { id: string; label: string; description: string; icon:
   { id: "membership_active", label: "Active membership", description: "Business must hold an active membership tier.", icon: <BadgeCheck className="h-4 w-4" /> },
   { id: "package_tier", label: "Purchased package", description: "Business must hold the required package tier.", icon: <Package className="h-4 w-4" /> },
   { id: "min_contribution", label: "Minimum platform contribution", description: "Business must have contributed at least £100 to the platform.", icon: <Wallet className="h-4 w-4" /> },
-  { id: "admin_approval", label: "Admin approval required", description: "An Admin must approve each business before access is granted.", icon: <UserCheck className="h-4 w-4" /> },
+  { id: "admin_approval", label: "Admin review after claiming", description: "An Admin reviews the campaign after it is claimed. Does not lock the template.", icon: <UserCheck className="h-4 w-4" /> },
 ];
 
 const ACCESS_PRESETS: { id: string; label: string; rules: string[]; type: AccessTypeId }[] = [
@@ -863,7 +865,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
       : {
           type: "automatic",
           eligibility: ["business_account"],
-          minContributionEnabled: true,
+          minContributionEnabled: false,
           minContribution: "100",
           accessAsReward: false,
           accessRewardThreshold: "100",
@@ -923,6 +925,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           valueGbp: templateReward.valueGbp ?? null,
           audience: (templateReward.audience as RewardAudience) ?? "both",
           source: "mcom",
+          mcomSource: templateReward.mcomSource ?? null,
           status: "active",
           defaultDelivery: "mcom_asset",
           uses: 0,
@@ -966,6 +969,11 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
 
   // Area 4 — Reward qualification mode (per-contribution vs cumulative)
   const [qualificationMode, setQualificationMode] = useState<"highest" | "cumulative">("highest");
+
+  // Area 4 — May a business claiming this template attach its own MCOM Rewards?
+  const [businessRewardsMode, setBusinessRewardsMode] = useState<BusinessRewardsMode>(
+    existing?.businessRewardsMode ?? "disabled"
+  );
 
   // Area 4 — Connected Internal Assets (spec step 11)
   const [connectedServiceIds, setConnectedServiceIds] = useState<string[]>(() => {
@@ -1285,7 +1293,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     setMcomError("");
     setMcomLoading(true);
     adminApi
-      .getMcomRewards({ limit: 100 })
+      .getMcomRewards({ limit: 100, source: "mcom vault" })
       .then((res) => setMcomItems(res?.data ?? []))
       .catch((err) =>
         setMcomError(err instanceof Error ? err.message : "Failed to load MCOM Rewards"),
@@ -1431,6 +1439,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           rule: buildRewardRule(entry.conditions),
           source: entry.reward.source,
           mcomRewardId: entry.reward.mcomRewardId ?? null,
+          mcomSource: entry.reward.mcomSource ?? null,
           valueGbp: entry.reward.valueGbp,
           audience: entry.reward.audience,
           delivery: entry.delivery.method,
@@ -1455,6 +1464,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           name: s.name,
           type: getMcomGroupMeta(s.group).label,
         })),
+        businessRewardsMode,
         campaignTypeName:
           CAMPAIGN_TYPES.find((t) => t.id === campaignType)?.label ?? "Fund",
         lifecycle,
@@ -2644,6 +2654,65 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
               the reward stays in the library for other campaigns.
             </Callout>
           )}
+
+          <Panel
+            title="Business-owned rewards"
+            description="Rewards the business itself created in MCOM Rewards — and how they interact with the template rewards above."
+          >
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(
+                [
+                  {
+                    id: "disabled",
+                    label: "Disabled",
+                    hint: "Businesses cannot add their own rewards.",
+                  },
+                  {
+                    id: "coexist",
+                    label: "Alongside",
+                    hint: "Businesses may add theirs; template rewards still apply.",
+                  },
+                  {
+                    id: "replace",
+                    label: "Instead of",
+                    hint: "The business's own rewards replace the template rewards.",
+                  },
+                ] as { id: BusinessRewardsMode; label: string; hint: string }[]
+              ).map((opt) => {
+                const active = businessRewardsMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setBusinessRewardsMode(opt.id)}
+                    className={`rounded-lg border p-3 text-left transition-colors ${
+                      active
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                          active ? "border-primary-600 bg-primary-600" : "border-gray-300"
+                        }`}
+                      >
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-500">{opt.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {businessRewardsMode === "replace" && (
+              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                If a business hasn&apos;t attached any of its own rewards, the template rewards above
+                still apply.
+              </p>
+            )}
+          </Panel>
         </div>
       )}
 
@@ -4281,11 +4350,12 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
               <div>
                 <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
                   <Store className="h-5 w-5 text-primary-600" />
-                  MCOM Rewards
+                  MCOM Vault Rewards
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Rewards are owned by the MCOM Rewards engine. Select the ones this campaign
-                  offers — they are issued to contributors when they qualify.
+                  Admin-created rewards from the MCOM Rewards vault. Select the ones this
+                  campaign offers — they are gifted to contributors on the platform's behalf
+                  when they qualify. The contributor needs an MCOM account to receive one.
                 </p>
               </div>
               <button

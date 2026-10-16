@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
 import { BusinessCampaignStatus, ContributionStatus } from "@prisma/client";
 import { BusinessLeaderboardService } from "./business-leaderboard.service";
+import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
 
 export interface DashboardOverviewResponse {
   stats: {
@@ -45,7 +46,9 @@ export class BusinessDashboardService {
       select: {
         id: true,
         name: true,
+        email: true,
         membershipTier: true,
+        owner: { select: { id: true, email: true, mcomUserId: true } },
       },
     });
 
@@ -58,7 +61,6 @@ export class BusinessDashboardService {
       contributionAgg,
       activeCampaignCount,
       backerCount,
-      campaignIdRows,
       recentCampaigns,
       teaserTemplate,
       rankInfo,
@@ -88,12 +90,6 @@ export class BusinessDashboardService {
           businessId,
           status: ContributionStatus.COMPLETED,
         },
-      }),
-
-      // Campaign ids (used to count rewards issued for this business)
-      this.prisma.businessCampaign.findMany({
-        where: { businessId },
-        select: { id: true },
       }),
 
       // Recent active campaigns
@@ -136,13 +132,15 @@ export class BusinessDashboardService {
 
     const totalContributed = contributionAgg._sum.amount ?? 0;
 
-    // Rewards issued for this business's campaigns (MCOM Rewards + local mirror)
-    const campaignIds = campaignIdRows.map((c) => c.id);
-    const rewardsCount = campaignIds.length
-      ? await this.prisma.rewardIssuance.count({
-          where: { campaignId: { in: campaignIds } },
-        })
-      : 0;
+    // Rewards the owner earned (MCOM Rewards + local mirror). Scoped to the
+    // owner's identity — rewards belong to the person, not the campaign.
+    const rewardsCount = await this.prisma.rewardIssuance.count({
+      where: businessRewardOwnershipWhere({
+        userId: business.owner.id,
+        emails: [business.owner.email, business.email],
+        mcomUserId: business.owner.mcomUserId,
+      }),
+    });
 
     return {
       stats: {

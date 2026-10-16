@@ -1,10 +1,14 @@
 import api from "../api";
 import type {
+  AttachCampaignRewardDto,
   BusinessTemplateView,
   Campaign,
   CampaignDetailData,
   CampaignQueryDto,
+  CampaignRewardAttachment,
+  CampaignRewardAttachmentsResponse,
   Category,
+  McomBusinessReward,
   PaginatedCampaigns,
   PaginatedResponse,
   SaveCampaignAnswersDto,
@@ -38,6 +42,48 @@ export const campaignService = {
 
   async submitForReview(campaignId: string): Promise<{ status: string }> {
     return api.post(`/business/campaigns/${campaignId}/submit`);
+  },
+
+  // ── Business-owned MCOM Rewards (attach to a campaign) ──
+
+  /** Live list of rewards this business created in MCOM Rewards. */
+  async getAvailableBusinessRewards(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    rewardType?: string;
+  }): Promise<{
+    business: { id: string; name: string; email: string; mcomUserId: string | null };
+    data: McomBusinessReward[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    return api.get("/business/rewards/available", { params });
+  },
+
+  async getCampaignRewardAttachments(
+    campaignId: string,
+  ): Promise<CampaignRewardAttachmentsResponse> {
+    return api.get(`/business/campaigns/${campaignId}/reward-attachments`);
+  },
+
+  async attachCampaignReward(
+    campaignId: string,
+    dto: AttachCampaignRewardDto,
+  ): Promise<CampaignRewardAttachment> {
+    return api.post(`/business/campaigns/${campaignId}/reward-attachments`, dto);
+  },
+
+  async detachCampaignReward(
+    campaignId: string,
+    attachmentId: string,
+  ): Promise<{ success: boolean; deletedId: string }> {
+    return api.delete(
+      `/business/campaigns/${campaignId}/reward-attachments/${attachmentId}`,
+    );
   },
 
   // ── General Campaign Directory & Lifecycle ──

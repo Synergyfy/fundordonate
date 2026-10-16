@@ -220,8 +220,12 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
           </div>
         )}
 
-        {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
-        {!showPayment ? (
+        {/* Continue — the payment panel is rendered OUTSIDE this <form> (below)
+            so its own Stripe <form> is never nested inside another <form>.
+            A submit event on a nested form does not bubble, so React's
+            onSubmit/preventDefault never runs and the browser performs a
+            native submit — reloading the page and jumping back to the top. */}
+        {!showPayment && (
           <button
             type="submit"
             disabled={pledgeAmount <= 0}
@@ -229,48 +233,51 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
           >
             Continue to Payment {formatCurrency(totalAmount) || "£0"}
           </button>
-        ) : (
-          <div className="space-y-3 border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-900">
-                Pledge {formatCurrency(totalAmount)}
-                {selectedReward && (
-                  <span className="ml-2 text-xs font-normal text-gray-500">
-                    · {selectedReward.title}
-                  </span>
-                )}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowPayment(false)}
-                className="text-xs font-semibold text-gray-500 hover:text-gray-700"
-              >
-                ← Edit pledge
-              </button>
-            </div>
-            <McomCheckoutPanel
-              amountPence={totalAmount}
-              purpose="PLEDGE"
-              campaignId={campaignId}
-              rewardId={selectedRewardId || undefined}
-              notes={notes || undefined}
-              formatGbp={formatCurrency}
-              metadata={{
-                campaignTitle,
-                rewardTitle: selectedReward?.title,
-                bonusSupportPence: bonusAmount,
-                contributionType: contributionType || "backer",
-                hierarchyLevel: hierarchyLevel || undefined,
-              }}
-              onSuccess={(result) => {
-                navigate(
-                  `/thank-you?reference=${encodeURIComponent(result.reference)}&type=pledge&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
-                );
-              }}
-            />
-          </div>
         )}
       </form>
+
+      {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
+      {showPayment && (
+        <div className="mt-6 space-y-3 border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">
+              Pledge {formatCurrency(totalAmount)}
+              {selectedReward && (
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  · {selectedReward.title}
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPayment(false)}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+            >
+              ← Edit pledge
+            </button>
+          </div>
+          <McomCheckoutPanel
+            amountPence={totalAmount}
+            purpose="PLEDGE"
+            campaignId={campaignId}
+            rewardId={selectedRewardId || undefined}
+            notes={notes || undefined}
+            formatGbp={formatCurrency}
+            metadata={{
+              campaignTitle,
+              rewardTitle: selectedReward?.title,
+              bonusSupportPence: bonusAmount,
+              contributionType: contributionType || "backer",
+              hierarchyLevel: hierarchyLevel || undefined,
+            }}
+            onSuccess={(result) => {
+              navigate(
+                `/thank-you?reference=${encodeURIComponent(result.reference)}&type=pledge&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
+              );
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { BusinessTemplateView } from "@/services/campaign/type";
+import { normalizeBusinessRewardsMode } from "@/services/templates";
 
 const formatGbp = (n: number) =>
   new Intl.NumberFormat("en-GB", {
@@ -82,6 +83,7 @@ export function BusinessTemplateCard({
 
   const accessLabel = t.accessType || "Open";
   const hasContributionReq = t.contributionRequirement?.required;
+  const rewardsMode = normalizeBusinessRewardsMode(t.businessRewardsMode);
 
   return (
     <div className="rounded-xl border bg-white p-5 shadow-sm">
@@ -119,6 +121,15 @@ export function BusinessTemplateCard({
         <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
         Permission to use · Admin owns this master template
       </p>
+
+      {rewardsMode !== "disabled" && (
+        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary-700">
+          <GiftIcon className="h-3.5 w-3.5 shrink-0" />
+          {rewardsMode === "replace"
+            ? "Use your own MCOM Rewards — they replace the template rewards"
+            : "Add your own MCOM Rewards alongside the template rewards"}
+        </p>
+      )}
 
       {t.requirements && t.requirements.length > 0 && (
         <ul className="mb-4 divide-y divide-gray-100">

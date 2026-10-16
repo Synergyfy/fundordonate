@@ -365,6 +365,7 @@ export interface AdminCampaignTemplate {
   selfFundingMode: string;
   selfFundingAmount: number;
   selfFundingRewardName?: string | null;
+  businessRewardsMode?: string;
   fieldsConfig: any[];
   rewardsConfig: any[];
   mcomAssetsConfig: any[];
@@ -449,6 +450,7 @@ export interface CreateCampaignTemplatePayload {
   selfFundingMode?: string;
   selfFundingAmount?: number;
   selfFundingRewardName?: string;
+  businessRewardsMode?: string;
   fieldsConfig?: any[];
   rewardsConfig?: any[];
   mcomAssetsConfig?: any[];

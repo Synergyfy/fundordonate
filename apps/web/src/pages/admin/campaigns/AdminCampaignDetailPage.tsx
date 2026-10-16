@@ -78,7 +78,7 @@ export function summarizeCoverage(cov?: CampaignCoverage | null): string {
   return parts.join(", ") || "No locations";
 }
 
-const getAdminCampaignPublicPath = (c: any) => `/campaigns/${c?.slug || c?.id}`;
+const getAdminCampaignPublicPath = (c: any) => `/campaigns/${c?.id}`;
 
 // ───────────────────── Types ─────────────────────
 

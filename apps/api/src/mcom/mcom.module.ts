@@ -5,6 +5,7 @@ import { EntitlementService } from "./entitlement.service";
 import { McomPaymentsService } from "./mcom-payments.service";
 import { RewardsClient } from "./rewards-client.service";
 import { McomRewardsWebhookService } from "./mcom-rewards-webhook.service";
+import { McomEventVerifierService } from "./mcom-event-verifier.service";
 
 @Global()
 @Module({
@@ -15,6 +16,7 @@ import { McomRewardsWebhookService } from "./mcom-rewards-webhook.service";
     McomPaymentsService,
     RewardsClient,
     McomRewardsWebhookService,
+    McomEventVerifierService,
   ],
   exports: [
     TokenCipher,
@@ -23,6 +25,7 @@ import { McomRewardsWebhookService } from "./mcom-rewards-webhook.service";
     McomPaymentsService,
     RewardsClient,
     McomRewardsWebhookService,
+    McomEventVerifierService,
   ],
 })
 export class McomModule {}

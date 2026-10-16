@@ -174,6 +174,12 @@ export interface LibraryReward {
   tags: string[];
   /** MCOM Rewards provider id — set only when `source === "mcom"`. */
   mcomRewardId?: string | null;
+  /**
+   * MCOM Rewards provider source (e.g. "mcom vault" for admin/MCOM-created
+   * rewards). When "mcom vault", the reward is gifted to contributors on behalf
+   * of the platform.
+   */
+  mcomSource?: string | null;
 }
 
 export const REWARD_CATEGORY_META: Record<RewardCategory, { label: string; color: string }> = {

@@ -106,7 +106,6 @@ export class BusinessContributionService {
   }> {
     const campaign = await this.prisma.businessCampaign.findFirst({
       where: { id: campaignId, businessId },
-      include: { template: true },
     });
 
     if (!campaign) {
@@ -116,8 +115,6 @@ export class BusinessContributionService {
     const reference = `SELF-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 1000,
     )}`;
-
-    const rewardName = campaign.template.selfFundingRewardName;
 
     let contributionId = "";
 
@@ -137,13 +134,14 @@ export class BusinessContributionService {
       });
       contributionId = contribution.id;
 
-      // 2. Increment campaign raised and self-contribution amounts
+      // 2. Increment campaign raised and self-contribution amounts. Self-funding
+      //    no longer unlocks rewards — the campaign runner is not eligible for
+      //    rewards from their own campaign.
       const updateResult = await tx.businessCampaign.updateMany({
         where: { id: campaignId, businessId },
         data: {
           businessContribution: { increment: dto.amount },
           raisedAmount: { increment: dto.amount },
-          rewardTriggered: rewardName ?? campaign.rewardTriggered,
         },
       });
 
@@ -153,13 +151,13 @@ export class BusinessContributionService {
     });
 
     // 3. Queue reward evaluation (durable + retried; never blocks the
-    //    contribution).
+    //    contribution). The runner is excluded as a recipient by the trigger.
     await this.rewardIssuanceQueue.enqueueContribution(contributionId);
 
     return {
       reference,
       contributed: dto.amount,
-      rewardTriggered: rewardName ?? null,
+      rewardTriggered: null,
     };
   }
 }

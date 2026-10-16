@@ -324,7 +324,7 @@ export class PaymentsService {
     await this.prisma.$transaction(async (tx) => {
       const c = await tx.contribution.findUnique({
         where: { id: contributionId },
-        include: { campaign: { include: { template: true } } },
+        include: { campaign: true },
       });
 
       if (!c || c.status === ContributionStatus.COMPLETED) {
@@ -341,7 +341,6 @@ export class PaymentsService {
 
       if (c.campaignId) {
         const isSelfFund = c.type === ContributionType.SELF_FUNDING;
-        const rewardName = isSelfFund ? c.campaign?.template?.selfFundingRewardName : null;
 
         const previousCount = c.backerId
           ? await tx.contribution.count({
@@ -355,13 +354,14 @@ export class PaymentsService {
           : 0;
         const isNewBacker = !isSelfFund && previousCount === 0;
 
+        // Note: self-funding no longer stamps `rewardTriggered` — the campaign
+        // runner is not eligible for rewards from their own campaign.
         await tx.businessCampaign.update({
           where: { id: c.campaignId },
           data: {
             raisedAmount: { increment: c.amount },
             ...(isNewBacker ? { backerCount: { increment: 1 } } : {}),
             businessContribution: isSelfFund ? { increment: c.amount } : undefined,
-            ...(rewardName ? { rewardTriggered: rewardName } : {}),
           },
         });
       }

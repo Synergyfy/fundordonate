@@ -39,6 +39,10 @@ export interface BusinessTemplateView {
   origin: string;
   approval: string;
   status: "available" | "locked";
+  /** Human label for the configured access model (e.g. "Automatic"). */
+  accessType: string;
+  /** The platform contribution (pence) required to unlock, if configured. */
+  contributionRequirement: { required: boolean; amount: number };
   requirements: TemplateRequirementCheck[];
   selfFunding: {
     enabled: boolean;
@@ -49,6 +53,7 @@ export interface BusinessTemplateView {
   fields: SetupFieldBlueprint[];
   rewards: TemplateRewardBlueprint[];
   mcomAssets: TemplateAssetBlueprint[];
+  businessRewardsMode?: string;
 }
 
 export interface MyCampaignItem {
@@ -112,6 +117,7 @@ export interface CampaignDetailData {
     fields: SetupFieldBlueprint[];
     rewards: TemplateRewardBlueprint[];
     mcomAssets: TemplateAssetBlueprint[];
+    businessRewardsMode?: string;
   };
   answers: CampaignFieldAnswerItem[];
   changes: CampaignRequestedChangeItem[];
@@ -126,6 +132,58 @@ export interface CampaignFieldAnswerDto {
 
 export interface SaveCampaignAnswersDto {
   answers: CampaignFieldAnswerDto[];
+}
+
+// ── Business-owned MCOM Rewards (attach to a campaign) ──
+
+export interface McomBusinessReward {
+  id: string;
+  title: string;
+  description?: string | null;
+  image?: string | null;
+  rewardType?: string | null;
+  status?: string;
+  quantity?: number | null;
+  remainingQuantity?: number | null;
+}
+
+export interface RewardConditionDto {
+  id?: string;
+  mode?: string;
+  minPence?: number | null;
+  maxPence?: number | null;
+  exactPence?: number | null;
+}
+
+export interface CampaignRewardAttachment {
+  id: string;
+  campaignId: string;
+  businessRewardId: string;
+  title: string;
+  description?: string | null;
+  image?: string | null;
+  rewardType?: string | null;
+  conditions: RewardConditionDto[];
+  qualificationMode: string;
+  enabled: boolean;
+  maxQuantity?: number | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignRewardAttachmentsResponse {
+  businessRewardsMode: string;
+  templateRewards: TemplateRewardBlueprint[];
+  attachments: CampaignRewardAttachment[];
+}
+
+export interface AttachCampaignRewardDto {
+  businessRewardId: string;
+  conditions?: RewardConditionDto[];
+  qualificationMode?: "independent" | "cumulative";
+  maxQuantity?: number;
+  expiresAt?: string;
 }
 
 export interface CampaignQueryDto {

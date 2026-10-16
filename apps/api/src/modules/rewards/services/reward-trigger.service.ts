@@ -2,7 +2,11 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ContributionStatus, ContributionType, type RewardIssuance } from "@prisma/client";
 import { PrismaService } from "@/prisma/prisma.service";
 import { RewardEngineService } from "./reward-engine.service";
-import { effectiveConditions } from "../reward-config.util";
+import {
+  effectiveConditions,
+  businessRewardsReplaceTemplate,
+  isPlatformGiftReward,
+} from "../reward-config.util";
 
 /**
  * Shape of a reward config entry as persisted in `CampaignTemplate.rewardsConfig`
@@ -25,6 +29,8 @@ interface StoredRewardConfig {
   rule?: string;
   source?: string; // "mcom" | "fundordonate"
   mcomRewardId?: string | null;
+  /** Provider source for MCOM rewards (e.g. "mcom vault" = admin-created). */
+  mcomSource?: string | null;
   rewardCategory?: string;
   valueGbp?: number | null;
   audience?: string;
@@ -37,6 +43,15 @@ interface StoredRewardConfig {
   quantityLimit?: number | string | null;
   availableFrom?: string | null;
   availableUntil?: string | null;
+}
+
+/** The fields of a `User` needed to identify a reward recipient/owner. */
+interface RewardRecipientUser {
+  id?: string;
+  mcomUserId: string | null;
+  email: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 /**
@@ -97,7 +112,7 @@ export class RewardTriggerService {
         include: {
           backer: true,
           campaign: {
-            include: { template: true, business: { include: { owner: true } } },
+            include: { template: true, business: { include: { owner: true } }, rewardAttachments: { where: { enabled: true } } },
           },
         },
         orderBy: { createdAt: "asc" },
@@ -138,7 +153,7 @@ export class RewardTriggerService {
       include: {
         backer: true,
         campaign: {
-          include: { template: true, business: { include: { owner: true } } },
+          include: { template: true, business: { include: { owner: true } }, rewardAttachments: { where: { enabled: true } } },
         },
       },
     });
@@ -155,80 +170,110 @@ export class RewardTriggerService {
     strict = false,
     precomputedCumulative?: number,
   ): Promise<RewardIssuance[]> {
-    const template = contribution.campaign?.template;
-    if (!template) return [];
-
-    const configs = Array.isArray(template.rewardsConfig)
-      ? (template.rewardsConfig as unknown as StoredRewardConfig[])
-      : [];
-    if (configs.length === 0) return [];
-
     const recipient = this.resolveRecipient(contribution);
     if (!recipient) {
-      this.logger.warn(
-        `No recipient resolved for contribution ${contribution.id} — reward not issued`,
+      this.logger.log(
+        `No eligible recipient for contribution ${contribution.id} — reward not issued`,
       );
       return [];
     }
 
-    // Build the qualifying candidates (availability-window + condition match),
-    // anchored on the contribution time.
-    const candidates: Array<{ cfg: StoredRewardConfig; amount: number }> = [];
-    for (const cfg of configs) {
-      if (!cfg || typeof cfg !== "object") continue;
-      if (!this.isAvailable(cfg, contribution.createdAt)) continue;
-
-      const amount = await this.qualifyingAmount(cfg, contribution, precomputedCumulative);
-      if (!this.matches(amount, cfg)) continue;
-      candidates.push({ cfg, amount });
-    }
-
-    if (candidates.length === 0) return [];
-
-    // "highest" issues only the single best-matching reward; "cumulative"
-    // (and any legacy default) keeps issuing every matching reward.
-    const mode = (configs[0]?.qualificationMode ?? "").toLowerCase();
-    const selected = mode === "cumulative" ? candidates : [this.highest(candidates)];
-
     const issued: RewardIssuance[] = [];
 
-    for (const { cfg } of selected) {
-      const limit = this.limitOf(cfg);
+    const template = contribution.campaign?.template;
+    const configs =
+      template && Array.isArray(template.rewardsConfig)
+        ? (template.rewardsConfig as unknown as StoredRewardConfig[])
+        : [];
 
-      if (cfg.source === "mcom" && cfg.mcomRewardId) {
-        const input = {
-          mcomRewardId: cfg.mcomRewardId,
-          recipient,
-          campaignId: contribution.campaignId,
-          contributionId: contribution.id,
-          userId: contribution.backerId ?? undefined,
-          rewardConfigId: cfg.id,
-          limit,
-          metadata: { rewardName: cfg.name, rule: cfg.rule, source: "mcom" },
-        };
-        const record = strict
-          ? await this.rewardEngine.issue(input)
-          : await this.rewardEngine.issueBestEffort(input);
-        if (record) issued.push(record);
-      } else {
-        const input = {
-          rewardRefId: cfg.id ?? cfg.mcomRewardId ?? "local-reward",
-          rewardTitle: cfg.name,
-          recipient,
-          campaignId: contribution.campaignId,
-          contributionId: contribution.id,
-          userId: contribution.backerId ?? undefined,
-          rewardConfigId: cfg.id,
-          limit,
-          value: cfg.valueGbp ?? null,
-          metadata: { rewardName: cfg.name, rule: cfg.rule, source: "fundordonate" },
-        };
-        const record = strict
-          ? await this.rewardEngine.issueLocal(input)
-          : await this.rewardEngine.issueLocalBestEffort(input);
-        if (record) issued.push(record);
+    // "replace" mode: when the business has attached at least one of its own
+    // rewards, those supersede the template rewards. If it hasn't attached any,
+    // we fall back to the template rewards so contributors never get nothing.
+    const enabledAttachments = contribution.campaign?.rewardAttachments ?? [];
+    const skipTemplateRewards =
+      businessRewardsReplaceTemplate(template?.businessRewardsMode) &&
+      enabledAttachments.length > 0;
+
+    // ── 1) Template-level rewards (existing behaviour) ───────────────────
+    if (configs.length > 0 && !skipTemplateRewards) {
+      // Build the qualifying candidates (availability-window + condition match),
+      // anchored on the contribution time.
+      const candidates: Array<{ cfg: StoredRewardConfig; amount: number }> = [];
+      for (const cfg of configs) {
+        if (!cfg || typeof cfg !== "object") continue;
+        if (!this.isAvailable(cfg, contribution.createdAt)) continue;
+
+        const amount = await this.qualifyingAmount(cfg, contribution, precomputedCumulative);
+        if (!this.matches(amount, cfg)) continue;
+        candidates.push({ cfg, amount });
+      }
+
+      if (candidates.length > 0) {
+        // "highest" issues only the single best-matching reward; "cumulative"
+        // (and any legacy default) keeps issuing every matching reward.
+        const mode = (configs[0]?.qualificationMode ?? "").toLowerCase();
+        const selected = mode === "cumulative" ? candidates : [this.highest(candidates)];
+
+        for (const { cfg } of selected) {
+          const limit = this.limitOf(cfg);
+
+          if (cfg.source === "mcom" && cfg.mcomRewardId) {
+            const input = {
+              mcomRewardId: cfg.mcomRewardId,
+              recipient,
+              campaignId: contribution.campaignId,
+              contributionId: contribution.id,
+              userId: contribution.backerId ?? undefined,
+              rewardConfigId: cfg.id,
+              limit,
+              metadata: { rewardName: cfg.name, rule: cfg.rule, source: "mcom" },
+            };
+            // Admin/MCOM-created ("mcom vault") rewards are gifted on behalf of
+            // the platform (app-level token, no sponsor business); other MCOM
+            // catalogue rewards are issued against the campaign business's
+            // entitlement.
+            const record = isPlatformGiftReward(cfg)
+              ? strict
+                ? await this.rewardEngine.issuePlatformGift(input)
+                : await this.rewardEngine.issuePlatformGiftBestEffort(input)
+              : strict
+                ? await this.rewardEngine.issue(input)
+                : await this.rewardEngine.issueBestEffort(input);
+            if (record) issued.push(record);
+          } else {
+            const input = {
+              rewardRefId: cfg.id ?? cfg.mcomRewardId ?? "local-reward",
+              rewardTitle: cfg.name,
+              recipient,
+              campaignId: contribution.campaignId,
+              contributionId: contribution.id,
+              userId: contribution.backerId ?? undefined,
+              rewardConfigId: cfg.id,
+              limit,
+              value: cfg.valueGbp ?? null,
+              metadata: { rewardName: cfg.name, rule: cfg.rule, source: "fundordonate" },
+            };
+            const record = strict
+              ? await this.rewardEngine.issueLocal(input)
+              : await this.rewardEngine.issueLocalBestEffort(input);
+            if (record) issued.push(record);
+          }
+        }
       }
     }
+
+    // ── 2) Business-owned rewards attached to the campaign (independent) ──
+    // Each attachment is evaluated on its own conditions and issued via the
+    // MCOM business-reward endpoint; it does NOT join the template's
+    // highest/cumulative selection.
+    issued.push(
+      ...(await this.evaluateAttachments(
+        contribution,
+        recipient,
+        strict,
+        precomputedCumulative,
+      )),
+    );
 
     if (issued.length > 0) {
       this.logger.log(
@@ -238,30 +283,117 @@ export class RewardTriggerService {
     return issued;
   }
 
+  /** Evaluate the campaign's business-owned reward attachments. */
+  private async evaluateAttachments(
+    contribution: any,
+    recipient: { email?: string; mcomUserId?: string; name?: string },
+    strict: boolean,
+    precomputedCumulative?: number,
+  ): Promise<RewardIssuance[]> {
+    const attachments: Array<{
+      id: string;
+      businessRewardId: string;
+      title: string;
+      conditions?: StoredCondition[];
+      qualificationMode?: string;
+      maxQuantity?: number | null;
+      expiresAt?: Date | null;
+      enabled?: boolean;
+    }> = contribution.campaign?.rewardAttachments ?? [];
+
+    if (attachments.length === 0) return [];
+
+    const issued: RewardIssuance[] = [];
+
+    for (const att of attachments) {
+      if (att.enabled === false) continue;
+      if (att.expiresAt && contribution.createdAt > att.expiresAt) continue;
+
+      const cfg: StoredRewardConfig = {
+        id: att.id,
+        name: att.title,
+        conditions: att.conditions,
+        qualificationMode: att.qualificationMode,
+      };
+
+      const amount = await this.qualifyingAmount(
+        cfg,
+        contribution,
+        precomputedCumulative,
+      );
+      if (!this.matches(amount, cfg)) continue;
+
+      const input = {
+        businessRewardId: att.businessRewardId,
+        rewardConfigId: att.id,
+        rewardTitle: att.title,
+        recipient,
+        campaignId: contribution.campaignId,
+        contributionId: contribution.id,
+        userId: contribution.backerId ?? undefined,
+        limit: att.maxQuantity ?? null,
+        expiresAt: att.expiresAt ? new Date(att.expiresAt).toISOString() : undefined,
+        metadata: {
+          rewardName: att.title,
+          source: "mcom-business",
+          attachmentId: att.id,
+        },
+      };
+
+      const record = strict
+        ? await this.rewardEngine.issueBusinessReward(input)
+        : await this.rewardEngine.issueBusinessRewardBestEffort(input);
+      if (record) issued.push(record);
+    }
+
+    return issued;
+  }
+
   /**
-   * The contributor (backer). Only a self-funding contribution (which has no
-   * external backer) falls back to the business owner — an anonymous/guest
-   * donation must NOT be attributed to the campaign owner.
+   * The contributor (backer) eligible for a reward.
+   *
+   * The person **running the campaign** (the campaign business's owner) is never
+   * eligible for a reward from their own campaign — regardless of whether they
+   * self-fund it or contribute online to it. A self-funding contribution has no
+   * external backer, so it resolves to the owner and is then excluded here; an
+   * owner's own online donation resolves to the owner as the backer and is
+   * excluded the same way. An anonymous/guest donation is likewise never
+   * attributed to the campaign owner.
    */
   private resolveRecipient(contribution: {
+    id?: string;
     type?: string;
-    backer: { mcomUserId: string | null; email: string; firstName: string | null; lastName: string | null } | null;
-    campaign: {
-      business: {
-        owner: { mcomUserId: string | null; email: string; firstName: string | null; lastName: string | null };
-      } | null;
-    } | null;
+    backer: RewardRecipientUser | null;
+    campaign: { business: { owner: RewardRecipientUser } | null } | null;
   }): { email?: string; mcomUserId?: string; name?: string } | null {
     const isSelfFunding = contribution.type === ContributionType.SELF_FUNDING;
-    const owner = isSelfFunding ? contribution.campaign?.business?.owner ?? null : null;
-    const user = contribution.backer ?? owner;
+    const owner = contribution.campaign?.business?.owner ?? null;
+    const user = contribution.backer ?? (isSelfFunding ? owner : null);
     if (!user) return null;
+
+    if (owner && this.isSameUser(user, owner)) {
+      this.logger.log(
+        `Campaign runner is not eligible for rewards on their own campaign — skipping rewards for contribution ${contribution.id ?? "n/a"}`,
+      );
+      return null;
+    }
+
     const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
     return {
       mcomUserId: user.mcomUserId ?? undefined,
       email: user.email ?? undefined,
       name: name || undefined,
     };
+  }
+
+  /** Whether two user identities refer to the same person. */
+  private isSameUser(a: RewardRecipientUser, b: RewardRecipientUser): boolean {
+    if (a.id && b.id && a.id === b.id) return true;
+    if (a.mcomUserId && b.mcomUserId && a.mcomUserId === b.mcomUserId) return true;
+    if (a.email && b.email && a.email.toLowerCase() === b.email.toLowerCase()) {
+      return true;
+    }
+    return false;
   }
 
   /** Per-contribution amount, or the cumulative total for cumulative rules. */

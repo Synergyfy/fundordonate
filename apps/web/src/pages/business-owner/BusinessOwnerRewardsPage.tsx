@@ -3,8 +3,29 @@
 // View earned rewards and unlock new ones, wired to live backend API.
 // =============================================================================
 
-import { Award, Check, AlertCircle, RefreshCw } from "lucide-react";
+import { Award, Check, AlertCircle, RefreshCw, Target, Wallet } from "lucide-react";
 import { useRewards } from "@/services/reward/hook";
+
+const CONTRIBUTION_TYPE_LABELS: Record<string, string> = {
+  ONLINE: "Online contribution",
+  IN_STORE: "In-store contribution",
+  FUNDING_SPLIT: "Funding split",
+  SELF_FUNDING: "Self-funding",
+};
+
+const fmtPence = (pence: number) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(
+    pence / 100,
+  );
+
+const fmtDate = (iso?: string | null) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
 
 export default function BusinessOwnerRewardsPage() {
   const { data, isLoading, error, refetch } = useRewards();
@@ -70,17 +91,64 @@ export default function BusinessOwnerRewardsPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {earned.map((r) => (
-                  <div key={r.id} className="rounded-xl bg-white p-4 shadow-sm border flex items-start gap-3">
-                    <div className="text-3xl">{r.icon}</div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-bold text-gray-900">{r.name}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>
-                      {r.earnedAt && (
-                        <div className="mt-2 flex items-center gap-1 text-xs text-green-600 font-medium">
-                          <Check className="h-3 w-3" /> Earned on {r.earnedAt}
-                        </div>
+                  <div key={r.id} className="rounded-xl bg-white p-4 shadow-sm border">
+                    <div className="flex items-start gap-3">
+                      {r.campaignImage ? (
+                        <img
+                          src={r.campaignImage}
+                          alt=""
+                          className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="text-3xl">{r.icon}</div>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-bold text-gray-900">{r.name}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>
+                        {r.earnedAt && (
+                          <div className="mt-2 flex items-center gap-1 text-xs text-green-600 font-medium">
+                            <Check className="h-3 w-3" /> Earned on{" "}
+                            {fmtDate(r.earnedAt) ?? r.earnedAt}
+                          </div>
+                        )}
+                      </div>
                     </div>
+
+                    {(r.campaignTitle || r.contributionAmount != null) && (
+                      <div className="mt-3 space-y-1 rounded-lg bg-gray-50 p-3">
+                        {r.campaignTitle && (
+                          <p className="flex items-center gap-1.5 text-xs text-gray-700">
+                            <Target className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                            <span className="font-medium text-gray-900">
+                              {r.campaignTitle}
+                            </span>
+                          </p>
+                        )}
+                        {r.contributionAmount != null && (
+                          <p className="flex items-center gap-1.5 text-xs text-gray-600">
+                            <Wallet className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                            <span>
+                              {fmtPence(r.contributionAmount)}
+                              {r.contributionType
+                                ? ` · ${
+                                    CONTRIBUTION_TYPE_LABELS[r.contributionType] ??
+                                    r.contributionType
+                                  }`
+                                : ""}
+                              {r.contributionDate
+                                ? ` · ${fmtDate(r.contributionDate)}`
+                                : ""}
+                            </span>
+                          </p>
+                        )}
+                        {r.contributionReference && (
+                          <p className="pl-5 text-[11px] text-gray-400">
+                            Ref: {r.contributionReference}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

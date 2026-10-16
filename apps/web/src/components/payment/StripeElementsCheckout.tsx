@@ -39,6 +39,17 @@ function StripeForm({
     setErrorMessage(null);
 
     try {
+      // Validate the Payment Element fields and collect wallet data before
+      // confirming, as required by Stripe's Payment Element flow.
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        const msg = submitError.message || "Please check your payment details.";
+        setErrorMessage(msg);
+        onError?.(msg);
+        setSubmitting(false);
+        return;
+      }
+
       const { paymentIntent, error } = await stripe.confirmPayment({
         elements,
         redirect: "if_required",

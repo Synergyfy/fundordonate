@@ -291,6 +291,10 @@ model CampaignTemplate {
   selfFundingMode         String               @default("optional") // "optional" | "required"
   selfFundingAmount       Int                  @default(10000) // In pence (£100.00)
   selfFundingRewardName   String?
+  // How a claiming business's own MCOM Rewards (business-owned) interact with
+  // this template's rewards: "disabled" | "coexist" | "replace".
+  // ("enabled" is a legacy alias for "coexist".)
+  businessRewardsMode     String               @default("disabled")
   
   // Configurations
   fieldsConfig            Json                 @default("[]") // Blueprint of fields, locks, questions
@@ -336,6 +340,7 @@ model BusinessCampaign {
   answers              CampaignFieldAnswer[]
   requestedChanges     CampaignRequestedChange[]
   contributions        Contribution[]
+  rewardAttachments    CampaignRewardAttachment[]
 
   @@index([businessId, status])
   @@index([templateId])
@@ -572,6 +577,8 @@ model RewardIssuance {
   campaignId         String?
   /** Reward rule (config id within the campaign) this issuance satisfies. */
   rewardConfigId     String?
+  /** Business-owned MCOM reward id when issued from a business's own reward. */
+  businessRewardId   String?
   contributionId     String?
   userId             String?
   mcomUserId         String?
@@ -594,8 +601,40 @@ model RewardIssuance {
   @@index([externalRef])
   @@index([userId])
   @@index([mcomRewardId])
+  @@index([businessRewardId])
   @@index([status])
   @@map("reward_issuances")
+}
+
+/// A business-owned MCOM Rewards reward attached to a campaign the business
+/// runs. Coexists with the template-level rewards (`CampaignTemplate.
+/// rewardsConfig`); the trigger engine evaluates these independently (each on
+/// its own `conditions`) and issues them via the MCOM business-reward endpoint.
+model CampaignRewardAttachment {
+  id                String           @id @default(uuid())
+  campaignId        String
+  campaign          BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// MCOM Rewards business-reward id (from `/partner/business-rewards`).
+  businessRewardId  String
+  /// Snapshot for display (kept in sync on attach).
+  title             String
+  description       String?
+  image             String?
+  rewardType        String?
+  /// Eligibility conditions: [{ id, mode, minPence, maxPence, exactPence }].
+  conditions        Json             @default("[]")
+  /// Evaluation mode for this attachment: "independent" | "cumulative".
+  qualificationMode String           @default("independent")
+  enabled           Boolean          @default(true)
+  /// Local cap mirror (null = provider's own cap is authoritative).
+  maxQuantity       Int?
+  expiresAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([campaignId, businessRewardId])
+  @@index([campaignId])
+  @@map("campaign_reward_attachments")
 }
 
 // =============================================================================

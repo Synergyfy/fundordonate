@@ -15,6 +15,9 @@ import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 // =============================================================================
 
 export type McomRewardSource = "mcom vault" | "partner" | "business";
+
+/** The provider source of admin/MCOM-created rewards that can be gifted. */
+export const MCOM_VAULT_SOURCE = "mcom vault";
 export type McomRewardType =
   | "Voucher"
   | "gift card"
@@ -62,6 +65,84 @@ export interface McomRewardCatalogueQuery {
   search?: string;
   rewardType?: string;
   audience?: string;
+  /** Filter by reward source, e.g. "mcom vault" for admin/MCOM-created rewards. */
+  source?: string;
+}
+
+export type McomRewardStatus = "active" | "draft";
+
+/**
+ * A reward a business owns (created in MCOM Rewards). FundOrDonate lists these
+ * so a business can attach one of its own rewards to a campaign it runs.
+ * `/partner/business-rewards`.
+ */
+export interface McomBusinessReward {
+  id: string;
+  businessId: string;
+  title: string;
+  description: string;
+  image: string;
+  gallery: string[] | null;
+  rewardType: McomRewardType | string;
+  source: McomRewardSource | string;
+  audience: string;
+  status: McomRewardStatus | string;
+  /** Configured amount (null = not capped). */
+  quantity: number | null;
+  /** Still available; consumed atomically on issue. */
+  remainingQuantity: number | null;
+  pointsRequired: number | null;
+  stampsRequired: number | null;
+  isPointsEnabled: boolean;
+  isStampsEnabled: boolean;
+  isMallIntegrated: boolean;
+  mallRewardValue: number;
+  mallRewardType: "VOUCHER" | "GIFT_CARD" | "COUPON" | null;
+  /** Parent catalogue reward when this business reward derives from one. */
+  sourceRewardId: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface McomBusinessRewardOwner {
+  id: string;
+  name: string;
+  email: string;
+  mcomUserId: string | null;
+}
+
+export interface McomBusinessRewardPage {
+  business: McomBusinessRewardOwner;
+  data: McomBusinessReward[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface McomListBusinessRewardsQuery {
+  /** One of mcomUserId/email is required by the provider. */
+  mcomUserId?: string;
+  email?: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: McomRewardStatus;
+  rewardType?: string;
+}
+
+/**
+ * Issue a business's own reward. The owning business is derived from the reward
+ * by the provider — no `business` field is sent (unlike a catalogue issue).
+ */
+export interface McomIssueBusinessRewardInput {
+  recipient: McomRewardRecipient;
+  quantity?: number;
+  idempotencyKey?: string;
+  externalRef?: string;
+  expiresAt?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface McomRewardRecipient {
@@ -94,9 +175,29 @@ export interface McomRewardIssueInput {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Gift an **admin/MCOM-created** ("mcom vault") reward to a recipient on behalf
+ * of the platform. Unlike a catalogue issue, there is **no `business` field** —
+ * this is a platform-sponsored gift, authenticated with the app-level
+ * client-credentials token (scope `rewards:gift`). Omitting `business` is
+ * required: the provider rejects unknown fields.
+ */
+export interface McomGiftRewardInput {
+  recipient: McomRewardRecipient;
+  quantity?: number;
+  /** Stable key — idempotent per (clientId, idempotencyKey). Always send one. */
+  idempotencyKey: string;
+  /** Caller-side correlation ref (e.g. campaignId). */
+  externalRef?: string;
+  expiresAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface McomRewardIssuance {
   id: string;
   rewardId: string;
+  /** Set when the issuance came from a business's own reward (§4.3.1). */
+  businessRewardId?: string | null;
   rewardTitle: string | null;
   issuerClientId: string;
   externalRef: string | null;
@@ -228,7 +329,7 @@ function toMcomError(status: number, data: unknown): McomRewardsError {
 export const MCOM_REWARD_SCOPES = {
   READ: "rewards:read",
   ISSUE: "rewards:issue",
-  REDEEM: "rewards:redeem",
+  GIFT: "rewards:gift",
 } as const;
 
 interface CachedToken {
@@ -324,6 +425,77 @@ export class RewardsClient {
   }
 
   /**
+   * Mint a delegated service token acting on behalf of a logged-in user, from
+   * their MCOM SSO access token (RFC 8693 token exchange). Used for the
+   * user-scoped `/partner/issuances/me` view. Cached under a dedicated key.
+   */
+  async getDelegatedServiceToken(subjectToken: string, scope: string): Promise<string> {
+    const cacheKey = `delegated:${scope}`;
+    const cached = this.tokenCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      return cached.token;
+    }
+
+    if (!this.clientSecret) {
+      throw new McomRewardsError({
+        httpStatus: 500,
+        message: "MCOM_CLIENT_SECRET is not configured",
+        retryable: false,
+      });
+    }
+
+    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
+
+    try {
+      const { data } = await axios.post(
+        `${this.centralUrl}/api/v1/auth/service-token/exchange`,
+        {
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          subject_token: subjectToken,
+          audience: this.audience,
+          scope,
+        },
+        {
+          headers: {
+            Authorization: `Basic ${basic}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 8000,
+        },
+      );
+
+      const token = String(data?.access_token ?? "");
+      if (!token) {
+        throw new McomRewardsError({
+          httpStatus: 502,
+          message: "Central Hub returned no access_token for delegated exchange",
+          details: data,
+          retryable: true,
+        });
+      }
+      const expiresIn = Number(data?.expires_in ?? 300);
+      this.tokenCache.set(cacheKey, {
+        token,
+        expiresAt: Date.now() + Math.max(expiresIn, 30) * 1000,
+      });
+      return token;
+    } catch (err) {
+      if (err instanceof McomRewardsError) throw err;
+      const status = axios.isAxiosError(err) ? (err.response?.status ?? 503) : 503;
+      const details = axios.isAxiosError(err) ? err.response?.data : (err as Error).message;
+      this.logger.error(
+        `Failed to mint delegated MCOM service token (scope=${scope}) -> ${status}: ${JSON.stringify(details)}`,
+      );
+      throw new McomRewardsError({
+        httpStatus: status,
+        message: "Failed to obtain delegated MCOM service token from Central Hub",
+        retryable: isRetryableStatus(status, null),
+        details,
+      });
+    }
+  }
+
+  /**
    * Call a MCOM Rewards provider route directly with a Bearer service token.
    */
   private async call<T>(
@@ -361,7 +533,7 @@ export class RewardsClient {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "X-Origin-App": this.clientId,
+        "X-Caller-Id": this.clientId,
       },
       timeout: 12000,
       validateStatus: () => true,
@@ -422,6 +594,33 @@ export class RewardsClient {
     );
   }
 
+  // ── Business-owned rewards ───────────────────────────────────────────────
+  // A business's own rewards (created in MCOM Rewards), which it can attach to
+  // a campaign it runs. The owning business is identified by mcomUserId/email.
+
+  listBusinessRewards(
+    query: McomListBusinessRewardsQuery = {},
+  ): Promise<McomBusinessRewardPage> {
+    return this.call<McomBusinessRewardPage>("/partner/business-rewards", {
+      scope: MCOM_REWARD_SCOPES.READ,
+      params: query as Record<string, unknown>,
+    });
+  }
+
+  /**
+   * Issue a business's own reward. The owner (and its entitlement + stock) is
+   * derived from the reward by the provider, so no `business` field is sent.
+   */
+  issueBusinessReward(
+    businessRewardId: string,
+    input: McomIssueBusinessRewardInput,
+  ): Promise<McomRewardIssuance> {
+    return this.call<McomRewardIssuance>(
+      `/partner/business-rewards/${encodeURIComponent(businessRewardId)}/issue`,
+      { method: "POST", scope: MCOM_REWARD_SCOPES.ISSUE, body: input },
+    );
+  }
+
   // ── Issuance lifecycle ───────────────────────────────────────────────────
 
   issueReward(rewardId: string, input: McomRewardIssueInput): Promise<McomRewardIssuance> {
@@ -431,13 +630,57 @@ export class RewardsClient {
     );
   }
 
+  /**
+   * Gift an admin/MCOM-created ("mcom vault") reward to a recipient on behalf of
+   * the platform. No `business` is sent — the provider derives the platform
+   * sponsor from the app-level token.
+   */
+  giftReward(
+    rewardId: string,
+    input: McomGiftRewardInput,
+  ): Promise<McomRewardIssuance> {
+    return this.call<McomRewardIssuance>(
+      `/partner/rewards/${encodeURIComponent(rewardId)}/gift`,
+      { method: "POST", scope: MCOM_REWARD_SCOPES.GIFT, body: input },
+    );
+  }
+
   listIssuances(
-    query: { page?: number; limit?: number; externalRef?: string } = {},
+    query: {
+      page?: number;
+      limit?: number;
+      externalRef?: string;
+      status?: McomIssuanceStatus | string;
+      recipientEmail?: string;
+      recipientMcomUserId?: string;
+      recipientUserId?: string;
+    } = {},
   ): Promise<McomRewardIssuancePage> {
     return this.call<McomRewardIssuancePage>("/partner/issuances", {
       scope: MCOM_REWARD_SCOPES.READ,
       params: query as Record<string, unknown>,
     });
+  }
+
+  /** Page through every issuance matching a recipient/status filter. */
+  async listAllIssuances(query: {
+    externalRef?: string;
+    status?: McomIssuanceStatus | string;
+    recipientEmail?: string;
+    recipientMcomUserId?: string;
+    recipientUserId?: string;
+  }): Promise<McomRewardIssuance[]> {
+    const limit = 100;
+    const all: McomRewardIssuance[] = [];
+    for (let guard = 0; guard < 100; guard += 1) {
+      const page = guard + 1;
+      const res = await this.listIssuances({ ...query, page, limit });
+      const items = Array.isArray(res?.data) ? res.data : [];
+      all.push(...items);
+      const totalPages = res?.totalPages ?? 1;
+      if (page >= totalPages || items.length === 0) break;
+    }
+    return all;
   }
 
   getIssuance(id: string): Promise<McomRewardIssuance> {
@@ -449,7 +692,7 @@ export class RewardsClient {
   redeemIssuance(id: string, body?: Record<string, unknown>): Promise<McomRewardIssuance> {
     return this.call<McomRewardIssuance>(`/partner/issuances/${encodeURIComponent(id)}/redeem`, {
       method: "POST",
-      scope: MCOM_REWARD_SCOPES.REDEEM,
+      scope: MCOM_REWARD_SCOPES.ISSUE,
       body: body ?? {},
     });
   }

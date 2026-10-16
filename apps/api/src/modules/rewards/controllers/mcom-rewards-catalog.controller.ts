@@ -51,6 +51,7 @@ export class McomRewardsCatalogController {
       search: query.search,
       rewardType: query.rewardType,
       audience: query.audience,
+      source: query.source,
     });
   }
 

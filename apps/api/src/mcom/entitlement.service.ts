@@ -1,10 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Prisma, type Subscription, type User } from "@prisma/client";
+import {
+  BusinessStatus,
+  MembershipTier,
+  Prisma,
+  type Business,
+  type Subscription,
+  type User,
+} from "@prisma/client";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenCipher } from "../common/crypto/token-cipher";
 import type {
   McomAppPlan,
+  McomBusinessProfile,
   McomUser,
   PlatformEntitlement,
 } from "./mcom.types";
@@ -116,7 +124,126 @@ export class EntitlementService {
 
     await this.syncSubscription(user.id, entitlement ?? null, appPlan);
 
+    // Mirror the Central Hub business profile locally. Owners onboarded through
+    // Central already provided this information, so they must never be sent
+    // through a second (local) business onboarding flow.
+    if (userType === "business") {
+      await this.ensureLinkedBusiness(user, businessProfile);
+    }
+
     return { user, isNewUser };
+  }
+
+  /**
+   * Backfill a local Business for an already-authenticated MCOM business owner
+   * (e.g. sessions established before business mirroring existed).
+   * Returns true when a business is available for the user afterwards.
+   */
+  async ensureBusinessForUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return false;
+
+    const existing = await this.prisma.business.findFirst({
+      where: { ownerId: user.id },
+      select: { id: true },
+    });
+    if (existing) return true;
+
+    // Only mirror for business accounts; consumers/admins are left untouched.
+    if (user.userType !== "business" && user.role !== "business") {
+      return false;
+    }
+
+    // Fall back to the cached identity for the name; the next SSO sync will
+    // refresh it with the authoritative business name from Central.
+    await this.ensureLinkedBusiness(user, {
+      businessName:
+        [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+        user.email.split("@")[0],
+      membershipTier: user.membershipTier,
+    });
+    return true;
+  }
+
+  /**
+   * Create or update the local Business that mirrors a Central Hub business
+   * profile. Central is the source of truth for the business name and
+   * membership tier.
+   */
+  private async ensureLinkedBusiness(
+    user: User,
+    businessProfile: McomBusinessProfile | null = null,
+  ): Promise<Business> {
+    const name =
+      businessProfile?.businessName?.trim() ||
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      user.email.split("@")[0];
+
+    const membershipTier = this.mapMembershipTier(
+      businessProfile?.membershipTier ??
+        businessProfile?.membershipLevel ??
+        businessProfile?.membershipPlanName,
+    );
+
+    const existing = await this.prisma.business.findFirst({
+      where: { ownerId: user.id },
+    });
+
+    if (existing) {
+      return this.prisma.business.update({
+        where: { id: existing.id },
+        data: {
+          ...(businessProfile?.businessName ? { name } : {}),
+          membershipTier,
+        },
+      });
+    }
+
+    return this.prisma.business.create({
+      data: {
+        ownerId: user.id,
+        name,
+        slug: await this.generateUniqueBusinessSlug(name),
+        businessType: "Other",
+        category: "Community",
+        subcategories: [],
+        email: user.email,
+        membershipTier,
+        status: BusinessStatus.ACTIVE,
+        city: "",
+        localArea: "",
+        highStreet: "",
+        postcode: "",
+        settings: { create: {} },
+      },
+    });
+  }
+
+  /** Map a Central membership value ("Gold", "Standard", …) to the local enum. */
+  private mapMembershipTier(value?: string | null): MembershipTier {
+    const raw = (value ?? "").toUpperCase();
+    if (raw.includes("PLATINUM")) return MembershipTier.PLATINUM;
+    if (raw.includes("GOLD")) return MembershipTier.GOLD;
+    if (raw.includes("SILVER")) return MembershipTier.SILVER;
+    return MembershipTier.BRONZE;
+  }
+
+  /** URL-friendly, collision-free slug for a mirrored business. */
+  private async generateUniqueBusinessSlug(name: string): Promise<string> {
+    const base =
+      name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "business";
+
+    let slug = base;
+    let counter = 1;
+    while (await this.prisma.business.findUnique({ where: { slug } })) {
+      slug = `${base}-${counter}`;
+      counter++;
+    }
+    return slug;
   }
 
   /** Persist the platform subscription derived from an entitlement. */

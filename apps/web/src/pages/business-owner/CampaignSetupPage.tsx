@@ -44,7 +44,14 @@ import {
 } from "@/components/business/PaymentGatewaySelector";
 import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
 import { DatePicker } from "@/components/ui/DatePicker";
-import type { SetupFieldBlueprint } from "@/services/campaign/type";
+import { campaignService } from "@/services/campaign";
+import { normalizeBusinessRewardsMode } from "@/services/templates";
+import type {
+  CampaignRewardAttachment,
+  McomBusinessReward,
+  RewardConditionDto,
+  SetupFieldBlueprint,
+} from "@/services/campaign/type";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", {
@@ -296,6 +303,105 @@ export default function CampaignSetupPage() {
   const [submittedStatus, setSubmittedStatus] = useState<
     "pending_review" | "approved" | null
   >(null);
+
+  // ── Business-owned MCOM rewards (attach to this campaign) ──
+  const businessRewardsMode = normalizeBusinessRewardsMode(
+    campaign?.template.businessRewardsMode ?? templateView?.businessRewardsMode
+  );
+  const canAttachRewards = businessRewardsMode !== "disabled";
+  const replaceTemplateRewards = businessRewardsMode === "replace";
+  const [attachments, setAttachments] = useState<CampaignRewardAttachment[]>([]);
+  const [availableRewards, setAvailableRewards] = useState<McomBusinessReward[]>([]);
+  const [rewardsBusy, setRewardsBusy] = useState(false);
+  const [rewardsError, setRewardsError] = useState<string | null>(null);
+  const [attachRewardId, setAttachRewardId] = useState("");
+  const [attachMin, setAttachMin] = useState("");
+  const [attachMax, setAttachMax] = useState("");
+  const [attachLimit, setAttachLimit] = useState("");
+
+  useEffect(() => {
+    if (!instanceId || !canAttachRewards) return;
+    let cancelled = false;
+    setRewardsBusy(true);
+    setRewardsError(null);
+    Promise.all([
+      campaignService.getCampaignRewardAttachments(instanceId),
+      campaignService
+        .getAvailableBusinessRewards({ limit: 50 })
+        .catch((e: any) => {
+          if (!cancelled) {
+            setRewardsError(
+              e?.message ?? "Could not load your MCOM Rewards rewards"
+            );
+          }
+          return null;
+        }),
+    ])
+      .then(([att, avail]) => {
+        if (cancelled) return;
+        setAttachments(att?.attachments ?? []);
+        if (avail) setAvailableRewards(avail.data ?? []);
+      })
+      .catch((e: any) => {
+        if (!cancelled) setRewardsError(e?.message ?? "Failed to load rewards");
+      })
+      .finally(() => {
+        if (!cancelled) setRewardsBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId, canAttachRewards]);
+
+  const refreshAttachments = async () => {
+    if (!instanceId) return;
+    const att = await campaignService.getCampaignRewardAttachments(instanceId);
+    setAttachments(att?.attachments ?? []);
+  };
+
+  const handleAttachReward = async () => {
+    if (!instanceId || !attachRewardId) return;
+    setRewardsBusy(true);
+    setRewardsError(null);
+    try {
+      const conditions: RewardConditionDto[] = [];
+      const min = Number(attachMin);
+      const max = Number(attachMax);
+      if (attachMin.trim() && attachMax.trim() && Number.isFinite(min) && Number.isFinite(max)) {
+        conditions.push({ mode: "range", minPence: Math.round(min * 100), maxPence: Math.round(max * 100) });
+      } else if (attachMin.trim() && Number.isFinite(min)) {
+        conditions.push({ mode: "minimum", minPence: Math.round(min * 100) });
+      }
+      await campaignService.attachCampaignReward(instanceId, {
+        businessRewardId: attachRewardId,
+        conditions,
+        maxQuantity: attachLimit.trim() ? Number(attachLimit) : undefined,
+      });
+      await refreshAttachments();
+      setAttachRewardId("");
+      setAttachMin("");
+      setAttachMax("");
+      setAttachLimit("");
+    } catch (e: any) {
+      setRewardsError(e?.message ?? "Could not attach this reward");
+    } finally {
+      setRewardsBusy(false);
+    }
+  };
+
+  const handleDetachReward = async (attachmentId: string) => {
+    if (!instanceId) return;
+    setRewardsBusy(true);
+    setRewardsError(null);
+    try {
+      await campaignService.detachCampaignReward(instanceId, attachmentId);
+      await refreshAttachments();
+    } catch (e: any) {
+      setRewardsError(e?.message ?? "Could not remove this reward");
+    } finally {
+      setRewardsBusy(false);
+    }
+  };
 
   const fields = useMemo(() => {
     return campaign?.template.fields ?? templateView?.fields ?? [];
@@ -747,7 +853,10 @@ export default function CampaignSetupPage() {
           <div className="space-y-4">
             <div className="rounded-xl border bg-white p-4">
               <p className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
-                <Gift className="h-4 w-4 text-primary-600" /> Rewards — attached from this template
+                <Gift className="h-4 w-4 text-primary-600" />
+                {replaceTemplateRewards
+                  ? "Rewards from this template (superseded)"
+                  : "Rewards — attached from this template"}
               </p>
               {rewards.length > 0 ? (
                 <ul className="space-y-2">
@@ -772,7 +881,141 @@ export default function CampaignSetupPage() {
               <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-500">
                 <Lock className="h-3.5 w-3.5" /> Reward rules are configured by the Admin — view only.
               </p>
+              {replaceTemplateRewards && (
+                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  This template lets you use your own rewards <strong>instead of</strong> these. Once
+                  you attach your own, these are no longer offered.
+                </p>
+              )}
             </div>
+
+            {canAttachRewards ? (
+              <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4">
+                <p className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+                  <Sparkles className="h-4 w-4 text-primary-600" /> Your own MCOM Rewards
+                </p>
+                <p className="mb-3 text-xs text-gray-600">
+                  Attach rewards you created in MCOM Rewards. When a contributor qualifies, the reward
+                  is granted through MCOM Rewards and tracked here.
+                </p>
+                {replaceTemplateRewards && (
+                  <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                    Your rewards replace the template rewards. If you don&apos;t attach any, the template
+                    rewards above still apply.
+                  </p>
+                )}
+
+                {rewardsError && (
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                    <AlertCircle className="h-3.5 w-3.5" /> {rewardsError}
+                  </p>
+                )}
+
+                {attachments.length > 0 && (
+                  <ul className="mb-4 space-y-2">
+                    {attachments.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-3"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{a.title}</p>
+                          <p className="text-xs text-gray-500">
+                            {a.conditions?.length
+                              ? a.conditions
+                                  .map((c) =>
+                                    c.mode === "minimum"
+                                      ? `Min £${(c.minPence ?? 0) / 100}`
+                                      : c.mode === "range"
+                                        ? `£${(c.minPence ?? 0) / 100}–£${(c.maxPence ?? 0) / 100}`
+                                        : c.mode === "exact"
+                                          ? `Exactly £${(c.exactPence ?? 0) / 100}`
+                                          : "Any contribution"
+                                  )
+                                  .join(", ")
+                              : "Any contribution"}
+                            {a.maxQuantity ? ` · Max ${a.maxQuantity}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDetachReward(a.id)}
+                          disabled={rewardsBusy}
+                          className="rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="rounded-lg border bg-white p-3">
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Add a reward
+                  </label>
+                  <select
+                    value={attachRewardId}
+                    onChange={(e) => setAttachRewardId(e.target.value)}
+                    className="mb-2 w-full rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <option value="">Select one of your MCOM rewards…</option>
+                    {availableRewards.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title}
+                        {typeof r.remainingQuantity === "number"
+                          ? ` (${r.remainingQuantity} left)`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      value={attachMin}
+                      onChange={(e) => setAttachMin(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="Min £"
+                      className="rounded-lg border px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      value={attachMax}
+                      onChange={(e) => setAttachMax(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="Max £ (opt)"
+                      className="rounded-lg border px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      value={attachLimit}
+                      onChange={(e) => setAttachLimit(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Qty cap (opt)"
+                      className="rounded-lg border px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAttachReward}
+                    disabled={rewardsBusy || !attachRewardId}
+                    className="mt-2 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {rewardsBusy ? "Please wait…" : "Attach reward"}
+                  </button>
+                  <p className="mt-2 text-[11px] text-gray-400">
+                    Leave the amount fields blank to offer it for any contribution.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed bg-gray-50 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Lock className="h-4 w-4 text-gray-400" /> Your own MCOM Rewards are disabled on this template
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  The Admin has not enabled attaching business-owned rewards. Rewards above (from the
+                  template) still apply.
+                </p>
+              </div>
+            )}
 
             {mcomAssets.length > 0 && (
               <div className="rounded-xl border bg-white p-4">

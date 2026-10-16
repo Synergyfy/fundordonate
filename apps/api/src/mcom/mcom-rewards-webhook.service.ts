@@ -1,6 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import type { McomRewardIssuance } from "./rewards-client.service";
 
@@ -11,50 +9,20 @@ export type McomRewardEvent =
   | "reward.revoked";
 
 /**
- * Handles inbound lifecycle webhooks from MCOM Rewards.
+ * Handles inbound lifecycle events from MCOM Rewards.
  *
  * MCOM Rewards POSTs `{ event, timestamp, source, data }` to
- * `/api/v1/webhooks/mcom`, signing the raw body with a shared HMAC-SHA256
- * secret (`MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET`). We verify against the
- * raw request body (never the parsed body) and mirror the issuance locally.
+ * `/api/v1/partner/events`, authenticated by an RS256 service token
+ * (audience `fundordonate`) verified offline via Central's JWKS — there is no
+ * HMAC / shared secret between the apps. The controller verifies the token
+ * (`McomEventVerifierService`) and calls `handleEvent`; this service only
+ * mirrors the issuance locally.
  */
 @Injectable()
 export class McomRewardsWebhookService {
   private readonly logger = new Logger(McomRewardsWebhookService.name);
-  private readonly secret: string;
 
-  constructor(
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {
-    this.secret = this.config.get<string>("mcom.rewardsWebhookSecret") ?? "";
-  }
-
-  /** Constant-time HMAC-SHA256 verification of the raw request body. */
-  verifySignature(rawBody: string | Buffer, signatureHeader?: string): boolean {
-    if (!this.secret) {
-      this.logger.warn(
-        "MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET is not configured — webhook verification aborted",
-      );
-      return false;
-    }
-    if (!signatureHeader || !signatureHeader.startsWith("sha256=")) {
-      return false;
-    }
-
-    const expected = "sha256=" + crypto
-      .createHmac("sha256", this.secret)
-      .update(rawBody)
-      .digest("hex");
-
-    try {
-      const a = Buffer.from(signatureHeader, "utf8");
-      const b = Buffer.from(expected, "utf8");
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
-    } catch {
-      return false;
-    }
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Apply an issuance lifecycle event to the local mirror. Idempotent — the
@@ -91,19 +59,26 @@ export class McomRewardsWebhookService {
     const redeemedAt = this.parseDate(data.redeemedAt);
     const revokedAt = this.parseDate(data.revokedAt);
 
+    // A business-owned issuance may carry a null catalogue `rewardId`; it is
+    // identified by `businessRewardId`. Keep `mcomRewardId` non-null.
+    const businessRewardId = data.businessRewardId ?? null;
+    const metadataValue = (data.metadata ?? undefined) as never;
+
     const update = {
       externalIssuanceId: data.id,
       status,
       code: data.code ?? undefined,
       rewardTitle: data.rewardTitle ?? undefined,
+      ...(businessRewardId ? { businessRewardId } : {}),
       expiresAt,
       redeemedAt,
       revokedAt,
-      metadata: (data.metadata ?? undefined) as never,
+      metadata: metadataValue,
     };
     const create = {
       externalIssuanceId: data.id,
-      mcomRewardId: data.rewardId,
+      mcomRewardId: data.rewardId ?? businessRewardId ?? data.id,
+      businessRewardId,
       rewardTitle: data.rewardTitle ?? null,
       rewardType: data.rewardType ?? null,
       externalRef: data.externalRef ?? null,
@@ -116,7 +91,7 @@ export class McomRewardsWebhookService {
       code: data.code ?? null,
       value: data.value ?? null,
       quantity: data.quantity ?? 1,
-      metadata: (data.metadata ?? undefined) as never,
+      metadata: metadataValue,
       expiresAt,
       redeemedAt,
       revokedAt,

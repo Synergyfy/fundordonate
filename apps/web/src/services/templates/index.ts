@@ -138,6 +138,18 @@ export interface MasterTemplate {
   contributionRules: ContributionRules;
   rewards: any[];
   mcomAssets: any[];
+  businessRewardsMode: BusinessRewardsMode;
+}
+
+export type BusinessRewardsMode = "disabled" | "coexist" | "replace";
+
+export function normalizeBusinessRewardsMode(
+  mode?: string | null,
+): BusinessRewardsMode {
+  const m = (mode ?? "").toLowerCase();
+  if (m === "replace") return "replace";
+  if (m === "coexist" || m === "enabled") return "coexist";
+  return "disabled";
 }
 
 export interface TemplateSaveInput {
@@ -157,6 +169,7 @@ export interface TemplateSaveInput {
   selfFundingRules: ContributionRules;
   rewards: any[];
   mcomAssets: any[];
+  businessRewardsMode: BusinessRewardsMode;
   campaignTypeName: string;
   lifecycle: TemplateLifecycle;
 }
@@ -282,6 +295,7 @@ export function buildTemplatePayload(input: TemplateSaveInput): CreateCampaignTe
     selfFundingEnabled: input.selfFundingRules.mode !== "not_allowed",
     selfFundingMode: input.selfFundingRules.mode,
     selfFundingAmount: Math.round(Number(input.selfFundingRules.fixedAmount || 0) * 100),
+    businessRewardsMode: input.businessRewardsMode,
     fieldsConfig: input.fieldRows,
     rewardsConfig: input.rewards,
     mcomAssetsConfig: input.mcomAssets,
@@ -407,6 +421,7 @@ export function adaptAdminTemplateToMaster(tpl: AdminCampaignTemplate): MasterTe
     contributionRules: config.contributionRules ?? DEFAULT_CONTRIBUTION,
     rewards: tpl.rewardsConfig ?? [],
     mcomAssets: tpl.mcomAssetsConfig ?? [],
+    businessRewardsMode: normalizeBusinessRewardsMode(tpl.businessRewardsMode),
   };
 }
 

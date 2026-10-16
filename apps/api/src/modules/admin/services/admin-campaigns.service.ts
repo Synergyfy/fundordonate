@@ -411,6 +411,7 @@ export class AdminCampaignsService {
           selfFundingMode: dto.selfFundingMode ?? "optional",
           selfFundingAmount: dto.selfFundingAmount ?? 10000,
           selfFundingRewardName: dto.selfFundingRewardName,
+          businessRewardsMode: dto.businessRewardsMode ?? "disabled",
           fieldsConfig: dto.fieldsConfig ?? [],
           rewardsConfig: dto.rewardsConfig ?? [],
           mcomAssetsConfig: dto.mcomAssetsConfig ?? [],
@@ -476,6 +477,7 @@ export class AdminCampaignsService {
     if (dto.selfFundingMode !== undefined) data.selfFundingMode = dto.selfFundingMode;
     if (dto.selfFundingAmount !== undefined) data.selfFundingAmount = dto.selfFundingAmount;
     if (dto.selfFundingRewardName !== undefined) data.selfFundingRewardName = dto.selfFundingRewardName;
+    if (dto.businessRewardsMode !== undefined) data.businessRewardsMode = dto.businessRewardsMode;
     if (dto.fieldsConfig !== undefined) data.fieldsConfig = dto.fieldsConfig;
     if (dto.rewardsConfig !== undefined) data.rewardsConfig = dto.rewardsConfig;
     if (dto.mcomAssetsConfig !== undefined) data.mcomAssetsConfig = dto.mcomAssetsConfig;

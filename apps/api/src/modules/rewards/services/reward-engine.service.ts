@@ -50,6 +50,66 @@ export interface IssueLocalRewardInput {
 }
 
 /**
+ * Issue a **business-owned** reward (a reward the campaign's business created in
+ * MCOM Rewards and attached to the campaign). The owning business — and its
+ * entitlement + stock — is derived by the provider from the reward id, so no
+ * `business` field is sent.
+ */
+export interface IssueBusinessRewardInput {
+  /** MCOM business-reward id (from `/partner/business-rewards`). */
+  businessRewardId: string;
+  rewardTitle?: string;
+  recipient: { email?: string; mcomUserId?: string; name?: string };
+  campaignId?: string;
+  contributionId?: string;
+  userId?: string;
+  /** Stable attachment id within the campaign (idempotency key + cap). */
+  rewardConfigId?: string;
+  /** Per-attachment quantity cap (null/undefined = provider's cap is authoritative). */
+  limit?: number | null;
+  expiresAt?: string;
+  quantity?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Gift an **admin/MCOM-created** reward ("mcom vault") to a recipient on behalf
+ * of the platform. No sponsor `business` is involved — the provider derives the
+ * platform sponsor from the app-level token (scope `rewards:gift`). The
+ * recipient must resolve to an existing MCOM participant account.
+ */
+export interface IssuePlatformGiftInput {
+  /** MCOM catalogue reward id (an admin/MCOM-created "mcom vault" reward). */
+  mcomRewardId: string;
+  rewardTitle?: string;
+  recipient: { email?: string; mcomUserId?: string; name?: string };
+  campaignId?: string;
+  contributionId?: string;
+  userId?: string;
+  /** Stable config id within the campaign (idempotency key + cap). */
+  rewardConfigId?: string;
+  /** Per-rule quantity cap (null/undefined = provider's cap is authoritative). */
+  limit?: number | null;
+  expiresAt?: string;
+  quantity?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/** The subset of an issuance input needed to record a failure / settle a row. */
+interface IssueRecord {
+  mcomRewardId: string;
+  businessRewardId?: string | null;
+  rewardTitle?: string | null;
+  recipient: { email?: string; mcomUserId?: string; name?: string };
+  campaignId?: string;
+  contributionId?: string;
+  userId?: string;
+  rewardConfigId?: string | null;
+  quantity?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Orchestrates issuing a reward (MCOM or FundOrDonate-local) and mirroring it.
  *
  * Concurrency-safe: every issuance is first *reserved* via
@@ -135,7 +195,7 @@ export class RewardEngineService {
         },
       });
 
-      return await this.settle(input, idempotencyKey, issuance);
+      return await this.settle(idempotencyKey, issuance, input);
     } catch (err) {
       // Fatal provider rejections (400 validation/state, 401, 403
       // caller/scope/not-entitled, 404) → mark FAILED (frees the slot) and
@@ -155,6 +215,201 @@ export class RewardEngineService {
     } catch (err) {
       this.logger.error(
         `Best-effort MCOM reward issue failed (campaign=${input.campaignId ?? "n/a"}, reward=${input.mcomRewardId}): ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Issue a business-owned reward (attached to a campaign) via MCOM Rewards.
+   * Same reserve → provider → settle flow as {@link issue}; the owner (and its
+   * entitlement + stock) is derived by the provider from the reward id.
+   */
+  async issueBusinessReward(
+    input: IssueBusinessRewardInput,
+  ): Promise<RewardIssuance | null> {
+    const idempotencyKey = this.buildIdempotencyKey({
+      userId: input.userId,
+      recipient: input.recipient,
+      campaignId: input.campaignId,
+      contributionId: input.contributionId,
+      rewardConfigId: input.rewardConfigId,
+      mcomRewardId: input.businessRewardId,
+    });
+
+    const reserved = await this.reservation.reserve({
+      campaignId: input.campaignId ?? "na",
+      rewardConfigId: input.rewardConfigId ?? input.businessRewardId,
+      idempotencyKey,
+      limit: input.limit ?? null,
+      base: {
+        mcomRewardId: input.businessRewardId,
+        businessRewardId: input.businessRewardId,
+        externalRef: input.campaignId ?? null,
+        contributionId: input.contributionId ?? null,
+        userId: input.userId ?? null,
+        mcomUserId: input.recipient.mcomUserId ?? null,
+        recipientEmail: input.recipient.email ?? null,
+        recipientName: input.recipient.name ?? null,
+        rewardTitle: input.rewardTitle ?? null,
+        quantity: input.quantity,
+        metadata: input.metadata,
+      },
+    });
+
+    if (reserved.outcome === "cap_reached") return null;
+    if (reserved.outcome === "exists") return reserved.issuance ?? null;
+
+    try {
+      const issuance = await this.rewardsClient.issueBusinessReward(
+        input.businessRewardId,
+        {
+          recipient: input.recipient,
+          quantity: input.quantity ?? 1,
+          idempotencyKey,
+          externalRef: input.campaignId,
+          expiresAt: input.expiresAt,
+          metadata: {
+            ...(input.metadata ?? {}),
+            ...(input.contributionId ? { contributionId: input.contributionId } : {}),
+            ...(input.userId ? { userId: input.userId } : {}),
+          },
+        },
+      );
+
+      return await this.settle(idempotencyKey, issuance, {
+        quantity: input.quantity,
+        metadata: input.metadata,
+        rewardTitle: input.rewardTitle ?? null,
+      });
+    } catch (err) {
+      if (err instanceof McomRewardsError && !err.retryable) {
+        await this.recordFailure(
+          {
+            mcomRewardId: input.businessRewardId,
+            businessRewardId: input.businessRewardId,
+            rewardTitle: input.rewardTitle ?? null,
+            recipient: input.recipient,
+            campaignId: input.campaignId,
+            contributionId: input.contributionId,
+            userId: input.userId,
+            rewardConfigId: input.rewardConfigId,
+            quantity: input.quantity,
+            metadata: input.metadata,
+          },
+          idempotencyKey,
+          err,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /** Issue a business-owned reward without breaking the caller's flow. */
+  async issueBusinessRewardBestEffort(
+    input: IssueBusinessRewardInput,
+  ): Promise<RewardIssuance | null> {
+    try {
+      return await this.issueBusinessReward(input);
+    } catch (err) {
+      this.logger.error(
+        `Best-effort MCOM business-reward issue failed (campaign=${input.campaignId ?? "n/a"}, businessReward=${input.businessRewardId}): ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Gift an admin/MCOM-created ("mcom vault") reward to a qualifying recipient
+   * on behalf of the platform. Same reserve → provider → settle flow as
+   * {@link issue}, but the provider call sends **no sponsor business** — the
+   * platform sponsor is derived from the app-level token (scope `rewards:gift`).
+   */
+  async issuePlatformGift(
+    input: IssuePlatformGiftInput,
+  ): Promise<RewardIssuance | null> {
+    const idempotencyKey = this.buildIdempotencyKey({
+      userId: input.userId,
+      recipient: input.recipient,
+      campaignId: input.campaignId,
+      contributionId: input.contributionId,
+      rewardConfigId: input.rewardConfigId,
+      mcomRewardId: input.mcomRewardId,
+    });
+
+    const reserved = await this.reservation.reserve({
+      campaignId: input.campaignId ?? "na",
+      rewardConfigId: input.rewardConfigId ?? input.mcomRewardId,
+      idempotencyKey,
+      limit: input.limit ?? null,
+      base: {
+        mcomRewardId: input.mcomRewardId,
+        externalRef: input.campaignId ?? null,
+        contributionId: input.contributionId ?? null,
+        userId: input.userId ?? null,
+        mcomUserId: input.recipient.mcomUserId ?? null,
+        recipientEmail: input.recipient.email ?? null,
+        recipientName: input.recipient.name ?? null,
+        rewardTitle: input.rewardTitle ?? null,
+        quantity: input.quantity,
+        metadata: input.metadata,
+      },
+    });
+
+    if (reserved.outcome === "cap_reached") return null;
+    if (reserved.outcome === "exists") return reserved.issuance ?? null;
+
+    try {
+      const issuance = await this.rewardsClient.giftReward(input.mcomRewardId, {
+        recipient: input.recipient,
+        quantity: input.quantity ?? 1,
+        idempotencyKey,
+        externalRef: input.campaignId,
+        expiresAt: input.expiresAt,
+        metadata: {
+          ...(input.metadata ?? {}),
+          sponsor: { type: "platform", app: "fundordonate", role: "admin" },
+          ...(input.contributionId ? { contributionId: input.contributionId } : {}),
+          ...(input.userId ? { userId: input.userId } : {}),
+        },
+      });
+
+      return await this.settle(idempotencyKey, issuance, {
+        quantity: input.quantity,
+        metadata: input.metadata,
+        rewardTitle: input.rewardTitle ?? null,
+      });
+    } catch (err) {
+      if (err instanceof McomRewardsError && !err.retryable) {
+        await this.recordFailure(
+          {
+            mcomRewardId: input.mcomRewardId,
+            rewardTitle: input.rewardTitle ?? null,
+            recipient: input.recipient,
+            campaignId: input.campaignId,
+            contributionId: input.contributionId,
+            userId: input.userId,
+            rewardConfigId: input.rewardConfigId,
+            quantity: input.quantity,
+            metadata: input.metadata,
+          },
+          idempotencyKey,
+          err,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /** Gift a platform ("mcom vault") reward without breaking the caller's flow. */
+  async issuePlatformGiftBestEffort(
+    input: IssuePlatformGiftInput,
+  ): Promise<RewardIssuance | null> {
+    try {
+      return await this.issuePlatformGift(input);
+    } catch (err) {
+      this.logger.error(
+        `Best-effort MCOM platform-gift failed (campaign=${input.campaignId ?? "n/a"}, reward=${input.mcomRewardId}): ${(err as Error).message}`,
       );
       return null;
     }
@@ -280,7 +535,7 @@ export class RewardEngineService {
    *  - sponsor business without an MCOM Rewards entitlement → `businessNotEntitled`
    */
   private async recordFailure(
-    input: IssueRewardInput,
+    input: IssueRecord,
     idempotencyKey: string,
     err: McomRewardsError,
   ): Promise<void> {
@@ -321,11 +576,13 @@ export class RewardEngineService {
       data: {
         externalIssuanceId: `failed:${idempotencyKey}`,
         mcomRewardId: input.mcomRewardId,
+        businessRewardId: input.businessRewardId ?? null,
         rewardConfigId: input.rewardConfigId ?? null,
         rewardTitle:
-          typeof input.metadata?.rewardName === "string"
+          input.rewardTitle ??
+          (typeof input.metadata?.rewardName === "string"
             ? input.metadata.rewardName
-            : null,
+            : null),
         externalRef: input.campaignId ?? null,
         idempotencyKey,
         campaignId: input.campaignId ?? null,
@@ -399,9 +656,13 @@ export class RewardEngineService {
 
   /** Settle a reserved (`PENDING`) issuance to its provider result. */
   private settle(
-    input: IssueRewardInput,
     idempotencyKey: string,
     issuance: McomRewardIssuance,
+    opts: {
+      quantity?: number;
+      metadata?: Record<string, unknown>;
+      rewardTitle?: string | null;
+    } = {},
   ): Promise<RewardIssuance> {
     const expiresAt = issuance.expiresAt ? new Date(issuance.expiresAt) : null;
     const redeemedAt = issuance.redeemedAt ? new Date(issuance.redeemedAt) : null;
@@ -413,10 +674,15 @@ export class RewardEngineService {
         externalIssuanceId: issuance.id,
         status: issuance.status,
         code: issuance.code ?? null,
-        rewardTitle: issuance.rewardTitle ?? input.metadata?.rewardName as string ?? null,
+        rewardTitle:
+          issuance.rewardTitle ??
+          opts.rewardTitle ??
+          (typeof opts.metadata?.rewardName === "string"
+            ? opts.metadata.rewardName
+            : null),
         rewardType: issuance.rewardType ?? null,
         value: issuance.value ?? null,
-        quantity: issuance.quantity ?? input.quantity ?? 1,
+        quantity: issuance.quantity ?? opts.quantity ?? 1,
         metadata: (issuance.metadata ?? undefined) as never,
         expiresAt,
         redeemedAt,

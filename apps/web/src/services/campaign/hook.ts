@@ -12,6 +12,7 @@ export const campaignKeys = {
   templates: () => [...campaignKeys.all, "templates"] as const,
   myCampaigns: (query?: CampaignQueryDto) => [...campaignKeys.all, "my", query] as const,
   detail: (id: string) => [...campaignKeys.all, "detail", id] as const,
+  rewardAttachments: (id: string) => [...campaignKeys.all, "reward-attachments", id] as const,
   comments: (id: string, page?: number) => [...campaignKeys.all, "comments", id, page] as const,
 };
 
@@ -74,6 +75,14 @@ export function useCampaignDetail(campaignId?: string) {
   return useQuery({
     queryKey: campaignKeys.detail(campaignId || ""),
     queryFn: () => campaignService.getCampaignDetail(campaignId!),
+    enabled: !!campaignId,
+  });
+}
+
+export function useCampaignRewardAttachments(campaignId?: string) {
+  return useQuery({
+    queryKey: campaignKeys.rewardAttachments(campaignId || ""),
+    queryFn: () => campaignService.getCampaignRewardAttachments(campaignId!),
     enabled: !!campaignId,
   });
 }

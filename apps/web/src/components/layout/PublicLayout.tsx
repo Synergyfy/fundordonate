@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, Outlet } from "react-router-dom";
-import { useAuthStore } from "@/stores/auth.store";
+import { useAuthStore, type User } from "@/stores/auth.store";
 import {
   Menu, X, Heart,
   Home, Info, Mail, MapPin, Target, ChevronDown,
   LogIn,
   LayoutDashboard, LogOut,
+  User as UserIcon, Settings, Building2, Activity,
   Facebook, Twitter, Instagram,
 } from "lucide-react";
 
@@ -45,6 +46,168 @@ function isChildActive(pathname: string, search: string, to: string): boolean {
   return pathname === childPath && search === childQuery;
 }
 
+/** Resolves the authenticated home ("dashboard") route for a given user. */
+function resolveDashboardLink(user: User | null): string {
+  if (!user) return "/";
+  if (user.userType === "admin" || user.role === "admin") return "/admin";
+  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") return "/dashboard";
+  return "/consumer";
+}
+
+function getUserDisplayName(user: User | null): string {
+  if (!user) return "Account";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ");
+  return name || user.username || user.email || "Account";
+}
+
+function getUserInitials(user: User | null): string {
+  if (!user) return "U";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ");
+  if (name) {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }
+  return (user.username || user.email || "U").charAt(0).toUpperCase();
+}
+
+interface UserMenuLink {
+  label: string;
+  to: string;
+  icon: React.ReactNode;
+}
+
+/** Secondary dashboard pages shown in the account dropdown, per role. */
+function getUserMenuLinks(user: User | null): UserMenuLink[] {
+  if (!user) return [];
+  if (user.userType === "admin" || user.role === "admin") {
+    return [
+      { label: "Admin Settings", to: "/admin/settings", icon: <Settings className="h-4 w-4" /> },
+    ];
+  }
+  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") {
+    return [
+      { label: "My Business", to: "/dashboard/my-business", icon: <Building2 className="h-4 w-4" /> },
+      { label: "Settings", to: "/dashboard/settings", icon: <Settings className="h-4 w-4" /> },
+    ];
+  }
+  return [
+    { label: "My Activity", to: "/consumer/activity", icon: <Activity className="h-4 w-4" /> },
+    { label: "Profile", to: "/consumer/you/profile", icon: <UserIcon className="h-4 w-4" /> },
+    { label: "Settings", to: "/consumer/you/settings", icon: <Settings className="h-4 w-4" /> },
+  ];
+}
+
+/** Primary label for the account's dashboard entry point. */
+function getDashboardLabel(user: User | null): string {
+  if (!user) return "Dashboard";
+  if (user.userType === "admin" || user.role === "admin") return "Dashboard";
+  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") return "Dashboard";
+  return "Home";
+}
+
+/** Avatar + name trigger with an account dropdown (name, email, dashboard pages, sign out). */
+function UserMenu({ user, onLogout }: { user: User | null; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, location.search]);
+
+  const name = getUserDisplayName(user);
+  const initials = getUserInitials(user);
+  const dashboardLink = resolveDashboardLink(user);
+  const menuLinks = getUserMenuLinks(user);
+
+  const avatar = user?.avatar ? (
+    <img src={user.avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
+  ) : (
+    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-600 text-xs font-semibold text-white">
+      {initials}
+    </span>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-full border border-gray-200 py-1 pl-1 pr-2.5 hover:bg-gray-50 transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+      >
+        {avatar}
+        <span className="hidden xl:block max-w-[120px] truncate text-sm font-medium text-gray-700">{name}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            role="menu"
+            className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+          >
+            <div className="flex items-center gap-3 border-b border-gray-100 px-3 py-3">
+              {avatar}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900">{name}</p>
+                <p className="truncate text-xs text-gray-500">{user?.email}</p>
+              </div>
+            </div>
+
+            <div className="py-1">
+              <Link
+                to={dashboardLink}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <LayoutDashboard className="h-4 w-4 text-gray-400" />
+                {getDashboardLabel(user)}
+              </Link>
+              {menuLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="text-gray-400">{link.icon}</span>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-100 pt-1">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setOpen(false); onLogout(); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const FOOTER_LINKS: { title: string; links: { label: string; to: string }[] }[] = [
   {
     title: "Explore",
@@ -80,7 +243,8 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, authStatus, logout } = useAuthStore();
+  const isAuthenticated = authStatus === "authenticated" && !!user;
   const location = useLocation();
 
   useEffect(() => {
@@ -112,7 +276,7 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
     }
   }, [mobileOpen, handleEscape]);
 
-  const dashboardLink = user?.role === "admin" ? "/admin" : user?.role === "fundraiser" ? "/fundraiser" : "/dashboard";
+  const handleLogout = useCallback(() => { void logout(); }, [logout]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -210,19 +374,7 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
             {/* Desktop Actions */}
             <div className="hidden lg:flex items-center gap-3">
               {isAuthenticated ? (
-                <>
-                  <Link to={dashboardLink} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                    <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
-                  </Link>
-                  <button
-                    onClick={() => logout()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                  </button>
-                </>
+                <UserMenu user={user} onLogout={handleLogout} />
               ) : (
                 <>
                   <Link to="/auth/login" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
@@ -312,17 +464,41 @@ export function PublicLayout({ children }: { children?: React.ReactNode }) {
 
               {isAuthenticated ? (
                 <div className="space-y-1">
+                  <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-semibold text-white">
+                        {getUserInitials(user)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900">{getUserDisplayName(user)}</p>
+                      <p className="truncate text-xs text-gray-500">{user?.email}</p>
+                    </div>
+                  </div>
                   <Link
-                    to={dashboardLink}
+                    to={resolveDashboardLink(user)}
                     onClick={() => setMobileOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     <LayoutDashboard className="w-5 h-5" />
-                    Dashboard
+                    {getDashboardLabel(user)}
                   </Link>
+                  {getUserMenuLinks(user).map((link) => (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="text-gray-400 [&>svg]:h-5 [&>svg]:w-5">{link.icon}</span>
+                      {link.label}
+                    </Link>
+                  ))}
                   <button
-                    onClick={() => { logout(); setMobileOpen(false); }}
-                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    onClick={() => { setMobileOpen(false); handleLogout(); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50"
                   >
                     <LogOut className="w-5 h-5" />
                     Sign Out

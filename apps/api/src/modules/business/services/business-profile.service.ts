@@ -7,6 +7,7 @@ import { PrismaService } from "@/prisma/prisma.service";
 import { Business, BusinessStatus } from "@prisma/client";
 import { BusinessOnboardingDto } from "../dto/business-onboarding.dto";
 import { UpdateBusinessProfileDto } from "../dto/update-business-profile.dto";
+import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
 
 @Injectable()
 export class BusinessProfileService {
@@ -58,16 +59,22 @@ export class BusinessProfileService {
       throw new NotFoundException("Business not found");
     }
 
-    // Rewards issued for this business's campaigns (legacy earnedRewards retired).
-    const campaignIds = (
-      await this.prisma.businessCampaign.findMany({
-        where: { businessId: business.id },
-        select: { id: true },
-      })
-    ).map((c) => c.id);
-    const earnedRewards = campaignIds.length
+    // Rewards the owner earned (legacy earnedRewards retired). Rewards belong
+    // to the person who earned them, so scope to the owner's identity — this
+    // excludes rewards contributors earned on the business's campaigns while
+    // still counting the owner's own contributions elsewhere.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: business.ownerId },
+      select: { id: true, email: true, mcomUserId: true },
+    });
+
+    const earnedRewards = owner
       ? await this.prisma.rewardIssuance.count({
-          where: { campaignId: { in: campaignIds } },
+          where: businessRewardOwnershipWhere({
+            userId: owner.id,
+            emails: [owner.email, business.email],
+            mcomUserId: owner.mcomUserId,
+          }),
         })
       : 0;
 

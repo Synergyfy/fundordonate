@@ -8,6 +8,7 @@ import {
   Store, Target, TrendingUp, Award, Users, ArrowRight, Crown, BarChart3, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { useBusinessOverview } from "@/services/business/hook";
+import { useAuthStore } from "@/stores/auth.store";
 import { WalletCard } from "@/components/wallet/WalletCard";
 
 const fmt = (p: number) =>
@@ -22,6 +23,7 @@ const QUICK_ACTIONS = [
 
 export default function BusinessOwnerOverviewPage() {
   const { data, isLoading, error, refetch } = useBusinessOverview();
+  const user = useAuthStore((s) => s.user);
 
   if (isLoading) {
     return (
@@ -40,7 +42,14 @@ export default function BusinessOwnerOverviewPage() {
 
   const errStatus = (error as any)?.response?.status ?? (error as any)?.status;
   const errMsg = (error as any)?.response?.data?.message ?? (error as any)?.message ?? "";
-  const isMissingProfile = errStatus === 404 || String(errMsg).toLowerCase().includes("onboarding") || String(errMsg).toLowerCase().includes("no business profile");
+  // Businesses that onboarded through MCOM Central Hub already have a profile;
+  // never route them back through the local onboarding flow.
+  const isCentralHubBusiness = Boolean(user?.businessId);
+  const isMissingProfile =
+    !isCentralHubBusiness &&
+    (errStatus === 404 ||
+      String(errMsg).toLowerCase().includes("onboarding") ||
+      String(errMsg).toLowerCase().includes("no business profile"));
 
   if (isMissingProfile) {
     return (

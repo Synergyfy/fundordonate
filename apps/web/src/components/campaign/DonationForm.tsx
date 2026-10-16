@@ -157,8 +157,12 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
           </div>
         )}
 
-        {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
-        {!showPayment ? (
+        {/* Continue — the payment panel is rendered OUTSIDE this <form> (below)
+            so its own Stripe <form> is never nested inside another <form>.
+            A submit event on a nested form does not bubble, so React's
+            onSubmit/preventDefault never runs and the browser performs a
+            native submit — reloading the page and jumping back to the top. */}
+        {!showPayment && (
           <button
             type="submit"
             disabled={donationAmount < minAmount * 100}
@@ -166,43 +170,46 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
           >
             Continue to Payment {formatCurrency(donationAmount) || "£0"}
           </button>
-        ) : (
-          <div className="space-y-3 border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-900">
-                Pay {formatCurrency(donationAmount)}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowPayment(false)}
-                className="text-xs font-semibold text-gray-500 hover:text-gray-700"
-              >
-                ← Edit amount
-              </button>
-            </div>
-            <McomCheckoutPanel
-              amountPence={donationAmount}
-              purpose="DONATION"
-              campaignId={campaignId}
-              isAnonymous={isAnonymous}
-              notes={notes || undefined}
-              formatGbp={formatCurrency}
-              metadata={{
-                campaignTitle,
-                tributeType: tributeType || undefined,
-                tributeTo: tributeTo || undefined,
-                contributionType: contributionType || "backer",
-                hierarchyLevel: hierarchyLevel || undefined,
-              }}
-              onSuccess={(result) => {
-                navigate(
-                  `/thank-you?reference=${encodeURIComponent(result.reference)}&type=donation&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
-                );
-              }}
-            />
-          </div>
         )}
       </form>
+
+      {/* Payment — single MCOM Pay path (Stripe / PayPal / MCOM Wallet) */}
+      {showPayment && (
+        <div className="mt-6 space-y-3 border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">
+              Pay {formatCurrency(donationAmount)}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPayment(false)}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+            >
+              ← Edit amount
+            </button>
+          </div>
+          <McomCheckoutPanel
+            amountPence={donationAmount}
+            purpose="DONATION"
+            campaignId={campaignId}
+            isAnonymous={isAnonymous}
+            notes={notes || undefined}
+            formatGbp={formatCurrency}
+            metadata={{
+              campaignTitle,
+              tributeType: tributeType || undefined,
+              tributeTo: tributeTo || undefined,
+              contributionType: contributionType || "backer",
+              hierarchyLevel: hierarchyLevel || undefined,
+            }}
+            onSuccess={(result) => {
+              navigate(
+                `/thank-you?reference=${encodeURIComponent(result.reference)}&type=donation&amount=${result.amountPence}&campaign=${encodeURIComponent(campaignTitle)}&status=completed`,
+              );
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

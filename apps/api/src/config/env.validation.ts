@@ -43,7 +43,11 @@ const envSchema = z.object({
   // ── Ecosystem peer: MCOM Rewards (direct app-to-app) ──
   MCOM_REWARDS_BASE_URL: z.string().url().default("http://localhost:4000"),
   MCOM_REWARDS_AUDIENCE: z.string().default("mcom-rewards"),
-  MCOM_REWARDS_FUNDORDONATE_WEBHOOK_SECRET: z.string().optional(),
+  // Inbound lifecycle events are authenticated with an RS256 service token
+  // (aud "fundordonate") verified offline via Central's JWKS.
+  MCOM_REWARDS_EVENT_ISSUER: z.string().default("mcom-solutions"),
+  MCOM_REWARDS_EVENT_AUDIENCE: z.string().default("fundordonate"),
+  MCOM_SOLUTIONS_JWKS_URL: z.string().url().optional(),
 
   // ── Reward reconciliation safety net ──
   REWARDS_RECONCILE_ENABLED: z.enum(["true", "false"]).default("true"),

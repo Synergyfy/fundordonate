@@ -24,8 +24,20 @@ export function CampaignDetailPage() {
     setLoading(true);
     setError(null);
 
-    campaignApi
-      .getBySlug(slug)
+    // The `/campaigns/:slug` route is reached with either a human slug
+    // (`title-slug-<id8>`) or a raw campaign id. `GET /campaigns/:id` and
+    // `GET /campaigns/slug/:slug` both resolve, so pick the right one — and
+    // fall back to an id lookup if a slug lookup 404s.
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        slug,
+      );
+
+    const request = isUuid
+      ? campaignApi.getById(slug)
+      : campaignApi.getBySlug(slug).catch(() => campaignApi.getById(slug));
+
+    request
       .then((data: any) => {
         setCampaign(data?.campaign || data);
       })

@@ -6,6 +6,20 @@ export interface RewardItem {
   earned: boolean;
   earnedAt?: string;
   progress?: number;
+
+  // ── Provenance: what earned this reward ──
+  status?: string;
+  rewardType?: string | null;
+  campaignId?: string | null;
+  campaignTitle?: string | null;
+  campaignImage?: string | null;
+  contributionId?: string | null;
+  /** Contribution amount in pence. */
+  contributionAmount?: number | null;
+  contributionType?: string | null;
+  contributionReference?: string | null;
+  contributionGateway?: string | null;
+  contributionDate?: string | null;
 }
 
 export interface RewardsResponse {

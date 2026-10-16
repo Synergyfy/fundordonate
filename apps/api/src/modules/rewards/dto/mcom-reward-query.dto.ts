@@ -30,4 +30,12 @@ export class McomRewardQueryDto {
   @IsOptional()
   @IsString()
   audience?: string;
+
+  /**
+   * Filter by reward source. Use `"mcom vault"` for admin/MCOM-created rewards
+   * (the only ones that can be gifted via `/partner/rewards/{id}/gift`).
+   */
+  @IsOptional()
+  @IsString()
+  source?: string;
 }

@@ -11,6 +11,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -194,6 +195,16 @@ export class CreateCampaignTemplateDto {
   @IsString()
   selfFundingRewardName?: string;
 
+  @ApiPropertyOptional({
+    enum: ["disabled", "coexist", "replace"],
+    default: "disabled",
+    description:
+      "How a claiming business's own MCOM Rewards interact with the template rewards: disabled (not allowed), coexist (added alongside), or replace (supersede the template rewards).",
+  })
+  @IsOptional()
+  @IsIn(["disabled", "coexist", "replace", "enabled"])
+  businessRewardsMode?: string = "disabled";
+
   @ApiPropertyOptional({ description: "Array of fields schema" })
   @IsOptional()
   @Type(() => Object)
@@ -313,6 +324,11 @@ export class UpdateCampaignTemplateDto {
   @IsOptional()
   @IsString()
   selfFundingRewardName?: string;
+
+  @ApiPropertyOptional({ enum: ["disabled", "coexist", "replace"] })
+  @IsOptional()
+  @IsIn(["disabled", "coexist", "replace", "enabled"])
+  businessRewardsMode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -15,6 +15,7 @@ export type ReserveOutcome = "proceed" | "exists" | "cap_reached";
 
 export interface ReserveBase {
   mcomRewardId: string;
+  businessRewardId?: string | null;
   externalRef?: string | null;
   contributionId?: string | null;
   userId?: string | null;
@@ -104,6 +105,7 @@ export class RewardReservationService {
 
       const rowData = {
         rewardConfigId,
+        businessRewardId: base.businessRewardId ?? existing?.businessRewardId ?? null,
         externalRef: base.externalRef ?? existing?.externalRef ?? null,
         contributionId: base.contributionId ?? existing?.contributionId ?? null,
         userId: base.userId ?? existing?.userId ?? null,

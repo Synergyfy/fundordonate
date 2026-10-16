@@ -110,8 +110,9 @@ export default function BusinessCampaignCentrePage() {
             <p className="text-sm font-bold text-blue-900">A · Unlock / Eligibility</p>
           </div>
           <p className="mt-1 text-sm text-blue-800">
-            One contribution may be required to unlock a template or confirm eligibility. It is separate from
-            contributing to your campaign.
+            Some templates require a membership tier, a minimum platform contribution, or a
+            completed pre-audit before you can claim them. This is separate from funding your own
+            campaign.
           </p>
         </div>
         <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
