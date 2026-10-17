@@ -170,7 +170,7 @@ function SeasonRow({
           </div>
           <div className="text-center min-w-[60px] hidden sm:block">
             <div className="text-xs text-gray-400 mb-0.5">Campaigns</div>
-            <div className="font-bold text-gray-900">{season.activeCampaigns || season.totalParticipants > 0 ? Math.ceil(season.totalParticipants / 50) : 0}</div>
+            <div className="font-bold text-gray-900">{season.activeCampaigns}</div>
           </div>
           <div className="text-center min-w-[60px] hidden sm:block">
             <div className="text-xs text-gray-400 mb-0.5">Participants</div>

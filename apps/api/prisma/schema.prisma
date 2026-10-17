@@ -53,6 +53,7 @@ model User {
   businesses    Business[]     @relation("BusinessOwner")
   contributions Contribution[] @relation("UserContributions")
   auditLogs     AuditLog[]
+  foundingMemberships FoundingMembership[]
 
   @@index([mcomUserId])
   @@index([userType])
@@ -144,6 +145,7 @@ model HubLocation {
 
   businesses         Business[]
   events             PlatformEvent[]
+  foundingProgrammes FoundingProgramme[]
 
   @@index([parentId])
   @@index([type])
@@ -721,5 +723,109 @@ model PayoutRequest {
   @@index([businessId, status])
   @@index([status, createdAt(sort: Desc)])
   @@map("payout_requests")
+}
+
+// =============================================================================
+// FOUNDING MEMBERSHIP PROGRAMMES
+// =============================================================================
+
+enum FoundingAudience {
+  BUSINESS
+  CONSUMER
+}
+
+enum FoundingProgrammeStatus {
+  OPEN
+  LIMITED
+  FULLY_ALLOCATED
+  CLOSED
+  ARCHIVED
+}
+
+enum FoundingMembershipStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  CANCELLED
+}
+
+model FoundingProgramme {
+  id                 String                  @id @default(uuid())
+  locationId         String
+  location           HubLocation             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  audience           FoundingAudience
+  title              String
+  description        String?                 @db.Text
+  status             FoundingProgrammeStatus @default(OPEN)
+  totalAllocation    Int                     @default(0)
+  allocatedCount     Int                     @default(0)
+  opensAt            DateTime?
+  closesAt           DateTime?
+  /// Price matrix keyed by "{metal}_{level}" in minor units (pence).
+  contributionConfig Json                    @default("{}")
+  benefitConfig      Json                    @default("[]")
+  eligibilityConfig  Json                    @default("{}")
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  memberships FoundingMembership[]
+
+  @@unique([locationId, audience])
+  @@index([locationId])
+  @@index([status])
+  @@map("founding_programmes")
+}
+
+model FoundingMembership {
+  id                 String                   @id @default(uuid())
+  programmeId        String
+  programme          FoundingProgramme        @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier               MembershipTier           @default(BRONZE)
+  accessLevel        String                   @default("standard") // standard | pro | pro_plus
+  status             FoundingMembershipStatus @default(PENDING)
+  contributionAmount BigInt                   @default(0) // minor units (pence)
+  isMonthly          Boolean                  @default(false)
+  reference          String?
+  startedAt          DateTime                 @default(now())
+  expiresAt          DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@unique([programmeId, userId])
+  @@index([programmeId])
+  @@index([userId])
+  @@index([status])
+  @@map("founding_memberships")
+}
+
+// =============================================================================
+// SUPPORT TICKETS
+// =============================================================================
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id        String              @id @default(uuid())
+  userId    String?
+  name      String
+  email     String
+  topic     String
+  subject   String?
+  message   String              @db.Text
+  status    SupportTicketStatus @default(OPEN)
+  source    String              @default("web") // web | consumer_dashboard
+  metadata  Json                @default("{}")
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("support_tickets")
 }
 

@@ -53,11 +53,13 @@ export default function BusinessProfilePublicPage() {
 
         if (!mounted) return;
 
-        let bName = slug ? slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Local Business Partner";
-        let bDesc = "Community business supporting local UK high street and charitable campaigns.";
-        let bCity = "United Kingdom";
-        let bTier = "BRONZE";
-        let bCategory = "Local Business";
+        let bName = slug ? slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "";
+        let bDesc = "";
+        let bCity = "";
+        let bTier = "";
+        let bCategory = "";
+        let bJoinedAt = "";
+        let bRewards: string[] = [];
 
         if (profileRes.status === "fulfilled" && profileRes.value) {
           const p: any = profileRes.value;
@@ -66,12 +68,17 @@ export default function BusinessProfilePublicPage() {
           bCity = p.city || p.locationName || bCity;
           bTier = p.membershipTier || bTier;
           bCategory = p.category || bCategory;
+          bJoinedAt = p.createdAt
+            ? new Date(p.createdAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+            : "";
+          const rawRewards = p.rewards ?? p.badges ?? p.recognition;
+          bRewards = Array.isArray(rawRewards) ? rawRewards.filter((r: unknown) => typeof r === "string") : [];
         }
 
         const rawCampaigns = campaignsRes.status === "fulfilled" ? campaignsRes.value?.items || [] : [];
         const mappedCampaigns = rawCampaigns.map((c: any) => ({
           id: c.id,
-          name: c.title || "Community Campaign",
+          name: c.title || "Untitled campaign",
           description: c.tagline || c.shortDescription || "",
           raised: c.raisedAmount || 0,
           target: c.targetAmount || 0,
@@ -81,18 +88,18 @@ export default function BusinessProfilePublicPage() {
         const totalRaised = mappedCampaigns.reduce((acc: number, c: any) => acc + c.raised, 0);
 
         setBusiness({
-          id: slug || "b-1",
+          id: slug || "",
           name: bName,
           type: bCategory,
           description: bDesc,
           location: bCity,
-          categories: [bCategory, "Community"],
+          categories: bCategory ? [bCategory] : [],
           membershipTier: bTier,
-          joinedAt: "Active Partner",
-          rank: 1,
+          joinedAt: bJoinedAt,
+          rank: 0,
           totalRaised,
           campaigns: mappedCampaigns,
-          rewards: ["Active Community Partner", "High Street Supporter"],
+          rewards: bRewards,
         });
       } catch (err) {
         console.error("Failed to load business profile:", err);
@@ -137,10 +144,12 @@ export default function BusinessProfilePublicPage() {
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">{business.name}</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{business.name || "Business profile"}</h1>
                 <Crown className="h-5 w-5 text-yellow-500" />
               </div>
-              <p className="text-sm text-gray-500 mt-1">{business.type} · {business.location}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {[business.type, business.location].filter(Boolean).join(" · ")}
+              </p>
             </div>
             <div className="flex gap-2">
               <button
@@ -177,7 +186,7 @@ export default function BusinessProfilePublicPage() {
           </div>
           <div className="rounded-xl bg-white p-4 shadow-sm border text-center">
             <Award className="mx-auto h-5 w-5 text-yellow-500 mb-1" />
-            <div className="text-xl font-bold text-gray-900">{business.membershipTier}</div>
+            <div className="text-xl font-bold text-gray-900">{business.membershipTier || "—"}</div>
             <div className="text-xs text-gray-500">Partner Tier</div>
           </div>
         </div>
@@ -185,15 +194,18 @@ export default function BusinessProfilePublicPage() {
         {/* About */}
         <div className="rounded-xl bg-white p-5 shadow-sm border mb-6">
           <h2 className="text-lg font-bold text-gray-900 mb-3">About</h2>
-          <p className="text-sm text-gray-600">{business.description}</p>
+          {business.description && <p className="text-sm text-gray-600">{business.description}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             {business.categories.map((c) => (
               <span key={c} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{c}</span>
             ))}
           </div>
-          <div className="mt-4 text-xs text-gray-400">
-            {business.joinedAt} · {business.membershipTier} Tier
-          </div>
+          {business.joinedAt && (
+            <div className="mt-4 text-xs text-gray-400">
+              {business.joinedAt}
+              {business.membershipTier ? ` · ${business.membershipTier} Tier` : ""}
+            </div>
+          )}
         </div>
 
         {/* Campaigns */}
@@ -234,16 +246,18 @@ export default function BusinessProfilePublicPage() {
         </div>
 
         {/* Rewards */}
-        <div className="rounded-xl bg-white p-5 shadow-sm border">
-          <h2 className="text-lg font-bold text-gray-900 mb-3">Earned Recognition</h2>
-          <div className="flex flex-wrap gap-2">
-            {business.rewards.map((r) => (
-              <span key={r} className="inline-flex items-center gap-1 rounded-full bg-yellow-50 border border-yellow-200 px-3 py-1.5 text-xs font-medium text-yellow-700">
-                <Award className="h-3 w-3" /> {r}
-              </span>
-            ))}
+        {business.rewards.length > 0 && (
+          <div className="rounded-xl bg-white p-5 shadow-sm border">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Earned Recognition</h2>
+            <div className="flex flex-wrap gap-2">
+              {business.rewards.map((r) => (
+                <span key={r} className="inline-flex items-center gap-1 rounded-full bg-yellow-50 border border-yellow-200 px-3 py-1.5 text-xs font-medium text-yellow-700">
+                  <Award className="h-3 w-3" /> {r}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -165,7 +165,7 @@ export default function FundingExplainerPage() {
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">See It In Action</h2>
-          <p className="text-gray-500">Real examples of how contributions feed into campaign funding targets.</p>
+          <p className="text-gray-500">Worked examples showing how contributions feed into campaign funding targets.</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">

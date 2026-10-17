@@ -210,7 +210,7 @@ export default function FundVsDonatePage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
             {[
               { icon: Gift, title: "MCOM Rewards", desc: "Earn reward points with every contribution" },
-              { icon: Globe, title: "National Exchange", desc: "Share, Exchange and Redeem across 76 UK City Hubs" },
+              { icon: Globe, title: "National Exchange", desc: "Share, Exchange and Redeem across UK City Hubs" },
               { icon: Shield, title: "Transparency", desc: "Full visibility on how your contribution is used" },
               { icon: HandHeart, title: "Community Impact", desc: "Support your Local High Street and community" },
             ].map((item) => (

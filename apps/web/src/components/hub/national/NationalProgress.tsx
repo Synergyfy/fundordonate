@@ -1,9 +1,10 @@
 // =============================================================================
 // National Hub — National Progress Snapshot Section
-// Overall funding and membership progress with live API + demo fallback.
+// Overall funding and membership progress from the live hub API.
 // =============================================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { AlertCircle, RotateCcw } from "lucide-react";
 import { hubProgressApi, type NationalProgressData } from "@/services/hub-progress";
 import { ProgressRing } from "@/components/hub/ProgressRing";
 import { formatCurrency, formatNumber } from "@/utils/formatters";
@@ -11,17 +12,43 @@ import { formatCurrency, formatNumber } from "@/utils/formatters";
 export function NationalProgress() {
   const [data, setData] = useState<NationalProgressData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    hubProgressApi.getNationalSummary().then((result) => {
-      if (!cancelled) {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(false);
+    hubProgressApi
+      .getNationalSummary()
+      .then((result) => {
         setData(result);
         setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
+      })
+      .catch(() => {
+        setData(null);
+        setError(true);
+        setLoading(false);
+      });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
+          <AlertCircle className="mx-auto mb-3 h-8 w-8 text-rose-500" aria-hidden="true" />
+          <h3 className="mb-1 font-semibold text-gray-900">Progress could not be loaded</h3>
+          <p className="mb-4 text-sm text-gray-600">We couldn't reach the national progress service.</p>
+          <button onClick={load} className="btn-secondary inline-flex items-center gap-2">
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   if (loading || !data) {
     return (

@@ -13,6 +13,21 @@ import { useQuery } from "@tanstack/react-query";
 import { seasonApi, type Season } from "@/services/season";
 import { useCountdown } from "@/hooks/useCountdown";
 import { campaignApi } from "@/services/campaign";
+import { MEMBERSHIP_TIERS } from "@/constants/membershipTiers";
+
+const TIER_TEXT_COLORS: Record<string, string> = {
+  bronze: "text-orange-600",
+  silver: "text-gray-600",
+  gold: "text-yellow-600",
+  platinum: "text-purple-600",
+};
+
+/** Membership tiers with their standard entry price, from the canonical catalogue. */
+const MEMBERSHIP_TIER_CARDS = MEMBERSHIP_TIERS.map((t) => ({
+  name: t.name,
+  amount: `£${t.variants.find((v) => v.accessLevel === "standard")?.price ?? 0}`,
+  color: TIER_TEXT_COLORS[t.id] ?? "text-gray-600",
+}));
 
 const fmtDate = (d: string) => {
   const date = new Date(d);
@@ -431,12 +446,7 @@ export default function BusinessParticipationChoicePage() {
                   Founding Member status includes membership tiers that determine your benefits level:
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { name: "Bronze", amount: "£50", color: "text-orange-600" },
-                    { name: "Silver", amount: "£100", color: "text-gray-600" },
-                    { name: "Gold", amount: "£150", color: "text-yellow-600" },
-                    { name: "Platinum", amount: "£200", color: "text-purple-600" },
-                  ].map((tier) => (
+                  {MEMBERSHIP_TIER_CARDS.map((tier) => (
                     <div key={tier.name} className="rounded-lg bg-white border p-2 text-center">
                       <div className={`text-xs font-bold ${tier.color}`}>{tier.name}</div>
                       <div className="text-[10px] text-gray-500">{tier.amount}</div>

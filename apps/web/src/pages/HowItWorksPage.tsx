@@ -187,7 +187,7 @@ export default function HowItWorksPage() {
                   { icon: Building2, title: "Join Your Local Hub", desc: "Register as a Business Owner and connect with your local High Street Hub." },
                   { icon: Users, title: "Become a Business Contributor", desc: "Contribute to your Local Hub and receive Backer Status with national reward exchange benefits." },
                   { icon: Share2, title: "Reward Supporters", desc: "Offer rewards and recognise the people who back your hub. Connect with Local Residents through the community network." },
-                  { icon: Globe, title: "Go National", desc: "Your Backer Status works across all 76 UK City Hubs. Share, Exchange and Redeem Nationally." },
+                  { icon: Globe, title: "Go National", desc: "Your Backer Status works across UK City Hubs nationwide. Share, Exchange and Redeem Nationally." },
                 ].map((item) => (
                   <div key={item.title} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
                     <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">

@@ -8,6 +8,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
 import { locationService } from "@/services/location";
+import { campaignApi } from "@/services/campaign";
 import type { BreadcrumbItem } from "@/types/uk-hub";
 import { LOCATION_TYPE_META } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
@@ -51,8 +52,14 @@ export default function CityBusinessHubPage() {
     enabled: !!slug,
   });
 
+  const { data: campaignResponse } = useQuery({
+    queryKey: ["city-business-campaigns", slug],
+    queryFn: () => (campaignApi.list as any)({ audience: "business", location: slug, limit: 50 }),
+    enabled: !!slug,
+  });
+
   const location = (hierarchy as any)?.city || hierarchy || null;
-  const campaigns: any[] = [];
+  const campaigns: any[] = campaignResponse?.items ?? [];
 
   if (isLoading) {
     return (
@@ -101,9 +108,20 @@ export default function CityBusinessHubPage() {
     createdAt: new Date().toISOString(),
   }));
 
-  const activationPct = location.publicStatus === "ACTIVE" ? 100 : location.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
-  const totalBusinesses = location.businessesCount || children.reduce((s: number, a: any) => s + (a.businessesCount || 10), 0) || 50;
+  const activationProgress = Number((location as any).activationProgress);
+  const activationPct =
+    Number.isFinite(activationProgress) && activationProgress > 0
+      ? Math.min(100, Math.round(activationProgress))
+      : location.publicStatus === "ACTIVE"
+        ? 100
+        : 0;
+  const rawBusinesses = (location as any).businessesCount ?? (location as any).businesses;
+  const totalBusinesses = Number(Array.isArray(rawBusinesses) ? rawBusinesses.length : rawBusinesses) || 0;
   const totalHighStreets = children.reduce((s: number, a: any) => s + (a.highStreetsList?.length || 0), 0);
+  const fundingPct =
+    Number(location.fundingTarget) > 0
+      ? Math.min(100, Math.round((Number(location.fundingRaised) / Number(location.fundingTarget)) * 100))
+      : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -166,7 +184,7 @@ export default function CityBusinessHubPage() {
               <span className="text-[10px] font-bold sm:text-xs">{fmtCurrency(location.fundingRaised)} / {fmtCurrency(location.fundingTarget)}</span>
             </div>
             <div className="h-1.5 bg-white/20 rounded-full overflow-hidden sm:h-2">
-              <div className="h-full bg-green-400 rounded-full" style={{ width: `${Math.min(100, Math.round((location.fundingRaised / location.fundingTarget) * 100))}%` }} />
+              <div className="h-full bg-green-400 rounded-full" style={{ width: `${fundingPct}%` }} />
             </div>
           </div>
         </div>
@@ -197,7 +215,7 @@ export default function CityBusinessHubPage() {
             </div>
             <p className="text-xs text-gray-600 mb-2 sm:text-sm sm:mb-3">Help reach the funding target for community projects.</p>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-              <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, Math.round((location.fundingRaised / location.fundingTarget) * 100))}%` }} />
+              <div className="h-full bg-green-500 rounded-full" style={{ width: `${fundingPct}%` }} />
             </div>
             <div className="flex justify-between text-[10px] text-gray-500 sm:text-xs">
               <span>{fmtCurrency(location.fundingRaised)} raised</span>
@@ -349,11 +367,21 @@ export default function CityBusinessHubPage() {
         {children.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
             {children.map((child: any) => {
-              const childActivationPct = child.publicStatus === "ACTIVE" ? 100 : child.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
-              const childBusinesses = child.foundingBusinessAllocated * 10;
-              const childHighStreets = Math.floor(childActivationPct / 20);
-              const childCampaigns = Math.floor(childActivationPct / 15);
-              const childFundingPct = Math.min(100, Math.round((child.fundingRaised / child.fundingTarget) * 100));
+              const childProgress = Number(child.activationProgress);
+              const childActivationPct =
+                Number.isFinite(childProgress) && childProgress > 0
+                  ? Math.min(100, Math.round(childProgress))
+                  : child.publicStatus === "ACTIVE"
+                    ? 100
+                    : 0;
+              const rawChildBusinesses = child.businessesCount ?? child.foundingBusinessAllocated;
+              const childBusinesses = Number(Array.isArray(rawChildBusinesses) ? rawChildBusinesses.length : rawChildBusinesses) || 0;
+              const childHighStreets = child.highStreetsList?.length || 0;
+              const childCampaigns = Number(child.campaignsCount) || 0;
+              const childFundingPct =
+                Number(child.fundingTarget) > 0
+                  ? Math.min(100, Math.round((Number(child.fundingRaised) / Number(child.fundingTarget)) * 100))
+                  : 0;
               
               return (
                 <div key={child.id} className="rounded-xl bg-white border p-4 hover:shadow-md transition-shadow sm:p-5">

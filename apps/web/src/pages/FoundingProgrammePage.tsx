@@ -1,21 +1,21 @@
 // =============================================================================
 // UK Hub — Founding Programme Detail Page
 // Route: /founding/:programmeId
-// Resolves seeded programmes by id, or synthetic ids (fp-{slug}-{audience}).
+// Resolves live founding programmes for the city (fp-{slug}-{audience} ids).
 // Shows allocation, tiers, benefits, hub info and a join flow.
 // =============================================================================
 
 import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { locationService } from "@/services/location";
+import { foundingService } from "@/services/founding";
 import {
-  buildSyntheticLocation, buildSyntheticProgrammes,
   FOUNDING_METALS, FOUNDING_TIER_LEVELS, FOUNDING_LEVEL_COMPARISON,
   PROVISIONAL_OPTION_KEYS, foundingOptionKey, getOptionPrice, getProgrammeWindow,
   type FoundingMetalKey, type FoundingLevelKey,
 } from "@/utils/foundingProgramme";
-import type { HubLocation, FoundingProgramme } from "@/types/uk-hub";
+import type { HubLocation, FoundingProgramme, FoundingProgrammeStatus } from "@/types/uk-hub";
 import { FOUNDING_STATUS_META } from "@/types/uk-hub";
 import { FOUNDING_BENEFIT_LABELS } from "@/components/hub/FoundingProgrammeCard";
 import { ProgressRing } from "@/components/hub/ProgressRing";
@@ -31,28 +31,14 @@ export interface TierSelection {
 // ───────────────────── Join form ─────────────────────
 
 function JoinForm({ programme, isBusiness, selection }: { programme: FoundingProgramme; isBusiness: boolean; selection: TierSelection }) {
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   const remaining = Math.max(0, programme.totalAllocation - programme.allocatedCount);
   const waitlist = remaining === 0;
-
-  if (done) {
-    return (
-      <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-2xl">✓</div>
-        <h3 className="mt-3 font-bold text-gray-900">{waitlist ? "You're on the waitlist" : "Spot reserved"}</h3>
-        <p className="mt-1 text-sm text-gray-600">
-          {waitlist
-            ? `Thanks ${name.split(" ")[0] || "there"} — we'll email ${email || "you"} as soon as a ${selection.metalLabel} spot opens.`
-            : `Thanks ${name.split(" ")[0] || "there"} — your ${selection.metalLabel} · ${selection.levelLabel} interest is reserved. We'll email ${email || "you"} with next steps.`}
-        </p>
-      </div>
-    );
-  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +46,8 @@ function JoinForm({ programme, isBusiness, selection }: { programme: FoundingPro
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Please enter a valid email address.");
     if (isBusiness && businessName.trim().length < 2) return setError("Please enter your business name.");
     setError(null);
-    setDone(true);
+    // Continue into the real membership purchase flow for this location.
+    navigate(`/membership/${programme.locationId}?amount=${selection.price}`);
   };
 
   const inputCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100";
@@ -105,27 +92,54 @@ export default function FoundingProgrammePage() {
   const citySlug = match ? match[1]! : id.replace(/^fp-/, "");
   const audience = match ? (match[2] === "business" ? "BUSINESS" : "CONSUMER") : "BUSINESS";
 
-  const { data: cities = [] } = useQuery({
+  const { data: cities = [], isLoading: citiesLoading } = useQuery({
     queryKey: ["hubCities"],
     queryFn: () => locationService.fetchHubCities(),
   });
 
+  const { data: apiProgrammes = [], isLoading: programmesLoading } = useQuery({
+    queryKey: ["founding-programmes", citySlug],
+    queryFn: () => foundingService.getProgrammes(citySlug),
+    enabled: Boolean(citySlug),
+  });
+
   const resolved = useMemo((): { programme: FoundingProgramme; location: HubLocation } | null => {
     if (!citySlug) return null;
-    const city = cities.find(c => c.slug === citySlug || c.id === citySlug) || {
-      id: `city-${citySlug}`,
-      name: citySlug.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
-      slug: citySlug,
-      status: "active",
-      shortDescription: `Local Hub for ${citySlug}`,
-      fundingRaised: 45000,
-      fundingTarget: 100000,
-    };
+    const city = cities.find(c => c.slug === citySlug || c.id === citySlug);
+    if (!city) return null;
+    const apiProg = apiProgrammes.find(p => p.audience === audience) ?? apiProgrammes[0];
+    if (!apiProg) return null;
 
-    const loc = buildSyntheticLocation(city);
-    const prog = buildSyntheticProgrammes(loc).find(p => p.audience === audience) || buildSyntheticProgrammes(loc)[0]!;
-    return { programme: prog, location: loc };
-  }, [citySlug, cities, audience]);
+    const programme: FoundingProgramme = {
+      id: apiProg.id,
+      locationId: apiProg.locationId,
+      audience: apiProg.audience,
+      status: apiProg.status as FoundingProgrammeStatus,
+      title: apiProg.title,
+      description: apiProg.description ?? null,
+      totalAllocation: apiProg.totalAllocation,
+      allocatedCount: apiProg.allocatedCount,
+      opensAt: apiProg.opensAt ?? null,
+      closesAt: apiProg.closesAt ?? null,
+      contributionConfig: apiProg.contributionConfig ?? "{}",
+      benefitConfig: JSON.stringify(apiProg.benefits ?? []),
+      eligibilityConfig: "{}",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return { programme, location: city };
+  }, [citySlug, cities, audience, apiProgrammes]);
+
+  if (citiesLoading || programmesLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+          <p className="mt-3 text-sm text-gray-500">Loading programme…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!resolved) {
     return (

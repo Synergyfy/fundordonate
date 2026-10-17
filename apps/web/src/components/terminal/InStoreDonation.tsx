@@ -53,6 +53,7 @@ export function InStoreDonation({
   const [customAmount, setCustomAmount] = useState("");
   const [giftAid, setGiftAid] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCampaignSelect = (campaign: Campaign) => {
     setSelectedCampaign(campaign);
@@ -69,13 +70,15 @@ export function InStoreDonation({
     if (!selectedCampaign || amount <= 0) return;
 
     setProcessing(true);
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setProcessing(false);
-    setStep("success");
-
-    if (onDonation) {
-      onDonation(selectedCampaign.id, amount, giftAid);
+    setError(null);
+    try {
+      // Persistence is owned by the caller (terminal payment/contribution API).
+      await onDonation?.(selectedCampaign.id, amount, giftAid);
+      setStep("success");
+    } catch {
+      setError("This donation could not be processed. Please try again.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -97,7 +100,7 @@ export function InStoreDonation({
         <h2 className="text-2xl font-bold text-green-800 mb-2">{thankYouMessage}</h2>
         <p className="text-green-700 mb-6">
           Your £{((selectedAmount || Number(customAmount) * 100) / 100).toFixed(2)} donation to{" "}
-          <strong>{selectedCampaign?.title}</strong> has been recorded.
+          <strong>{selectedCampaign?.title}</strong> has been processed.
         </p>
         <button
           onClick={handleNewDonation}
@@ -255,6 +258,12 @@ export function InStoreDonation({
               <Gift className="h-4 w-4 inline mr-1" />
               Gift Aid adds £{((amount * 0.25) / 100).toFixed(2)} at no extra cost
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-center text-sm text-red-700 mb-6">
+            {error}
           </div>
         )}
 

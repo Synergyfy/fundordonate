@@ -118,6 +118,38 @@ export class PublicCampaignsService {
   }
 
   /**
+   * Look up a single contribution by its public reference (e.g. WEB-042) for the
+   * post-payment confirmation page.
+   */
+  async getContributionByReference(reference: string) {
+    const contribution = await this.prisma.contribution.findUnique({
+      where: { reference },
+      include: {
+        campaign: { select: { id: true, title: true } },
+        business: { select: { name: true, city: true } },
+      },
+    });
+    if (!contribution) {
+      throw new NotFoundException(`Contribution ${reference} not found`);
+    }
+
+    return {
+      uid: contribution.id,
+      reference: contribution.reference,
+      amount: contribution.amount,
+      status: contribution.status.toLowerCase(),
+      createdAt: contribution.createdAt.toISOString(),
+      gateway: contribution.gateway,
+      campaign: {
+        id: contribution.campaign.id,
+        title: contribution.campaign.title,
+        slug: this.slugify(contribution.campaign.title),
+      },
+      business: { name: contribution.business.name, location: contribution.business.city },
+    };
+  }
+
+  /**
    * Retrieves public campaigns matching filters (audience, mode, city, search, etc.)
    */
   async list(query: PublicCampaignQueryDto): Promise<{

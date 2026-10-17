@@ -205,7 +205,7 @@ export default function FoundingMemberDashboardPage() {
                 {hasActive && (
                   <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
                     <CheckCircle2 className="h-3 w-3" />
-                    Active for your membership
+                    Included with Founding Membership
                   </span>
                 )}
               </div>

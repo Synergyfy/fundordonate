@@ -26,13 +26,30 @@ export function WalletCard({
     );
   }
 
-  const currentWallet = wallet ?? {
-    success: true,
-    balance: 0,
-    availableBalance: 0,
-    status: "ACTIVE" as const,
-    currency: "MCOM" as const,
-  };
+  if (isError || !wallet) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs text-left">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+            <Coins className="h-4 w-4" />
+          </span>
+          <h3 className="font-bold text-gray-900">{title}</h3>
+        </div>
+        <p className="mt-3 text-sm text-gray-500">
+          Wallet balance is unavailable right now.
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const currentWallet = wallet;
 
   return (
     <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/70 via-white to-orange-50/50 p-6 shadow-xs text-left relative overflow-hidden">

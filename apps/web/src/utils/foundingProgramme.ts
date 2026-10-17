@@ -2,7 +2,7 @@
 // Founding Programme Utilities & Calculation Helpers
 // =============================================================================
 
-import type { HubLocation, LocationPublicStatus, FoundingProgramme } from "@/types/uk-hub";
+import type { HubLocation, LocationPublicStatus } from "@/types/uk-hub";
 import { formatCurrency } from "@/utils/formatters";
 
 export type FoundingMetalKey = "bronze" | "silver" | "gold" | "platinum";
@@ -263,98 +263,3 @@ export function foundingOptionKey(metal: FoundingMetalKey, level: FoundingLevelK
   return `${metal}_${level}`;
 }
 
-export function buildSyntheticProgrammes(loc: HubLocation): FoundingProgramme[] {
-  const now = new Date().toISOString();
-  const future = new Date(Date.now() + 60 * 86_400_000).toISOString();
-  const mk = (audience: "BUSINESS" | "CONSUMER", total: number, allocated: number): FoundingProgramme => ({
-    id: `fp-${loc.slug}-${audience.toLowerCase()}`,
-    locationId: loc.id,
-    audience,
-    status: allocated >= total ? "FULLY_ALLOCATED" : allocated / total > 0.9 ? "LIMITED" : "OPEN",
-    title: `${loc.name} Founding ${audience === "BUSINESS" ? "Business" : "Consumer"} Member Programme`,
-    description: audience === "BUSINESS"
-      ? `Join as a Founding Business Member of the ${loc.name} hub. Gain early access, voting rights, priority participation and founding recognition.`
-      : `Become a Founding Consumer Member of the ${loc.name} hub. Support your local community and receive recognition, events access and early opportunities.`,
-    totalAllocation: total,
-    allocatedCount: allocated,
-    opensAt: now,
-    closesAt: future,
-    campaignId: null,
-    contributionConfig: JSON.stringify({
-      bronze_standard: 9000, bronze_pro: 18000, bronze_pro_plus: 30000,
-      silver_standard: 27000, silver_pro: 54000, silver_pro_plus: 80000,
-      gold_standard: 114000, gold_pro: 150000, gold_pro_plus: 195000,
-      platinum_standard: 240000, platinum_pro: 270000, platinum_pro_plus: 300000,
-    }),
-    benefitConfig: JSON.stringify(audience === "BUSINESS"
-      ? ["early_access", "voting", "events", "priority_participation"]
-      : ["community_recognition", "events", "early_access"]),
-    eligibilityConfig: JSON.stringify({ audience }),
-    createdAt: now,
-    updatedAt: now,
-  });
-  return [
-    mk("BUSINESS", loc.foundingBusinessTotal || 50, loc.foundingBusinessAllocated || 25),
-    mk("CONSUMER", loc.foundingConsumerTotal || 200, loc.foundingConsumerAllocated || 120),
-  ];
-}
-
-export function buildSyntheticLocation(mapLoc: {
-  slug: string;
-  name: string;
-  type?: string;
-  status?: string;
-  activationProgress?: number;
-  shortDescription?: string | null;
-  description?: string | null;
-  imageOne?: string | null;
-  imageTwo?: string | null;
-  fundingRaised?: number;
-  fundingTarget?: number;
-  foundingBusinessTotal?: number;
-  foundingBusinessAllocated?: number;
-  foundingConsumerTotal?: number;
-  foundingConsumerAllocated?: number;
-} | HubLocation): HubLocation {
-  const isCity = (mapLoc.type || "city").toLowerCase() === "city";
-  const st = (mapLoc.status || "active").toLowerCase();
-  const publicStatus: LocationPublicStatus =
-    st === "active" ? "ACTIVE" : st === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION";
-
-  return {
-    id: isCity ? `city-${mapLoc.slug}` : `borough-${mapLoc.slug}`,
-    name: mapLoc.name,
-    slug: mapLoc.slug,
-    type: isCity ? "CITY" : "BOROUGH",
-    parentId: isCity ? "uk-national" : "city-london",
-    shortDescription: mapLoc.shortDescription || `${mapLoc.name} Hub`,
-    description: mapLoc.description || mapLoc.shortDescription || `${mapLoc.name} Hub Activation`,
-    heroHeadline: isCity ? `${mapLoc.name} City Hub` : mapLoc.name,
-    heroSupportingText: isCity
-      ? "Part of the UK Hub Activation Programme"
-      : "Local Area — Part of the UK Hub Activation Programme",
-    internalLifecycle: "ACTIVE",
-    publicStatus,
-    statusOverride: null,
-    isActive: publicStatus === "ACTIVE",
-    isPublic: true,
-    mapVisible: true,
-    latitude: null,
-    longitude: null,
-    mapZoomLevel: isCity ? 11 : 13,
-    primaryImage: mapLoc.imageOne || null,
-    secondaryImage: mapLoc.imageTwo || null,
-    fullPath: mapLoc.slug,
-    isFeaturedNationally: false,
-    featuredPriority: 0,
-    fundingTarget: mapLoc.fundingTarget || 200_000,
-    fundingRaised: mapLoc.fundingRaised || 50_000,
-    activationThreshold: 80,
-    foundingBusinessTotal: 50,
-    foundingBusinessAllocated: 25,
-    foundingConsumerTotal: 200,
-    foundingConsumerAllocated: 120,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-}

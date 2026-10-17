@@ -9,12 +9,13 @@ import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
 import {
   ArrowLeft, Calendar, Clock, Users,
-  ChevronRight, Megaphone, TrendingUp, Star, Trophy, Gift,
+  ChevronRight, Megaphone, TrendingUp, Star, Gift,
   FileText, BarChart3, MessageSquare,
-  Shield, Store, Award, Play, ChevronLeft, X, Plus, Minus,
+  Shield, Play, ChevronLeft, X, Plus, Minus,
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
 import { campaignApi } from "@/services/campaign";
+import { Leaderboard } from "@/components/campaign/Leaderboard";
 
 export interface CampaignMedia {
   id: string;
@@ -75,7 +76,6 @@ export default function CampaignDetailPage() {
   
   // Detect consumer vs business context from URL
   const isConsumerContext = location.pathname.includes("/consumer/") || location.pathname.includes("/c-campaigns/");
-  const isBusinessContext = location.pathname.includes("/business/") || location.pathname.includes("/b-campaigns/");
 
   const { data: campaignData, isLoading: campaignLoading } = useQuery({
     queryKey: ["campaign", campaignSlug],
@@ -103,6 +103,21 @@ export default function CampaignDetailPage() {
 
   const seasonCountdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isSeasonActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
+
+  const { data: postsResponse } = useQuery({
+    queryKey: ["campaign-posts", campaign?.id],
+    queryFn: () => campaignApi.getPosts(campaign!.id),
+    enabled: Boolean(campaign?.id),
+  });
+
+  const { data: rewardsResponse } = useQuery({
+    queryKey: ["campaign-rewards", campaign?.id],
+    queryFn: () => campaignApi.getCampaignRewards(campaign!.id),
+    enabled: Boolean(campaign?.id),
+  });
+
+  const posts: any[] = postsResponse?.items ?? [];
+  const rewards: any[] = rewardsResponse?.items ?? [];
 
   const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "City";
   const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
@@ -262,39 +277,15 @@ export default function CampaignDetailPage() {
 
             {/* Community Join Counts */}
             <div className="flex items-center gap-4 rounded-xl bg-white border px-5 py-3">
-              {isBusinessContext && (
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-100">
-                    <Store className="h-3.5 w-3.5 text-purple-600" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-gray-900">{Math.floor(contributors * 0.6) || 12}</span>
-                    <span className="text-xs text-gray-500 ml-1">Businesses Joined</span>
-                  </div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100">
+                  <Users className="h-3.5 w-3.5 text-blue-600" />
                 </div>
-              )}
-              {isConsumerContext && (
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-green-100">
-                    <Users className="h-3.5 w-3.5 text-green-600" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-gray-900">{Math.floor(contributors * 0.4) || 8}</span>
-                    <span className="text-xs text-gray-500 ml-1">Consumers Joined</span>
-                  </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-900">{contributors}</span>
+                  <span className="text-xs text-gray-500 ml-1">Contributors</span>
                 </div>
-              )}
-              {!isBusinessContext && !isConsumerContext && (
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100">
-                    <Users className="h-3.5 w-3.5 text-blue-600" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-gray-900">{contributors}</span>
-                    <span className="text-xs text-gray-500 ml-1">Contributors</span>
-                  </div>
-                </div>
-              )}
+              </div>
               <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
                 <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
                 Live
@@ -369,36 +360,36 @@ export default function CampaignDetailPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-gray-900 mb-2">Full Description</h3>
-                      <p className="text-sm text-gray-600 leading-relaxed">
-                        This campaign aims to raise {fmt(campaign.goalAmount)} to support local initiatives on {streetName}, {localAreaName}, {cityName}. The funding will be used to develop community programmes, support local businesses, and enhance the high street experience for everyone in the area.
-                      </p>
-                      <p className="text-sm text-gray-600 leading-relaxed mt-3">
-                        Through this campaign, we aim to create lasting positive change in our community. Every contribution, no matter the size, helps us move closer to our goal and makes a real difference for the people and businesses on {streetName}.
-                      </p>
+                      {campaign.description ? (
+                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                          {campaign.description}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          This campaign aims to raise {fmt(campaign.goalAmount)} to support local initiatives on {streetName}, {localAreaName}, {cityName}.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {/* ── Rewards tab ── */}
                 {activeTab === "rewards" && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {[
-                      { title: "Backer Badge", desc: "Receive a Backer badge for your contribution", icon: Trophy },
-                      { title: "Leaderboard Points", desc: "Earn points towards the community leaderboard", icon: TrendingUp },
-                      { title: "Community Recognition", desc: "Public recognition for supporting this campaign", icon: Star },
-                      { title: "Campaign Updates", desc: "Regular updates on campaign progress and impact", icon: Megaphone },
-                      { title: "Priority Access", desc: "Early access to future campaigns and initiatives", icon: Award },
-                      { title: "Exclusive Events", desc: "Invitations to community events and networking", icon: Gift },
-                    ].map((reward) => (
-                      <div key={reward.title} className="flex items-start gap-3 rounded-lg bg-yellow-50 border border-yellow-200 p-3">
-                        <reward.icon className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <div className="text-sm font-bold text-gray-900">{reward.title}</div>
-                          <div className="text-xs text-gray-600">{reward.desc}</div>
+                  rewards.length === 0 ? (
+                    <p className="text-sm text-gray-500">No rewards are configured for this campaign yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {rewards.map((reward: any) => (
+                        <div key={reward.id} className="flex items-start gap-3 rounded-lg bg-yellow-50 border border-yellow-200 p-3">
+                          <Gift className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <div className="text-sm font-bold text-gray-900">{reward.title || reward.name || "Reward"}</div>
+                            {reward.description && <div className="text-xs text-gray-600">{reward.description}</div>}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )
                 )}
 
                 {/* ── Leaderboard tab ── */}
@@ -407,50 +398,31 @@ export default function CampaignDetailPage() {
                     <p className="text-sm text-gray-600 mb-4">
                       Top contributors to this campaign. Earn leaderboard points by backing this campaign.
                     </p>
-                    <div className="space-y-2">
-                      {[
-                        { name: "ABC Foods Ltd", amount: 500, rank: 1 },
-                        { name: "Smith & Co", amount: 350, rank: 2 },
-                        { name: "Local Bakery", amount: 200, rank: 3 },
-                      ].map((entry) => (
-                        <div key={entry.name} className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                            entry.rank === 1 ? "bg-yellow-100 text-yellow-700" :
-                            entry.rank === 2 ? "bg-gray-100 text-gray-600" :
-                            "bg-orange-100 text-orange-700"
-                          }`}>
-                            {entry.rank}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-bold text-gray-900">{entry.name}</div>
-                          </div>
-                          <div className="text-sm font-bold text-green-600">{fmt(entry.amount)}</div>
-                        </div>
-                      ))}
-                    </div>
+                    <Leaderboard level="campaign" scopeId={campaign.id} size={10} />
                   </div>
                 )}
 
                 {/* ── Updates tab ── */}
                 {activeTab === "updates" && (
-                  <div className="space-y-4">
-                    {[
-                      { date: "10 Sep 2026", title: "Campaign Launched", desc: "We're excited to launch this campaign for the community!" },
-                      { date: "5 Sep 2026", title: "Milestone Reached", desc: "We've reached 25% of our funding goal. Thank you for your support!" },
-                    ].map((update, i) => (
-                      <div key={i} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div className="h-3 w-3 rounded-full bg-blue-500" />
-                          {i < 1 && <div className="w-0.5 flex-1 bg-gray-200 mt-1" />}
+                  posts.length === 0 ? (
+                    <p className="text-sm text-gray-500">No updates have been posted for this campaign yet.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {posts.map((post: any, i: number) => (
+                        <div key={post.id ?? i} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="h-3 w-3 rounded-full bg-blue-500" />
+                            {i < posts.length - 1 && <div className="w-0.5 flex-1 bg-gray-200 mt-1" />}
+                          </div>
+                          <div className="pb-4">
+                            <div className="text-[10px] text-gray-400">{post.createdAt ? fmtDate(post.createdAt) : ""}</div>
+                            <div className="text-sm font-bold text-gray-900">{post.title}</div>
+                            {post.content && <div className="text-xs text-gray-600 mt-0.5">{post.content}</div>}
+                          </div>
                         </div>
-                        <div className="pb-4">
-                          <div className="text-[10px] text-gray-400">{update.date}</div>
-                          <div className="text-sm font-bold text-gray-900">{update.title}</div>
-                          <div className="text-xs text-gray-600 mt-0.5">{update.desc}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )
                 )}
 
                 {/* ── Terms tab ── */}
@@ -494,7 +466,11 @@ export default function CampaignDetailPage() {
                     Start Date
                   </div>
                   <div className="font-bold text-gray-900">
-                    {currentSeason ? fmtDate(currentSeason.startDate) : fmtDate(new Date(Date.now() - 30 * 86400000).toISOString())}
+                    {campaign.startDate
+                      ? fmtDate(campaign.startDate)
+                      : currentSeason
+                        ? fmtDate(currentSeason.startDate)
+                        : "—"}
                   </div>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
