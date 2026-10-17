@@ -10,6 +10,7 @@ import {
 import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { TokenCipher } from "../common/crypto/token-cipher";
+import { McomClient } from "./mcom.client";
 import type {
   McomAppPlan,
   McomBusinessProfile,
@@ -54,6 +55,7 @@ export class EntitlementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cipher: TokenCipher,
+    private readonly mcomClient: McomClient,
   ) {}
 
   /**
@@ -320,6 +322,67 @@ export class EntitlementService {
       return this.cipher.decrypt(user.mcomAccessToken);
     } catch (error) {
       this.logger.warn(`Failed to decrypt Central token: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * A usable Central SSO access token for the user, refreshing it from Central
+   * when it is missing or close to expiry. Used as the `subject_token` for
+   * RFC 8693 delegated exchanges (e.g. 247GBS Audit reads). Returns `null` when
+   * the user has no MCOM link or the refresh fails and no usable token remains.
+   */
+  async getFreshCentralToken(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        mcomAccessToken: true,
+        mcomRefreshToken: true,
+        mcomTokenExpiresAt: true,
+      },
+    });
+    if (!user) return null;
+
+    const current = this.tryDecrypt(user.mcomAccessToken);
+    const expiringSoon =
+      !user.mcomTokenExpiresAt ||
+      user.mcomTokenExpiresAt.getTime() <= Date.now() + 60_000;
+    if (current && !expiringSoon) return current;
+
+    const refresh = this.tryDecrypt(user.mcomRefreshToken);
+    if (!refresh) return current;
+
+    try {
+      const tokens = await this.mcomClient.refreshCentralToken(refresh);
+      if (!tokens?.accessToken) return current;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          mcomAccessToken: this.cipher.encrypt(tokens.accessToken),
+          ...(tokens.refreshToken
+            ? { mcomRefreshToken: this.cipher.encrypt(tokens.refreshToken) }
+            : {}),
+          mcomTokenExpiresAt: new Date(
+            Date.now() + (tokens.expiresIn ?? 3600) * 1000,
+          ),
+        },
+      });
+      return tokens.accessToken;
+    } catch (error) {
+      this.logger.warn(
+        `Central token refresh failed for user ${userId}: ${(error as Error).message}`,
+      );
+      return current;
+    }
+  }
+
+  /** Decrypt a stored value, returning null instead of throwing. */
+  private tryDecrypt(value: string | null | undefined): string | null {
+    if (!value) return null;
+    try {
+      return this.cipher.decrypt(value);
+    } catch (error) {
+      this.logger.warn(`Failed to decrypt stored token: ${(error as Error).message}`);
       return null;
     }
   }

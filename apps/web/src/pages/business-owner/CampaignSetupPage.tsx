@@ -38,6 +38,7 @@ import {
   useSubmitCampaign,
 } from "@/services/campaign/hook";
 import { useBusinessProfile } from "@/services/business/hook";
+import { useBusinessAuditStatus } from "@/services/audit/hook";
 import {
   gatewayName,
   type PaymentGateway,
@@ -74,7 +75,7 @@ const formatDate = (iso: string) => {
 const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   admin: { label: "Admin", color: "bg-purple-100 text-purple-700" },
   template: { label: "Template", color: "bg-indigo-100 text-indigo-700" },
-  audit: { label: "Public Pre-Audit", color: "bg-amber-100 text-amber-800" },
+  audit: { label: "247GBS Pre-Audit", color: "bg-amber-100 text-amber-800" },
   business_account: { label: "Business account", color: "bg-blue-100 text-blue-700" },
   location: { label: "Location", color: "bg-teal-100 text-teal-700" },
   mcom: { label: "MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
@@ -223,6 +224,10 @@ export default function CampaignSetupPage() {
   const { data: templates = [], isLoading: templatesLoading } =
     useBusinessTemplates();
   const { data: profile, isLoading: profileLoading } = useBusinessProfile();
+  const { data: auditStatus } = useBusinessAuditStatus();
+  const preAuditRef = auditStatus?.preAuditId
+    ? auditStatus.preAuditId.slice(0, 8).toUpperCase()
+    : null;
   const {
     data: campaign,
     isLoading: campaignLoading,
@@ -648,8 +653,8 @@ export default function CampaignSetupPage() {
                     value: profile?.membershipTier || "Standard",
                   },
                   {
-                    label: "Public Pre-Audit",
-                    value: profile?.id ? `AUD-${profile.id.slice(0, 6).toUpperCase()}` : "Verified",
+                    label: "247GBS Pre-Audit",
+                    value: preAuditRef ?? "Not linked",
                   },
                 ].map((row) => (
                   <div key={row.label}>
@@ -708,7 +713,7 @@ export default function CampaignSetupPage() {
                   }`}
                 >
                   {source === "audit"
-                    ? `Public Pre-Audit (${profile?.id ? `AUD-${profile.id.slice(0, 6).toUpperCase()}` : "Verified"})`
+                    ? `247GBS Pre-Audit (${preAuditRef ?? "Not linked"})`
                     : "Direct template use"}
                 </span>
                 <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
@@ -725,7 +730,7 @@ export default function CampaignSetupPage() {
                     Imported from your Public Pre-Audit
                   </p>
                   <span className="rounded bg-amber-200/70 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                    {profile?.id ? `AUD-${profile.id.slice(0, 6).toUpperCase()}` : "AUD-VERIFIED"}
+                    {preAuditRef ?? "247GBS"}
                   </span>
                 </div>
                 <p className="text-xs text-amber-800">

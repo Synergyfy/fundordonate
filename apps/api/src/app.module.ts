@@ -18,6 +18,7 @@ import { HubModule } from "./modules/hub/hub.module";
 import { PublicCampaignsModule } from "./modules/campaigns/public-campaigns.module";
 import { ConsumerModule } from "./modules/consumer/consumer.module";
 import { RewardsModule } from "./modules/rewards/rewards.module";
+import { AuditModule } from "./modules/audit/audit.module";
 import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
 
 @Module({
@@ -48,6 +49,7 @@ import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
     PublicCampaignsModule,
     ConsumerModule,
     RewardsModule,
+    AuditModule,
     LeaderboardModule,
   ],
   controllers: [AppController],

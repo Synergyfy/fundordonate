@@ -413,4 +413,12 @@ export class InstantiateCampaignTemplateDto {
   @IsInt()
   @Min(1)
   deadlineDays?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Force assignment, overriding eligibility. Only honoured when the template allows admin override.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }

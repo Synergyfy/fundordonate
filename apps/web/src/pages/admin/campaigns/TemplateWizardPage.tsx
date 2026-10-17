@@ -110,6 +110,7 @@ type FieldSource =
   | "business_account"
   | "business_mcom"
   | "audit_business"
+  | "audit_diagnostic"
   | "admin"
   | "admin_mcom";
 type FieldAccess = "no" | "configurable" | "conditional";
@@ -222,6 +223,7 @@ interface AccessConfig {
   accessAsReward: boolean;
   accessRewardThreshold: string;
   adminApproval: boolean;
+  allowAssignmentOverride: boolean;
 }
 
 interface FieldAccessRow {
@@ -386,7 +388,7 @@ const PRESENTATION_OPTIONS: { id: Presentation; label: string; description: stri
 
 const ACCESS_TYPES: { id: AccessTypeId; label: string; description: string; icon: React.ReactNode }[] = [
   { id: "automatic", label: "Automatic", description: "Every eligible business sees the template automatically — no approval needed.", icon: <Zap className="h-4 w-4" /> },
-  { id: "audit", label: "After Audit", description: "Unlocked once the business passes its platform audit.", icon: <ShieldCheck className="h-4 w-4" /> },
+  { id: "audit", label: "After Audit", description: "Unlocked once the business passes its 247GBS Audit pre-audit.", icon: <ShieldCheck className="h-4 w-4" /> },
   { id: "contribution", label: "Contribution", description: "Unlocked when the business contributes the required amount to the platform.", icon: <Wallet className="h-4 w-4" /> },
   { id: "membership", label: "Membership / Package", description: "Unlocked by an active membership or purchased package tier.", icon: <Package className="h-4 w-4" /> },
   { id: "admin_assigned", label: "Admin Assigned", description: "Granted manually by an Admin to specific businesses.", icon: <UserCheck className="h-4 w-4" /> },
@@ -395,7 +397,7 @@ const ACCESS_TYPES: { id: AccessTypeId; label: string; description: string; icon
 
 const ELIGIBILITY_RULES: { id: string; label: string; description: string; icon: React.ReactNode }[] = [
   { id: "business_account", label: "Verified business account", description: "Business must have a completed, verified account.", icon: <Building2 className="h-4 w-4" /> },
-  { id: "pre_audit", label: "Passed pre-audit", description: "Business must have passed its FundOrDonate audit.", icon: <ShieldCheck className="h-4 w-4" /> },
+  { id: "pre_audit", label: "Passed pre-audit", description: "Business must have completed and shared a 247GBS Audit pre-audit.", icon: <ShieldCheck className="h-4 w-4" /> },
   { id: "membership_active", label: "Active membership", description: "Business must hold an active membership tier.", icon: <BadgeCheck className="h-4 w-4" /> },
   { id: "package_tier", label: "Purchased package", description: "Business must hold the required package tier.", icon: <Package className="h-4 w-4" /> },
   { id: "min_contribution", label: "Minimum platform contribution", description: "Business must have contributed at least £100 to the platform.", icon: <Wallet className="h-4 w-4" /> },
@@ -418,6 +420,7 @@ const FIELD_SOURCE_META: Record<string, { label: string; color: string }> = {
   location: { label: "Location", color: "bg-emerald-100 text-emerald-700" },
   business_mcom: { label: "Business-MCOM", color: "bg-teal-100 text-teal-700" },
   audit_business: { label: "Audit-Business", color: "bg-amber-100 text-amber-700" },
+  audit_diagnostic: { label: "247GBS Audit", color: "bg-amber-100 text-amber-800" },
   admin: { label: "Admin", color: "bg-purple-100 text-purple-700" },
   admin_mcom: { label: "Admin-MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
 };
@@ -469,9 +472,9 @@ const DEFAULT_FIELD_ACCESS: FieldAccessRow[] = [
   { id: "f_location", field: "Location details", source: "business_account", access: "conditional" },
   { id: "f_contact", field: "Contact information", source: "business_account", access: "configurable" },
   { id: "f_rewards", field: "Reward selection", source: "template", access: "conditional" },
-  { id: "f_payout", field: "Payout / bank details", source: "audit_business", access: "no" },
+  { id: "f_payout", field: "Payout / bank details", source: "admin", access: "no" },
   { id: "f_disclosure", field: "Self-funding disclosure", source: "admin", access: "no" },
-  { id: "f_docs", field: "Supporting documents", source: "audit_business", access: "configurable" },
+  { id: "f_docs", field: "Supporting documents", source: "business_account", access: "configurable" },
 ];
 
 const CONTRIBUTION_MODES: { id: ContributionMode; label: string; description: string }[] = [
@@ -870,6 +873,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           accessAsReward: false,
           accessRewardThreshold: "100",
           adminApproval: false,
+          allowAssignmentOverride: false,
         }
   );
 
@@ -1537,12 +1541,14 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
   const completenessIssues = completeness.filter((c) => !c.ok).length;
   const blockingIssues = completeness.filter((c) => !c.ok && c.blocking).length;
 
-  // Area 2 (spec) — where each value comes from: Public Pre-Audit, business
+  // Area 2 (spec) — where each value comes from: 247GBS Audit pre-audit, business
   // profile, location data or Admin.
   const dataSourceGroups: { label: string; fields: string[] }[] = [
     {
-      label: "Public Pre-Audit",
-      fields: fieldAccess.filter((r) => r.source === "audit_business").map((r) => r.field),
+      label: "247GBS Audit pre-audit",
+      fields: fieldAccess
+        .filter((r) => r.source === "audit_business" || r.source === "audit_diagnostic")
+        .map((r) => r.field),
     },
     {
       label: "Business profile",
@@ -3318,9 +3324,21 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
               </ol>
             )}
           </Panel>
+
+          <Panel
+            title="Admin assignment override"
+            description="Controls whether an admin may bypass these rules when assigning this template."
+          >
+            <ToggleRow
+              checked={access.allowAssignmentOverride}
+              onChange={(v) => setAccess((p) => ({ ...p, allowAssignmentOverride: v }))}
+              title="Allow admin to override eligibility on assignment"
+              description="When off (default), the same rules are enforced whether a business claims the template or an admin assigns it. When on, an admin may force-assign to ineligible businesses."
+              icon={<UserCheck className="h-4 w-4" />}
+            />
+          </Panel>
         </div>
       )}
-
       {/* ══ Step 9 — Access as Reward, Area 2 ═════════════════════════ */}
       {step === 9 && (
         <div className="space-y-5">
@@ -3475,7 +3493,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
 
           <Panel
             title="Data Sources"
-            description="Where each value comes from — Public Pre-Audit, business profile, location data or Admin. Businesses never re-ask what a source already knows."
+            description="Where each value comes from — 247GBS Audit pre-audit, business profile, location data or Admin. Businesses never re-ask what a source already knows."
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {dataSourceGroups.map((group) => (

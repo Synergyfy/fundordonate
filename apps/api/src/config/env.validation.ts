@@ -52,6 +52,17 @@ const envSchema = z.object({
   // ── Reward reconciliation safety net ──
   REWARDS_RECONCILE_ENABLED: z.enum(["true", "false"]).default("true"),
   REWARDS_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(900000),
+
+  // ── Ecosystem peer: 247GBS Audit (direct app-to-app, delegated reads) ──
+  AUDIT_API_BASE_URL: z.string().url().default("http://localhost:9008"),
+  AUDIT_WEB_URL: z.string().url().default("http://localhost:9009"),
+  AUDIT_AUDIENCE: z.string().default("247gbs-audit"),
+  AUDIT_SCOPES: z.string().default("preaudit:read audit:read"),
+  AUDIT_EVENTS_ENABLED: z.enum(["true", "false"]).default("false"),
+  AUDIT_EVENT_SCOPE: z.string().default("audit:write"),
+  AUDIT_SNAPSHOT_TTL_MS: z.coerce.number().int().positive().default(300000),
+  AUDIT_RECONCILE_ENABLED: z.enum(["true", "false"]).default("true"),
+  AUDIT_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(900000),
 });
 
 export type Env = z.infer<typeof envSchema>;
