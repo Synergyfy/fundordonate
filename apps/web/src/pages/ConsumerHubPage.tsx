@@ -71,14 +71,14 @@ function ConsumerCityPanel({ location, onClose }: { location: MapHubLocation; on
   const meta = HUB_STATUS_META[location.status as HubStatus] || HUB_STATUS_META.active;
   const campaigns = (location as any).campaignsList || [];
   const fundingRaised = location.fundingRaised || 0;
-  const fundingTarget = location.fundingTarget || 200000;
+  const fundingTarget = Number(location.fundingTarget) || 0;
   const fundingPct = safePct(fundingRaised, fundingTarget);
-  const conTotal = (location as any).foundingConsumerTotal || 100;
-  const conAllocated = (location as any).foundingConsumerAllocated || Math.floor(conTotal * 0.6);
+  const conTotal = Number((location as any).foundingConsumerTotal) || 0;
+  const conAllocated = Number((location as any).foundingConsumerAllocated) || 0;
   const conRemaining = Math.max(0, conTotal - conAllocated);
   const lifecycle = (location as any).internalLifecycle || "ACTIVE";
   const lifecycleMeta = ACTIVATION_LIFECYCLE.find(s => s.stage.toLowerCase() === lifecycle.toLowerCase());
-  const backers = Math.floor(conAllocated * 1.5);
+  const backers = Number((location as any).totalBackers ?? (location as any).backersCount) || 0;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -255,8 +255,8 @@ export default function ConsumerHubPage() {
     [selectedMapSlug, allCities]
   );
 
-  const conTotalAll = allCities.reduce((s, c) => s + ((c as any).foundingConsumerTotal || 100), 0);
-  const conAllocAll = allCities.reduce((s, c) => s + ((c as any).foundingConsumerAllocated || 60), 0);
+  const conTotalAll = allCities.reduce((s, c) => s + (Number((c as any).foundingConsumerTotal) || 0), 0);
+  const conAllocAll = allCities.reduce((s, c) => s + (Number((c as any).foundingConsumerAllocated) || 0), 0);
   const conPct = safePct(conAllocAll, conTotalAll);
 
   const tabCounts = useMemo(() => ({

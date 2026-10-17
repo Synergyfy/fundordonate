@@ -3,6 +3,8 @@ import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, ChevronDown, ChevronUp, Mail, Send } from "lucide-react";
 import { FAQ_CATEGORIES, type FaqCategory, type FaqEntry } from "@/constants/faq";
+import { useAuthStore } from "@/stores/auth.store";
+import { supportService } from "@/services/support";
 
 const CONTACT_TOPICS = [
   { id: "general", label: "General question" },
@@ -13,6 +15,7 @@ const CONTACT_TOPICS = [
 ];
 
 export function ConsumerHelpPage() {
+  const { user } = useAuthStore();
   const [activeCategory, setActiveCategory] = useState(FAQ_CATEGORIES[0]?.id ?? "general");
   const [openQuestion, setOpenQuestion] = useState<string | null>(null);
 
@@ -25,7 +28,7 @@ export function ConsumerHelpPage() {
   const category =
     FAQ_CATEGORIES.find((c) => c.id === activeCategory) ?? FAQ_CATEGORIES[0];
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (sending) return;
     if (message.trim().length < 10) {
@@ -34,11 +37,24 @@ export function ConsumerHelpPage() {
     }
     setFormError(null);
     setSending(true);
-    window.setTimeout(() => {
-      setSending(false);
+    try {
+      await supportService.createTicket({
+        name:
+          [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+          user?.email?.split("@")[0] ||
+          "Consumer",
+        email: user?.email ?? "",
+        topic,
+        message: message.trim(),
+        source: "consumer_dashboard",
+      });
       setSent(true);
       setMessage("");
-    }, 600);
+    } catch {
+      setFormError("We couldn't send your message right now. Please try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (

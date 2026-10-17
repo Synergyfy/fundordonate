@@ -306,7 +306,7 @@ export function issuedRewardGuidance(
   return "We couldn't issue this reward automatically. Our team has been notified.";
 }
 
-export interface DemoReward {
+export interface RewardItem {
   id: string;
   title: string;
   description: string;
@@ -323,5 +323,5 @@ export interface DemoReward {
   items?: { title: string; physicalType?: string }[];
 }
 
-export type CampaignRewardItem = DemoReward;
+export type CampaignRewardItem = RewardItem;
 

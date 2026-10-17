@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import { foundingApi } from "@/services/founding";
 import { paymentApi, type PaymentMethod } from "@/services/payment";
@@ -31,11 +31,12 @@ interface Programme {
 
 export default function MembershipPurchasePage() {
   const { locationId } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
 
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [selectedProgramme, setSelectedProgramme] = useState<Programme | null>(null);
-  const [selectedAmount, setSelectedAmount] = useState<number>(0);
+  const [selectedAmount, setSelectedAmount] = useState<number>(Number(searchParams.get("amount")) || 0);
   const [isMonthly, setIsMonthly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);

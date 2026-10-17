@@ -39,6 +39,16 @@ export class PublicCampaignsController {
     return this.campaignsService.getRewards(id);
   }
 
+  @Get("contributions/reference/:reference")
+  @ApiOperation({
+    summary: "Get a contribution by reference",
+    description: "Retrieves a single contribution (public fields) for the post-payment confirmation page.",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved contribution" })
+  async getContributionByReference(@Param("reference") reference: string) {
+    return this.campaignsService.getContributionByReference(reference);
+  }
+
   @Get(":id")
   @ApiOperation({
     summary: "Get public campaign by ID",

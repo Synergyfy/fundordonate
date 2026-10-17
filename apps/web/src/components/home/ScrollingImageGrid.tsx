@@ -16,28 +16,28 @@ interface GridCard {
 }
 
 const COLUMN_A: GridCard[] = [
-  { icon: Store, label: "Camden High Street Hub", gradient: "from-primary-500 to-primary-700", iconColor: "text-white", size: "lg" },
+  { icon: Store, label: "High Street Hubs", gradient: "from-primary-500 to-primary-700", iconColor: "text-white", size: "lg" },
   { icon: Heart, label: "Fund or Donate", gradient: "from-secondary-400 to-secondary-600", iconColor: "text-white", size: "md" },
   { icon: Users, label: "Business Owners", gradient: "from-primary-600 to-primary-800", iconColor: "text-white", size: "sm" },
   { icon: Gift, label: "Founding Membership", gradient: "from-gray-700 to-gray-900", iconColor: "text-white", size: "md" },
   { icon: HandCoins, label: "Community Funding", gradient: "from-secondary-500 to-primary-600", iconColor: "text-white", size: "lg" },
   { icon: BadgePercent, label: "Reward Points", gradient: "from-primary-500 to-secondary-500", iconColor: "text-white", size: "sm" },
-  { icon: Building2, label: "Islington Local Hub", gradient: "from-primary-700 to-primary-900", iconColor: "text-white", size: "md" },
+  { icon: Building2, label: "Local Hubs", gradient: "from-primary-700 to-primary-900", iconColor: "text-white", size: "md" },
   { icon: Repeat, label: "Share & Exchange", gradient: "from-secondary-600 to-secondary-800", iconColor: "text-white", size: "sm" },
-  { icon: MapPin, label: "Hackney High Street", gradient: "from-primary-600 to-secondary-600", iconColor: "text-white", size: "lg" },
+  { icon: MapPin, label: "City High Streets", gradient: "from-primary-600 to-secondary-600", iconColor: "text-white", size: "lg" },
   { icon: HandHeart, label: "Donate Locally", gradient: "from-secondary-400 to-primary-500", iconColor: "text-white", size: "md" },
 ];
 
 const COLUMN_B: GridCard[] = [
-  { icon: Landmark, label: "Westminster Hub", gradient: "from-gray-800 to-primary-800", iconColor: "text-white", size: "md" },
+  { icon: Landmark, label: "City Hubs", gradient: "from-gray-800 to-primary-800", iconColor: "text-white", size: "md" },
   { icon: Banknote, label: "Fund Your Hub", gradient: "from-secondary-500 to-secondary-700", iconColor: "text-white", size: "lg" },
   { icon: Smartphone, label: "Mobile VCard", gradient: "from-primary-600 to-primary-800", iconColor: "text-white", size: "sm" },
   { icon: QrCode, label: "QR Code Discovery", gradient: "from-gray-700 to-primary-700", iconColor: "text-white", size: "md" },
   { icon: ShoppingBag, label: "Local Shopping", gradient: "from-secondary-600 to-primary-600", iconColor: "text-white", size: "lg" },
-  { icon: Coffee, label: "Southwark Hub", gradient: "from-primary-500 to-primary-700", iconColor: "text-white", size: "sm" },
-  { icon: BookOpen, label: "Lambeth Community", gradient: "from-primary-700 to-secondary-700", iconColor: "text-white", size: "md" },
+  { icon: Coffee, label: "Borough Hubs", gradient: "from-primary-500 to-primary-700", iconColor: "text-white", size: "sm" },
+  { icon: BookOpen, label: "Local Communities", gradient: "from-primary-700 to-secondary-700", iconColor: "text-white", size: "md" },
   { icon: Leaf, label: "Cost-Neutral Funding", gradient: "from-secondary-500 to-secondary-700", iconColor: "text-white", size: "sm" },
-  { icon: Store, label: "Greenwich Hub", gradient: "from-primary-600 to-gray-800", iconColor: "text-white", size: "md" },
+  { icon: Store, label: "Neighbourhood Hubs", gradient: "from-primary-600 to-gray-800", iconColor: "text-white", size: "md" },
   { icon: Heart, label: "MCOM Rewards", gradient: "from-secondary-400 to-primary-500", iconColor: "text-white", size: "lg" },
 ];
 

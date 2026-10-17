@@ -11,6 +11,7 @@ import { useLocation, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
 import { locationService } from "@/services/location";
+import { campaignApi } from "@/services/campaign";
 import { getAreaTerminology, type HubLocation, type BreadcrumbItem } from "@/types/uk-hub";
 import { HubBreadcrumb } from "@/components/hub/HubBreadcrumb";
 import {
@@ -73,13 +74,24 @@ export default function CityHubPage() {
 
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
-  const campaigns: any[] = [];
 
   const { data: hierarchy, isLoading: hierarchyLoading } = useQuery({
     queryKey: ["city-hierarchy", citySlug],
     queryFn: () => locationService.getCityWithHierarchy(citySlug),
     enabled: !!citySlug,
   });
+
+  const { data: campaignResponse } = useQuery({
+    queryKey: ["city-campaigns", citySlug, areaSlug, streetSlug],
+    queryFn: () =>
+      (campaignApi.list as any)({
+        location: streetSlug || areaSlug || citySlug,
+        limit: 50,
+      }),
+    enabled: Boolean(citySlug),
+  });
+
+  const campaigns: any[] = campaignResponse?.items ?? [];
 
   const { location, ancestors, children, childLinkPrefix, sectionTitle, isHighStreet } = React.useMemo(() => {
     if (!hierarchy) {
@@ -113,11 +125,11 @@ export default function CityHubPage() {
       slug: areaSlug,
       type: "LOCAL_AREA" as const,
       publicStatus: "MAKING_PROGRESS",
-      shortDescription: `Local Area in ${city.name}`,
-      fundingTarget: 250000,
-      fundingRaised: 120000,
-      foundingBusinessAllocated: 15,
-      foundingConsumerAllocated: 30,
+      shortDescription: "",
+      fundingTarget: 0,
+      fundingRaised: 0,
+      foundingBusinessAllocated: 0,
+      foundingConsumerAllocated: 0,
     };
 
     if (!streetSlug) {
@@ -146,11 +158,11 @@ export default function CityHubPage() {
       slug: streetSlug,
       type: "HIGH_STREET" as const,
       publicStatus: "ACTIVE",
-      description: `Welcome to ${streetSlug.replace(/-/g, " ")}, a vibrant community high street.`,
-      fundingTarget: 50000,
-      fundingRaised: 22000,
-      foundingBusinessAllocated: 8,
-      foundingConsumerAllocated: 16,
+      description: "",
+      fundingTarget: 0,
+      fundingRaised: 0,
+      foundingBusinessAllocated: 0,
+      foundingConsumerAllocated: 0,
     };
 
     return {
@@ -191,9 +203,16 @@ export default function CityHubPage() {
     );
   }
 
-  const activationPct = location.publicStatus === "ACTIVE" ? 100 : location.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
-  const totalBusinesses = (location as any).businessesCount || (location as any).businesses || children.length * 10 || 12;
-  const totalConsumers = totalBusinesses * 12;
+  const activationProgress = Number((location as any).activationProgress);
+  const activationPct =
+    Number.isFinite(activationProgress) && activationProgress > 0
+      ? Math.min(100, Math.round(activationProgress))
+      : location.publicStatus === "ACTIVE"
+        ? 100
+        : 0;
+  const rawBusinesses = (location as any).businessesCount ?? (location as any).businesses;
+  const totalBusinesses = Number(Array.isArray(rawBusinesses) ? rawBusinesses.length : rawBusinesses) || 0;
+  const totalConsumers = Number((location as any).consumersCount ?? (location as any).consumers) || 0;
   const totalHighStreets = (hierarchy?.localAreas || []).reduce((acc: number, a: any) => acc + (a.highStreetsList?.length || 0), 0);
   const totalLocalAreas = hierarchy?.localAreas?.length || children.length;
   const parentPath = ancestors.length > 0
@@ -428,7 +447,13 @@ export default function CityHubPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {children.map((child: any) => {
-                const childActivation = child.publicStatus === "ACTIVE" ? 100 : child.publicStatus === "MAKING_PROGRESS" ? 65 : 25;
+                const childProgress = Number(child.activationProgress);
+                const childActivation =
+                  Number.isFinite(childProgress) && childProgress > 0
+                    ? Math.min(100, Math.round(childProgress))
+                    : child.publicStatus === "ACTIVE"
+                      ? 100
+                      : 0;
                 const childLink = `${childLinkPrefix}/${child.slug}`;
                 return (
                   <Link

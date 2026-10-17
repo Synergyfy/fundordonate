@@ -242,6 +242,10 @@ export const campaignService = {
     return api.get(`/campaigns/0/donations/${uid}`);
   },
 
+  async getContributionByReference(reference: string): Promise<any> {
+    return api.get(`/campaigns/contributions/reference/${encodeURIComponent(reference)}`);
+  },
+
   async getCampaignDonations(campaignId: string, page = 1, limit = 20): Promise<PaginatedResponse<any>> {
     return api.get(`/campaigns/${campaignId}/donations/list/all`, { params: { page, limit } });
   },

@@ -2,6 +2,8 @@ import {
   BusinessCampaignStatus,
   ContributionStatus,
   ContributionType,
+  FoundingAudience,
+  FoundingProgrammeStatus,
   HubLocationType,
   MembershipTier,
   PreferredAudience,
@@ -1063,6 +1065,69 @@ async function main() {
   });
 
   console.log(`Seeded ${businessSeedData.length} Live Businesses and active campaigns across the UK.`);
+
+  // ── Founding membership programmes (one Business + one Consumer per city) ──
+  const foundingPriceMatrix = {
+    bronze_standard: 5000,
+    bronze_pro: 7500,
+    bronze_pro_plus: 12000,
+    silver_standard: 10000,
+    silver_pro: 15000,
+    silver_pro_plus: 24000,
+    gold_standard: 15000,
+    gold_pro: 22500,
+    gold_pro_plus: 36000,
+    platinum_standard: 20000,
+    platinum_pro: 30000,
+    platinum_pro_plus: 48000,
+  };
+
+  const cities = await prisma.hubLocation.findMany({
+    where: { type: HubLocationType.CITY },
+    select: { id: true, name: true },
+  });
+
+  for (const city of cities) {
+    await prisma.foundingProgramme.upsert({
+      where: { locationId_audience: { locationId: city.id, audience: FoundingAudience.BUSINESS } },
+      update: {},
+      create: {
+        locationId: city.id,
+        audience: FoundingAudience.BUSINESS,
+        title: `${city.name} Founding Business Member Programme`,
+        description: `Join as a Founding Business Member of the ${city.name} hub. Gain early access, voting rights, priority participation and founding recognition.`,
+        status: FoundingProgrammeStatus.OPEN,
+        totalAllocation: 50,
+        allocatedCount: 0,
+        opensAt: new Date(),
+        closesAt: new Date(Date.now() + 60 * 86_400_000),
+        contributionConfig: foundingPriceMatrix,
+        benefitConfig: ["early_access", "voting", "events", "priority_participation"],
+        eligibilityConfig: { audience: "BUSINESS" },
+      },
+    });
+
+    await prisma.foundingProgramme.upsert({
+      where: { locationId_audience: { locationId: city.id, audience: FoundingAudience.CONSUMER } },
+      update: {},
+      create: {
+        locationId: city.id,
+        audience: FoundingAudience.CONSUMER,
+        title: `${city.name} Founding Consumer Member Programme`,
+        description: `Become a Founding Consumer Member of the ${city.name} hub. Support your local community and receive recognition, events access and early opportunities.`,
+        status: FoundingProgrammeStatus.OPEN,
+        totalAllocation: 200,
+        allocatedCount: 0,
+        opensAt: new Date(),
+        closesAt: new Date(Date.now() + 60 * 86_400_000),
+        contributionConfig: foundingPriceMatrix,
+        benefitConfig: ["community_recognition", "events", "early_access"],
+        eligibilityConfig: { audience: "CONSUMER" },
+      },
+    });
+  }
+
+  console.log(`Seeded founding programmes for ${cities.length} cities.`);
 
   console.log("Database seed completed successfully with rich live data! 🚀");
 }

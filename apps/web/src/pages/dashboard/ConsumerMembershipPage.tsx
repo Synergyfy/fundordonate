@@ -9,10 +9,12 @@ export interface ConsumerMembership {
   tier: MembershipTier;
   level: MembershipLevel;
   status: MembershipStatus;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
   autoRenew: boolean;
 }
+
+const MEMBERSHIP_TIERS: MembershipTier[] = ["bronze", "silver", "gold", "platinum"];
 
 const TIER_LABELS: Record<MembershipTier, string> = {
   bronze: "Bronze",
@@ -73,18 +75,26 @@ export function ConsumerMembershipPage() {
     userDashboardApi.getProfile()
       .then((profile: any) => {
         if (cancelled) return;
-        const rawTier = (profile.membershipTier || "bronze").toLowerCase();
-        const tier: MembershipTier = ["bronze", "silver", "gold", "platinum"].includes(rawTier)
-          ? (rawTier as MembershipTier)
-          : "bronze";
+        // Only show a membership when the profile actually carries one.
+        const rawTier = String(profile.membershipTier ?? "").toLowerCase();
+        if (!MEMBERSHIP_TIERS.includes(rawTier as MembershipTier)) {
+          setMembership(null);
+          return;
+        }
+        const rawLevel = String(profile.membershipLevel ?? "").toLowerCase();
+        const level: MembershipLevel =
+          rawLevel === "pro" ? "pro" : rawLevel === "pro+" || rawLevel === "pro_plus" ? "pro+" : "standard";
+        const rawStatus = String(profile.membershipStatus ?? "").toLowerCase();
+        const status: MembershipStatus =
+          rawStatus === "expired" ? "expired" : rawStatus === "cancelled" ? "cancelled" : "active";
         setMembership({
           id: profile.id,
-          tier,
-          level: "standard",
-          status: "active",
-          startDate: profile.createdAt || new Date(new Date().getFullYear(), 0, 1).toISOString(),
-          endDate: new Date(new Date().getFullYear(), 11, 31).toISOString(),
-          autoRenew: true,
+          tier: rawTier as MembershipTier,
+          level,
+          status,
+          startDate: profile.membershipStartDate ?? profile.createdAt ?? null,
+          endDate: profile.membershipEndDate ?? null,
+          autoRenew: Boolean(profile.membershipAutoRenew),
         });
       })
       .catch(() => {
@@ -158,12 +168,12 @@ export function ConsumerMembershipPage() {
               </DetailRow>
               <DetailRow label="Start Date">
                 <p className="font-medium text-gray-900">
-                  {formatDate(membership.startDate)}
+                  {membership.startDate ? formatDate(membership.startDate) : "—"}
                 </p>
               </DetailRow>
               <DetailRow label="End Date">
                 <p className="font-medium text-gray-900">
-                  {formatDate(membership.endDate)}
+                  {membership.endDate ? formatDate(membership.endDate) : "—"}
                 </p>
               </DetailRow>
               <DetailRow label="Auto-renew">

@@ -7,10 +7,25 @@ import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
+import { MEMBERSHIP_TIERS } from "@/constants/membershipTiers";
 import {
   Calendar, Clock, Target, Store, Users, Award,
   Gift, ArrowRight, ChevronRight, Megaphone, Heart,
 } from "lucide-react";
+
+const TIER_COLORS: Record<string, string> = {
+  bronze: "text-orange-600 bg-orange-50",
+  silver: "text-gray-600 bg-gray-50",
+  gold: "text-yellow-600 bg-yellow-50",
+  platinum: "text-purple-600 bg-purple-50",
+};
+
+/** Standard-tier entry price per membership tier, sourced from the canonical catalogue. */
+const MEMBERSHIP_CARDS = MEMBERSHIP_TIERS.map((t) => ({
+  tier: t.name,
+  price: `£${t.variants.find((v) => v.accessLevel === "standard")?.price ?? 0}`,
+  color: TIER_COLORS[t.id] ?? "text-gray-600 bg-gray-50",
+}));
 
 function useCountdown(targetDate: string) {
   const [timeLeft, setTimeLeft] = React.useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -44,12 +59,12 @@ const fmtDate = (d: string) => {
 };
 
 const SEASON_OBJECTIVES = [
-  { icon: Megaphone, title: "Current Campaigns", desc: "Active campaigns in your city seeking support", count: 12 },
-  { icon: Target, title: "Funding Objectives", desc: "City-wide funding goals for community projects", count: 8 },
-  { icon: Store, title: "Business Opportunities", desc: "Partnerships and collaborations for businesses", count: 5 },
-  { icon: Heart, title: "Community Activity", desc: "Consumer and community initiatives", count: 15 },
-  { icon: Gift, title: "Available Rewards", desc: "Earn rewards for your participation", count: 20 },
-  { icon: Award, title: "Membership Benefits", desc: "Exclusive perks for founding members", count: 10 },
+  { icon: Megaphone, title: "Current Campaigns", desc: "Active campaigns in your city seeking support" },
+  { icon: Target, title: "Funding Objectives", desc: "City-wide funding goals for community projects" },
+  { icon: Store, title: "Business Opportunities", desc: "Partnerships and collaborations for businesses" },
+  { icon: Heart, title: "Community Activity", desc: "Consumer and community initiatives" },
+  { icon: Gift, title: "Available Rewards", desc: "Earn rewards for your participation" },
+  { icon: Award, title: "Membership Benefits", desc: "Exclusive perks for founding members" },
 ];
 
 const BUSINESS_OPPORTUNITIES = [
@@ -205,20 +220,20 @@ export default function SeasonContextPage() {
             </p>
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="text-center p-3 rounded-lg bg-blue-50">
-                <div className="text-2xl font-bold text-blue-600">12</div>
+                <div className="text-2xl font-bold text-blue-600">{currentSeason.activeCampaigns ?? 0}</div>
                 <div className="text-xs text-gray-500">Active Campaigns</div>
               </div>
               <div className="text-center p-3 rounded-lg bg-green-50">
-                <div className="text-2xl font-bold text-green-600">8</div>
-                <div className="text-xs text-gray-500">Funding Objectives</div>
+                <div className="text-2xl font-bold text-green-600">{currentSeason.totalParticipants ?? 0}</div>
+                <div className="text-xs text-gray-500">Participants</div>
               </div>
               <div className="text-center p-3 rounded-lg bg-purple-50">
-                <div className="text-2xl font-bold text-purple-600">5</div>
-                <div className="text-xs text-gray-500">Business Opportunities</div>
+                <div className="text-2xl font-bold text-purple-600">{currentSeason.totalBusinessOwners ?? 0}</div>
+                <div className="text-xs text-gray-500">Business Owners</div>
               </div>
               <div className="text-center p-3 rounded-lg bg-pink-50">
-                <div className="text-2xl font-bold text-pink-600">15</div>
-                <div className="text-xs text-gray-500">Community Initiatives</div>
+                <div className="text-2xl font-bold text-pink-600">{currentSeason.totalBackers ?? 0}</div>
+                <div className="text-xs text-gray-500">Backers</div>
               </div>
             </div>
           </div>
@@ -240,9 +255,6 @@ export default function SeasonContextPage() {
                       <h3 className="font-bold text-gray-900">{obj.title}</h3>
                       <p className="text-xs text-gray-500 mt-1">{obj.desc}</p>
                     </div>
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
-                      {obj.count}
-                    </span>
                   </div>
                 </div>
               );
@@ -284,12 +296,7 @@ export default function SeasonContextPage() {
               Choose a membership tier to unlock additional benefits and recognition during this season.
             </p>
             <div className="grid gap-3 sm:grid-cols-4">
-              {[
-                { tier: "Bronze", price: "£50", color: "text-orange-600 bg-orange-50" },
-                { tier: "Silver", price: "£100", color: "text-gray-600 bg-gray-50" },
-                { tier: "Gold", price: "£150", color: "text-yellow-600 bg-yellow-50" },
-                { tier: "Platinum", price: "£200", color: "text-purple-600 bg-purple-50" },
-              ].map((m) => (
+              {MEMBERSHIP_CARDS.map((m) => (
                 <div key={m.tier} className={`rounded-lg p-4 text-center ${m.color}`}>
                   <div className="text-lg font-bold">{m.tier}</div>
                   <div className="text-2xl font-bold mt-1">{m.price}</div>

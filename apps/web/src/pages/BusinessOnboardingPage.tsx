@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from "@/stores/auth.store";
 import { useBusinessOnboarding } from "@/services/business/hook";
 import { useLocationTreeQuery } from "@/services/location/hook";
+import { MEMBERSHIP_TIERS as CANONICAL_MEMBERSHIP_TIERS } from "@/constants/membershipTiers";
 
 const STEPS = [
   { id: 1, label: "Welcome", icon: Store },
@@ -35,11 +36,20 @@ const CATEGORIES = [
 
 
 
-const MEMBERSHIP_TIERS = [
-  { id: "bronze", name: "Bronze", price: "Free", features: ["Basic listing", "1 campaign/season", "Standard support"] },
-  { id: "silver", name: "Silver", price: "£50/season", features: ["Enhanced listing", "3 campaigns/season", "Priority support", "Analytics dashboard"] },
-  { id: "gold", name: "Gold", price: "£100/season", features: ["Featured listing", "Unlimited campaigns", "Dedicated support", "Advanced analytics", "Leaderboard priority"] },
-];
+const TIER_FEATURES: Record<string, string[]> = {
+  bronze: ["Basic listing", "1 campaign/season", "Standard support"],
+  silver: ["Enhanced listing", "3 campaigns/season", "Priority support", "Analytics dashboard"],
+  gold: ["Featured listing", "Unlimited campaigns", "Dedicated support", "Advanced analytics", "Leaderboard priority"],
+  platinum: ["Premium listing", "Unlimited campaigns", "Dedicated support", "Advanced analytics", "VIP recognition"],
+};
+
+/** Membership tiers with standard entry price, sourced from the canonical catalogue. */
+const MEMBERSHIP_TIERS = CANONICAL_MEMBERSHIP_TIERS.map((t) => ({
+  id: t.id,
+  name: t.name,
+  price: `£${t.variants.find((v) => v.accessLevel === "standard")?.price ?? 0} one-time`,
+  features: TIER_FEATURES[t.id] ?? [],
+}));
 
 interface OnboardingData {
   businessName: string;

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { userDashboardApi } from "@/services/user-dashboard";
+import { campaignApi } from "@/services/campaign";
 
 // ── Types ──
 
@@ -105,26 +105,26 @@ export function ContributionConfirmationPage({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get("ref") || transactionRefProp) return;
+    const ref = searchParams.get("ref") ?? transactionRefProp;
+    if (!ref) return;
     let cancelled = false;
-    userDashboardApi.getDonations()
-      .then((res: any) => {
-        if (!cancelled) {
-          const list = res?.items || (Array.isArray(res) ? res : []);
-          if (list[0]) {
-            setFallback({
-              reference: list[0].id?.slice(0, 8)?.toUpperCase(),
-              campaignSlug: list[0].campaign?.id || "",
-              campaignTitle: list[0].campaign?.title || "",
-              amount: list[0].amount || 0,
-              participationType: "backer",
-              rewardTitle: "Supporter Reward",
-            });
-          }
-        }
+    // Fetch the real contribution recorded for this payment reference.
+    campaignApi
+      .getContributionByReference(ref)
+      .then((c: any) => {
+        if (cancelled) return;
+        setFallback({
+          reference: c.reference,
+          campaignSlug: c.campaign?.slug || "",
+          campaignTitle: c.campaign?.title || "",
+          amount: c.amount || 0,
+          participationType: "backer",
+          status: c.status,
+          createdAt: c.createdAt,
+        });
       })
       .catch(() => {
-        /* show defaults */
+        /* confirmation still renders from the passed props */
       });
     return () => {
       cancelled = true;

@@ -54,7 +54,7 @@ const WHATS_HAPPENING = [
 
 export default function BusinessCityHubPage() {
   const { citySlug } = useParams<{ citySlug: string }>();
-  const activeSlug = citySlug || "manchester";
+  const activeSlug = citySlug || "";
 
   const { data: cityDetail, isLoading, isError } = useQuery({
     queryKey: ["cityDetail", activeSlug],
@@ -65,8 +65,10 @@ export default function BusinessCityHubPage() {
   const city = useMemo(() => {
     if (!cityDetail) {
       return {
-        name: activeSlug.charAt(0).toUpperCase() + activeSlug.slice(1),
-        description: `Building a stronger local business and community network across ${activeSlug}.`,
+        name: activeSlug
+          ? activeSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+          : "City hub",
+        description: "",
         activationPct: 0,
         businesses: 0,
         highStreets: 0,

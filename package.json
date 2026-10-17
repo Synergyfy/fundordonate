@@ -12,6 +12,7 @@
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter @fundordonate/api build",
     "build": "pnpm build:web && pnpm build:api",
+    "test": "pnpm --filter web test",
     "db:migrate": "pnpm --filter @fundordonate/api prisma:migrate",
     "db:generate": "pnpm --filter @fundordonate/api prisma:generate",
     "db:seed": "pnpm --filter @fundordonate/api prisma:seed",
@@ -30,7 +31,8 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "prettier": "^3.4.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8"

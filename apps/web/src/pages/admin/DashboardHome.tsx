@@ -98,32 +98,32 @@ export function DashboardHome() {
 
     if (audience === "consumers") {
       return [
-        { label: "Consumer Donations", value: formatCurrency(donationsAmt), icon: "💰", change: "+12%" },
-        { label: "Active Campaigns", value: String(publishedCampaigns), icon: "🎯", change: "+5%" },
-        { label: "Registered Consumers", value: String(totalUsers), icon: "👥", change: "+8%" },
-        { label: "Total Contributions", value: String(stats?.totalDonations || 0), icon: "🤝", change: "+15%" },
-        { label: "Donation Volume", value: formatCurrency(donationsAmt), icon: "❤️", change: "+10%" },
-        { label: "Campaigns in Progress", value: String(totalCampaigns), icon: "🎫", change: "+4%" },
+        { label: "Consumer Donations", value: formatCurrency(donationsAmt), icon: "💰" },
+        { label: "Active Campaigns", value: String(publishedCampaigns), icon: "🎯" },
+        { label: "Registered Consumers", value: String(totalUsers), icon: "👥" },
+        { label: "Total Contributions", value: String(stats?.totalDonations || 0), icon: "🤝" },
+        { label: "Donation Volume", value: formatCurrency(donationsAmt), icon: "❤️" },
+        { label: "Campaigns in Progress", value: String(totalCampaigns), icon: "🎫" },
       ];
     }
     if (audience === "business_owners") {
       return [
-        { label: "Pledges & Match Funds", value: formatCurrency(pledgesAmt), icon: "💰", change: "+10%" },
-        { label: "Commercial Campaigns", value: String(totalCampaigns), icon: "🎯", change: "+7%" },
-        { label: "Active Pledges", value: String(stats?.totalPledges || 0), icon: "🤝", change: "+9%" },
-        { label: "Published Opportunities", value: String(publishedCampaigns), icon: "⭐", change: "+4%" },
-        { label: "Committed Pledges", value: formatCurrency(pledgesAmt), icon: "🏢", change: "+12%" },
-        { label: "Total Platform Backers", value: String(stats?.totalDonations || 0), icon: "👥", change: "+6%" },
+        { label: "Pledges & Match Funds", value: formatCurrency(pledgesAmt), icon: "💰" },
+        { label: "Commercial Campaigns", value: String(totalCampaigns), icon: "🎯" },
+        { label: "Active Pledges", value: String(stats?.totalPledges || 0), icon: "🤝" },
+        { label: "Published Opportunities", value: String(publishedCampaigns), icon: "⭐" },
+        { label: "Committed Pledges", value: formatCurrency(pledgesAmt), icon: "🏢" },
+        { label: "Total Platform Backers", value: String(stats?.totalDonations || 0), icon: "👥" },
       ];
     }
     // All
     return [
-      { label: "Total Raised", value: formatCurrency(totalRaised), icon: "💰", change: "+12%" },
-      { label: "Total Campaigns", value: totalCampaigns.toString(), icon: "🎯", change: "+5%" },
-      { label: "Total Donations", value: formatCurrency(donationsAmt), icon: "❤️", change: "+8%" },
-      { label: "Total Pledges", value: formatCurrency(pledgesAmt), icon: "🤝", change: "+15%" },
-      { label: "Total Users", value: totalUsers.toString(), icon: "👥", change: "+3%" },
-      { label: "Published Campaigns", value: publishedCampaigns.toString(), icon: "✅", change: "+2%" },
+      { label: "Total Raised", value: formatCurrency(totalRaised), icon: "💰" },
+      { label: "Total Campaigns", value: totalCampaigns.toString(), icon: "🎯" },
+      { label: "Total Donations", value: formatCurrency(donationsAmt), icon: "❤️" },
+      { label: "Total Pledges", value: formatCurrency(pledgesAmt), icon: "🤝" },
+      { label: "Total Users", value: totalUsers.toString(), icon: "👥" },
+      { label: "Published Campaigns", value: publishedCampaigns.toString(), icon: "✅" },
     ];
   };
 
@@ -217,9 +217,6 @@ export function DashboardHome() {
               <span className="text-lg">{metric.icon}</span>
             </div>
             <p className="mt-2 text-2xl font-bold text-gray-900">{metric.value}</p>
-            <div className="mt-2 flex items-center text-xs text-green-600">
-              <span>{metric.change} from last month</span>
-            </div>
           </div>
         ))}
       </div>

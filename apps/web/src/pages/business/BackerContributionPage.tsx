@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
 import { campaignApi } from "@/services/campaign";
+import { OfflinePaymentInstructions } from "@/components/campaign/OfflinePaymentInstructions";
+import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p);
@@ -104,6 +106,7 @@ export default function BackerContributionPage() {
   const [selectedAmount, setSelectedAmount] = useState<number>(100);
   const [customAmount, setCustomAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const { data: seasonResponse } = useQuery({
     queryKey: ["seasons"],
@@ -137,11 +140,14 @@ export default function BackerContributionPage() {
   };
 
   const handlePay = () => {
-    setStep("processing");
-    // Simulate payment processing
-    setTimeout(() => {
+    // Offline (cheque/bank transfer) and in-store terminal payments are settled
+    // outside the online gateway, so we record the intent and show instructions.
+    if (paymentMethod === "offline" || paymentMethod === "terminal") {
       setStep("complete");
-    }, 2500);
+      return;
+    }
+    // Card / PayPal are settled through the real MCOM Pay checkout.
+    setShowCheckout(true);
   };
 
   if (!campaign) {
@@ -397,43 +403,8 @@ export default function BackerContributionPage() {
 
               {/* Offline Payment Instructions */}
               {paymentMethod === "offline" && (
-                <div className="rounded-xl bg-orange-50 border border-orange-200 p-5 mb-6">
-                  <h3 className="font-bold text-orange-900 text-sm mb-3 flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Offline Payment Instructions
-                  </h3>
-                  <div className="space-y-3 text-sm text-orange-800">
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">1.</span>
-                      <span>Offline donation is only payable by <strong>cheque</strong> or <strong>bank transfer</strong>.</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">2.</span>
-                      <span>Make cheques payable to: <strong>247 Global Business Solutions Ltd</strong></span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">3.</span>
-                      <div>
-                        <span>Bank: <strong>Barclays Bank</strong></span>
-                        <br />
-                        <span>Sort Code: <strong>20-45-67</strong></span>
-                        <br />
-                        <span>Account No: <strong>73849251</strong></span>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">4.</span>
-                      <span>Reference: Use your name and campaign name as reference.</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">5.</span>
-                      <span>Post cheques to: <strong>247 Global Business Solutions Ltd, Unit 4, Imperial Business Centre, 151 Semaphore Road, London, SE15 3TR</strong></span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-orange-600">6.</span>
-                      <span>Payment must be received within <strong>14 days</strong> of your pledge. Your Backer status will be confirmed once payment is received and verified.</span>
-                    </div>
-                  </div>
+                <div className="mb-6">
+                  <OfflinePaymentInstructions />
                 </div>
               )}
 
@@ -468,32 +439,6 @@ export default function BackerContributionPage() {
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-green-600">6.</span>
                       <span>Your Backer status and rewards will be activated within <strong>24 hours</strong> of the terminal transaction being processed.</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* PayPal Demo Notice */}
-              {paymentMethod === "paypal" && (
-                <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 mb-6">
-                  <div className="flex items-start gap-2">
-                    <Shield className="h-4 w-4 text-blue-600 mt-0.5" />
-                    <div className="text-sm text-blue-800">
-                      <p className="font-bold mb-1">Demo PayPal Integration</p>
-                      <p>In production, you'll be redirected to PayPal to complete payment securely. This is a demo simulation.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Stripe Demo Notice */}
-              {paymentMethod === "stripe" && (
-                <div className="rounded-xl bg-purple-50 border border-purple-200 p-4 mb-6">
-                  <div className="flex items-start gap-2">
-                    <Shield className="h-4 w-4 text-purple-600 mt-0.5" />
-                    <div className="text-sm text-purple-800">
-                      <p className="font-bold mb-1">Demo Stripe Integration</p>
-                      <p>In production, you'll see a secure card form powered by Stripe. This is a demo simulation.</p>
                     </div>
                   </div>
                 </div>
@@ -623,6 +568,19 @@ export default function BackerContributionPage() {
           )}
         </div>
       </div>
+
+      <PaymentCheckoutModal
+        open={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        title="Backer contribution"
+        amount={totalAmount}
+        campaignId={campaign.id}
+        purpose={campaign.mode === "fund" ? "PLEDGE" : "DONATION"}
+        onSuccess={() => {
+          setShowCheckout(false);
+          setStep("complete");
+        }}
+      />
     </div>
   );
 }

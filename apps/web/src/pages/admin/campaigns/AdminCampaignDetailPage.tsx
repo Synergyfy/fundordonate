@@ -1139,61 +1139,67 @@ export default function AdminCampaignDetailPage() {
               <TrendingUp className="h-4 w-4 text-green-500" />
               <span className="text-sm text-gray-600">Avg. Contribution</span>
             </div>
-            <span className="text-sm font-bold">{fmt(Math.round(campaign.raised / campaign.totalContributors))}</span>
+            <span className="text-sm font-bold">
+              {campaign.totalContributors > 0 ? fmt(Math.round(campaign.raised / campaign.totalContributors)) : "—"}
+            </span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-gray-600">Conversion Rate</span>
+              <span className="text-sm text-gray-600">Contributors</span>
             </div>
-            <span className="text-sm font-bold">12.4%</span>
+            <span className="text-sm font-bold">{campaign.totalContributors.toLocaleString()}</span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4 text-purple-500" />
-              <span className="text-sm text-gray-600">Retention Rate</span>
+              <span className="text-sm text-gray-600">Consumer share of funding</span>
             </div>
-            <span className="text-sm font-bold">68%</span>
+            <span className="text-sm font-bold">
+              {campaign.raised > 0 ? `${Math.round((campaign.consumerRaised / campaign.raised) * 100)}%` : "—"}
+            </span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-amber-500" />
-              <span className="text-sm text-gray-600">Avg. Time to Fund</span>
+              <span className="text-sm text-gray-600">Days Active</span>
             </div>
-            <span className="text-sm font-bold">14 days</span>
+            <span className="text-sm font-bold">{Math.max(0, Math.ceil((Date.now() - new Date(campaign.startDate).getTime()) / (1000 * 60 * 60 * 24)))} days</span>
           </div>
         </div>
       </div>
       <div className="rounded-xl border bg-white p-5">
-        <h3 className="text-sm font-bold text-gray-900 mb-4">Growth Indicators</h3>
+        <h3 className="text-sm font-bold text-gray-900 mb-4">Funding Indicators</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-primary-500" />
-              <span className="text-sm text-gray-600">Page Views</span>
+              <span className="text-sm text-gray-600">Amount Raised</span>
             </div>
-            <span className="text-sm font-bold">24,830</span>
+            <span className="text-sm font-bold">{fmt(campaign.raised)}</span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-gray-600">Unique Visitors</span>
+              <Target className="h-4 w-4 text-green-500" />
+              <span className="text-sm text-gray-600">Target</span>
             </div>
-            <span className="text-sm font-bold">8,420</span>
+            <span className="text-sm font-bold">{fmt(campaign.target)}</span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-gray-600">Share Rate</span>
+              <span className="text-sm text-gray-600">Progress</span>
             </div>
-            <span className="text-sm font-bold">5.2%</span>
+            <span className="text-sm font-bold">
+              {campaign.target > 0 ? `${Math.min(100, Math.round((campaign.raised / campaign.target) * 100))}%` : "—"}
+            </span>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-amber-500" />
-              <span className="text-sm text-gray-600">Days Active</span>
+              <span className="text-sm text-gray-600">Remaining to target</span>
             </div>
-            <span className="text-sm font-bold">{Math.ceil((Date.now() - new Date(campaign.startDate).getTime()) / (1000 * 60 * 60 * 24))} days</span>
+            <span className="text-sm font-bold">{fmt(Math.max(0, campaign.target - campaign.raised))}</span>
           </div>
         </div>
       </div>

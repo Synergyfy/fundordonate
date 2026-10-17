@@ -51,7 +51,8 @@ export default function BusinessJoinSuccessPage() {
               Welcome to the {cityName} Business Community.
             </h1>
             <p className="text-gray-600 max-w-md mx-auto">
-              Your business is now officially established in FundOrDonate and connected to the hub network.
+              Your business is now connected to the {cityName} hub network. Complete your
+              business profile to unlock campaigns, rewards and participation.
             </p>
           </div>
 

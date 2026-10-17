@@ -4,7 +4,7 @@
 // =============================================================================
 
 import React, { useState } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
 import {
@@ -170,6 +170,7 @@ const OPTION_CONFIGS: {
 export default function MembershipSelectionPage() {
   const { citySlug } = useParams<{ citySlug: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const participationType = searchParams.get("type") || "backer";
 
   const [selectedTier, setSelectedTier] = useState<MembershipTier | null>(null);
@@ -197,8 +198,9 @@ export default function MembershipSelectionPage() {
 
   const handleContinue = () => {
     if (!selectedTier) return;
-    // In real app, this would proceed to payment
-    alert(`Proceeding with ${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} ${OPTION_CONFIGS.find(o => o.option === selectedOption)?.name} membership. Payment flow coming soon!`);
+    navigate(
+      `/membership/${citySlug}?type=${encodeURIComponent(participationType)}&tier=${selectedTier}&option=${selectedOption}`,
+    );
   };
 
   // Filter tiers based on participation type

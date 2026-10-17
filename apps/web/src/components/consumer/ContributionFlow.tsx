@@ -853,7 +853,9 @@ function ConfirmationStep({
 
 // ── Main Component ──
 
-const DEFAULT_CAMPAIGN: Campaign = {
+// Shape placeholder used only so the step hooks have a stable object while a
+// campaign is loading. It is never rendered as real data — see the guard below.
+const EMPTY_CAMPAIGN: Campaign = {
   id: "",
   slug: "",
   title: "Campaign",
@@ -868,9 +870,11 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [fetchedCampaign, setFetchedCampaign] = useState<Campaign | null>(null);
+  const [campaignLoading, setCampaignLoading] = useState(Boolean(slug && !campaignProp));
 
   useEffect(() => {
     if (campaignProp || !slug) return;
+    setCampaignLoading(true);
     campaignApi.getBySlug(slug)
       .then((c: any) => {
         setFetchedCampaign({
@@ -907,10 +911,12 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
       })
       .catch((err) => {
         console.error("Failed to load campaign for contribution:", err);
-      });
+      })
+      .finally(() => setCampaignLoading(false));
   }, [campaignProp, slug]);
 
-  const campaign = campaignProp ?? fetchedCampaign ?? DEFAULT_CAMPAIGN;
+  const campaign = campaignProp ?? fetchedCampaign ?? EMPTY_CAMPAIGN;
+  const hasCampaign = Boolean(campaignProp || fetchedCampaign);
   const onClose = onCloseProp ?? (() => navigate(-1));
   const [currentStep, setCurrentStep] = useState(0);
   const [participationType, setParticipationType] = useState("");
@@ -1131,6 +1137,41 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   };
 
   const isConfirmation = steps[currentStep]?.id === "confirmation";
+
+  if (!hasCampaign) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="relative w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-xl">
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-full p-2 hover:bg-gray-100"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5 text-gray-500" />
+          </button>
+          {campaignLoading ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-600" />
+              <p className="text-sm text-gray-500">Loading campaign…</p>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-lg font-bold text-gray-900">Campaign not found</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                This campaign is unavailable or no longer exists.
+              </p>
+              <button
+                onClick={onClose}
+                className="mt-4 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+              >
+                Close
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
