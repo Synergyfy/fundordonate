@@ -12,6 +12,7 @@ export interface FoundingProgramme {
   opensAt?: string;
   closesAt?: string;
   contributionAmounts: string[];
+  contributionConfig?: string;
   benefits: string[];
   isOriginal?: boolean;
 }

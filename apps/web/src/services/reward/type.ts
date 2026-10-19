@@ -7,9 +7,21 @@ export interface RewardItem {
   earnedAt?: string;
   progress?: number;
 
-  // ── Provenance: what earned this reward ──
+  // ── What the reward actually is / what the owner gets ──
+  /** Lifecycle status of the issuance (ISSUED / REDEEMED / EXPIRED / REVOKED / FAILED). */
   status?: string;
   rewardType?: string | null;
+  /** Monetary value of the reward in pounds GBP (null when open-ended/unknown). */
+  value?: number | null;
+  /** Redemption / voucher code the owner quotes to claim the reward. */
+  code?: string | null;
+  /** Number of units issued. */
+  quantity?: number;
+  expiresAt?: string | null;
+  redeemedAt?: string | null;
+  revokedAt?: string | null;
+
+  // ── Provenance: what earned this reward ──
   campaignId?: string | null;
   campaignTitle?: string | null;
   campaignImage?: string | null;

@@ -24,6 +24,7 @@ export interface TemplateInstantiateJobData {
   targetAmount?: number;
   deadlineDays?: number;
   adminUserId?: string;
+  force?: boolean;
 }
 
 export interface SeasonTransitionJobData {
@@ -173,6 +174,7 @@ export class AdminTasksProcessor extends WorkerHost {
       targetAmount: data.targetAmount,
       deadlineDays: data.deadlineDays,
       adminUserId: data.adminUserId,
+      force: data.force,
     });
 
     this.logger.log(

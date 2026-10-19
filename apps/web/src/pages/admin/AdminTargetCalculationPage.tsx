@@ -379,8 +379,7 @@ Liverpool,498000,4192,119,55"
               <button
                 onClick={() => {
                   const cityNames = (hubCities || []).map((c) => c.name);
-                  const list = cityNames.length ? cityNames : ["London", "Manchester", "Birmingham"];
-                  const csv = list.map((city) => `${city},,,,\n`).join("");
+                  const csv = cityNames.map((city) => `${city},,,,\n`).join("");
                   setImportData(`location,population,density,areaSize,economicIndex\n${csv}`);
                 }}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

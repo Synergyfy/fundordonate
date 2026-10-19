@@ -120,7 +120,7 @@ export function AdminFoundingPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {locations.slice(0, 8).map(loc => {
             const bizAllocated = (loc as any).foundingBusinessAllocated || 0;
-            const bizTotal = (loc as any).foundingBusinessTotal || 100;
+            const bizTotal = (loc as any).foundingBusinessTotal || 0;
             const fillPct = bizTotal > 0 ? Math.round((bizAllocated / bizTotal) * 100) : 0;
             const remaining = Math.max(0, bizTotal - bizAllocated);
 

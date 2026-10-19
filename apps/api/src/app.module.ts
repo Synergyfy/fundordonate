@@ -18,7 +18,10 @@ import { HubModule } from "./modules/hub/hub.module";
 import { PublicCampaignsModule } from "./modules/campaigns/public-campaigns.module";
 import { ConsumerModule } from "./modules/consumer/consumer.module";
 import { RewardsModule } from "./modules/rewards/rewards.module";
+import { AuditModule } from "./modules/audit/audit.module";
 import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
+import { FoundingModule } from "./modules/founding/founding.module";
+import { SupportModule } from "./modules/support/support.module";
 
 @Module({
   imports: [
@@ -48,7 +51,10 @@ import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
     PublicCampaignsModule,
     ConsumerModule,
     RewardsModule,
+    AuditModule,
     LeaderboardModule,
+    FoundingModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [

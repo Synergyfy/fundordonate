@@ -98,8 +98,8 @@ export function ConsumerRecognitionPage() {
       <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
         <p className="text-sm text-blue-900">
-          Recognitions are separate from your contribution history — they
-          celebrate milestones you have reached, not individual contributions.
+          Recognitions celebrate milestones you reach as you contribute. They are
+          based on your contribution activity and update automatically.
         </p>
       </div>
 

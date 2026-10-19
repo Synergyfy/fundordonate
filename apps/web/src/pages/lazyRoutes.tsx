@@ -177,7 +177,7 @@ export const BusinessCampaignCentrePage = lazy(() => import("@/pages/business-ow
 export const BusinessCampaignSetupPage = lazy(() => import("@/pages/business-owner/CampaignSetupPage"));
 export const BusinessMyCampaignDetailPage = lazy(() => import("@/pages/business-owner/MyCampaignDetailPage"));
 
-export const SpilloverPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SpilloverPage })));
+export const SpilloverPage = lazy(() => import("@/pages/admin/sections/SpilloverPage").then(m => ({ default: m.SpilloverPage })));
 export const FoundingMembersPage = lazy(() => import("@/pages/admin/AdminFoundingMembersPage"));
 export const MembershipPage = lazy(() => import("@/pages/admin/AdminMembershipPage"));
 export const BusinessCampaignsPage = lazy(() => import("@/pages/admin/business-owners/BusinessCampaignsPage").then(m => ({ default: m.BusinessCampaignsPage })));
@@ -186,29 +186,29 @@ export const BusinessContributionsPage = lazy(() => import("@/pages/admin/busine
 export const BusinessRewardsPage = lazy(() => import("@/pages/admin/business-owners/BusinessRewardsPage").then(m => ({ default: m.BusinessRewardsPage })));
 export const BusinessLeaderboardsPage = lazy(() => import("@/pages/admin/business-owners/BusinessLeaderboardsPage").then(m => ({ default: m.BusinessLeaderboardsPage })));
 export const BusinessRecognitionPage = lazy(() => import("@/pages/admin/business-owners/BusinessRecognitionPage").then(m => ({ default: m.BusinessRecognitionPage })));
-export const CampaignCommsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.CampaignCommsPage })));
-export const RewardsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.RewardsPage })));
-export const LeaderboardsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.LeaderboardsPage })));
-export const RecognitionPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.RecognitionPage })));
-export const CampaignIncentivesPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.CampaignIncentivesPage })));
-export const FinancialOverviewPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.FinancialOverviewPage })));
-export const BalancesPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.BalancesPage })));
-export const PayoutsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.PayoutsPage })));
-export const RefundsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.RefundsPage })));
-export const ContentCMSPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.ContentCMSPage })));
-export const NotificationsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.NotificationsPage })));
-export const SupportPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SupportPage })));
-export const ModerationPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.ModerationPage })));
-export const SeasonalPerformancePage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SeasonalPerformancePage })));
-export const ActivationPerformancePage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.ActivationPerformancePage })));
-export const CampaignPerformancePage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.CampaignPerformancePage })));
-export const ParticipationMembershipPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.ParticipationMembershipPage })));
-export const FinancialReportsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.FinancialReportsPage })));
-export const UsersRolesPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.UsersRolesPage })));
-export const IntegrationsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.IntegrationsPage })));
-export const AuditLogsPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.AuditLogsPage })));
-export const SecurityPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SecurityPage })));
-export const SystemHealthPage = lazy(() => import("@/pages/admin/AdminPlaceholderPages").then(m => ({ default: m.SystemHealthPage })));
+export const CampaignCommsPage = lazy(() => import("@/pages/admin/sections/ContentPages").then(m => ({ default: m.CampaignCommsPage })));
+export const RewardsPage = lazy(() => import("@/pages/admin/sections/EngagementPages").then(m => ({ default: m.RewardsPage })));
+export const LeaderboardsPage = lazy(() => import("@/pages/admin/sections/EngagementPages").then(m => ({ default: m.LeaderboardsPage })));
+export const RecognitionPage = lazy(() => import("@/pages/admin/sections/EngagementPages").then(m => ({ default: m.RecognitionPage })));
+export const CampaignIncentivesPage = lazy(() => import("@/pages/admin/sections/EngagementPages").then(m => ({ default: m.CampaignIncentivesPage })));
+export const FinancialOverviewPage = lazy(() => import("@/pages/admin/sections/FinancePages").then(m => ({ default: m.FinancialOverviewPage })));
+export const BalancesPage = lazy(() => import("@/pages/admin/sections/FinancePages").then(m => ({ default: m.BalancesPage })));
+export const PayoutsPage = lazy(() => import("@/pages/admin/sections/FinancePages").then(m => ({ default: m.PayoutsPage })));
+export const RefundsPage = lazy(() => import("@/pages/admin/sections/FinancePages").then(m => ({ default: m.RefundsPage })));
+export const ContentCMSPage = lazy(() => import("@/pages/admin/sections/ContentPages").then(m => ({ default: m.ContentCMSPage })));
+export const NotificationsPage = lazy(() => import("@/pages/admin/sections/ContentPages").then(m => ({ default: m.NotificationsPage })));
+export const SupportPage = lazy(() => import("@/pages/admin/sections/ContentPages").then(m => ({ default: m.SupportPage })));
+export const ModerationPage = lazy(() => import("@/pages/admin/sections/ContentPages").then(m => ({ default: m.ModerationPage })));
+export const SeasonalPerformancePage = lazy(() => import("@/pages/admin/sections/AnalyticsPages").then(m => ({ default: m.SeasonalPerformancePage })));
+export const ActivationPerformancePage = lazy(() => import("@/pages/admin/sections/AnalyticsPages").then(m => ({ default: m.ActivationPerformancePage })));
+export const CampaignPerformancePage = lazy(() => import("@/pages/admin/sections/AnalyticsPages").then(m => ({ default: m.CampaignPerformancePage })));
+export const ParticipationMembershipPage = lazy(() => import("@/pages/admin/sections/AnalyticsPages").then(m => ({ default: m.ParticipationMembershipPage })));
+export const FinancialReportsPage = lazy(() => import("@/pages/admin/sections/AnalyticsPages").then(m => ({ default: m.FinancialReportsPage })));
+export const UsersRolesPage = lazy(() => import("@/pages/admin/sections/SystemPages").then(m => ({ default: m.UsersRolesPage })));
+export const IntegrationsPage = lazy(() => import("@/pages/admin/sections/SystemPages").then(m => ({ default: m.IntegrationsPage })));
+export const AuditLogsPage = lazy(() => import("@/pages/admin/sections/SystemPages").then(m => ({ default: m.AuditLogsPage })));
+export const SecurityPage = lazy(() => import("@/pages/admin/sections/SystemPages").then(m => ({ default: m.SecurityPage })));
+export const SystemHealthPage = lazy(() => import("@/pages/admin/sections/SystemPages").then(m => ({ default: m.SystemHealthPage })));
 
 // =============================================================================
 // Dashboard Pages

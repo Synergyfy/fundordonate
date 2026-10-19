@@ -120,5 +120,4 @@ export interface BusinessOnboardingDto {
   preferredAudience?: "consumer" | "business" | "both";
   campaignGoal?: string;
   membershipTier?: "BRONZE" | "SILVER" | "GOLD" | "PLATINUM";
-  auditReference?: string;
 }

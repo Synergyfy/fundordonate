@@ -299,7 +299,7 @@ export function ConsumerSettingsPage() {
       </Card>
 
       <p className="pb-4 text-center text-xs text-gray-400">
-        Preferences are saved on this device for the demo.
+        Notification preferences are saved to your account. Other preferences are stored on this device.
       </p>
     </div>
   );

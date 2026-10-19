@@ -52,6 +52,23 @@ export default () => ({
     eventAudience: process.env.MCOM_REWARDS_EVENT_AUDIENCE ?? "fundordonate",
     jwksUrl: process.env.MCOM_SOLUTIONS_JWKS_URL,
   },
+  // Ecosystem peer: 247GBS Audit (direct app-to-app, delegated reads).
+  audit: {
+    apiBaseUrl: process.env.AUDIT_API_BASE_URL ?? "http://localhost:9008",
+    webUrl: process.env.AUDIT_WEB_URL ?? "http://localhost:9009",
+    audience: process.env.AUDIT_AUDIENCE ?? "247gbs-audit",
+    scopes: process.env.AUDIT_SCOPES ?? "preaudit:read audit:read",
+    eventsEnabled: (process.env.AUDIT_EVENTS_ENABLED ?? "false") === "true",
+    eventScope: process.env.AUDIT_EVENT_SCOPE ?? "audit:write",
+    // How long a snapshot is trusted before a user-present read refreshes it.
+    snapshotTtlMs: parseInt(process.env.AUDIT_SNAPSHOT_TTL_MS ?? "300000", 10),
+    reconcileEnabled:
+      (process.env.AUDIT_RECONCILE_ENABLED ?? "true") === "true",
+    reconcileIntervalMs: parseInt(
+      process.env.AUDIT_RECONCILE_INTERVAL_MS ?? "900000",
+      10,
+    ),
+  },
   rewards: {
     // Periodic reconciliation safety net (mirror drift repair).
     reconcileEnabled: (process.env.REWARDS_RECONCILE_ENABLED ?? "true") === "true",

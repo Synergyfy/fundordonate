@@ -4,6 +4,7 @@ import { McomClient } from "./mcom.client";
 import { EntitlementService } from "./entitlement.service";
 import { McomPaymentsService } from "./mcom-payments.service";
 import { RewardsClient } from "./rewards-client.service";
+import { AuditClient } from "./audit-client.service";
 import { McomRewardsWebhookService } from "./mcom-rewards-webhook.service";
 import { McomEventVerifierService } from "./mcom-event-verifier.service";
 
@@ -15,6 +16,7 @@ import { McomEventVerifierService } from "./mcom-event-verifier.service";
     EntitlementService,
     McomPaymentsService,
     RewardsClient,
+    AuditClient,
     McomRewardsWebhookService,
     McomEventVerifierService,
   ],
@@ -24,6 +26,7 @@ import { McomEventVerifierService } from "./mcom-event-verifier.service";
     EntitlementService,
     McomPaymentsService,
     RewardsClient,
+    AuditClient,
     McomRewardsWebhookService,
     McomEventVerifierService,
   ],

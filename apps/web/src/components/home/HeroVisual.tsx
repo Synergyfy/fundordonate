@@ -74,28 +74,26 @@ function FundingSlide() {
               <Building2 className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <div className="text-sm font-bold text-gray-900">Camden High Street Hub</div>
-              <div className="text-xs text-gray-400">Local Business Fund</div>
+              <div className="text-sm font-bold text-gray-900">Your High Street Hub</div>
+              <div className="text-xs text-gray-400">Community Campaign</div>
             </div>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
             <div className="h-full w-[72%] bg-gradient-to-r from-secondary-400 to-primary-500 rounded-full" />
           </div>
           <div className="flex justify-between text-xs">
-            <span className="font-bold text-secondary-600">£4,250 raised</span>
-            <span className="text-gray-400">of £6,000</span>
+            <span className="font-bold text-secondary-600">Funded</span>
+            <span className="text-gray-400">Illustrative example</span>
           </div>
         </div>
         <div className="flex gap-2">
           <div className="flex-1 bg-white rounded-xl p-3 text-center shadow-lg">
             <Users className="w-5 h-5 text-primary-500 mx-auto mb-1" />
-            <div className="text-xs font-bold text-gray-900">247</div>
-            <div className="text-[10px] text-gray-400">Backers</div>
+            <div className="text-[10px] font-bold text-gray-900">Backers</div>
           </div>
           <div className="flex-1 bg-white rounded-xl p-3 text-center shadow-lg">
             <HandHeart className="w-5 h-5 text-secondary-500 mx-auto mb-1" />
-            <div className="text-xs font-bold text-gray-900">72%</div>
-            <div className="text-[10px] text-gray-400">Funded</div>
+            <div className="text-[10px] font-bold text-gray-900">Funded</div>
           </div>
         </div>
       </div>
@@ -133,11 +131,11 @@ function RewardsSlide() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[10px] opacity-70">Status</div>
-              <div className="text-sm font-bold">Active</div>
+              <div className="text-sm font-bold">Member</div>
             </div>
             <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2.5 py-1">
               <Sparkles className="w-3 h-3 text-yellow-300" />
-              <span className="text-xs font-bold">1,250 pts</span>
+              <span className="text-xs font-bold">Reward Points</span>
             </div>
           </div>
         </div>

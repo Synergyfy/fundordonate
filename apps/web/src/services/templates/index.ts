@@ -67,6 +67,7 @@ export type TemplateFieldSource =
   | "business_account"
   | "business_mcom"
   | "audit_business"
+  | "audit_diagnostic"
   | "admin"
   | "admin_mcom";
 
@@ -95,6 +96,8 @@ export interface TemplateAccessRules {
   accessAsReward: boolean;
   accessRewardThreshold: string;
   adminApproval: boolean;
+  /** Allow an admin to override eligibility when assigning this template. */
+  allowAssignmentOverride: boolean;
 }
 
 export interface ContributionRules {
@@ -243,6 +246,7 @@ const DEFAULT_ACCESS: TemplateAccessRules = {
   accessAsReward: false,
   accessRewardThreshold: "100",
   adminApproval: false,
+  allowAssignmentOverride: false,
 };
 
 const DEFAULT_CONTRIBUTION: ContributionRules = {
@@ -342,6 +346,8 @@ export function normalizeFieldRows(fields?: any[]): TemplateFieldRow[] {
       source = "business_account";
     } else if (rawSource === "business_mcom") {
       source = "business_mcom";
+    } else if (rawSource === "audit_diagnostic") {
+      source = "audit_diagnostic";
     } else if (rawSource === "audit_business" || rawSource === "audit") {
       source = "audit_business";
     } else if (rawSource === "admin") {
@@ -379,7 +385,11 @@ export function normalizeFieldRows(fields?: any[]): TemplateFieldRow[] {
  */
 export function adaptAdminTemplateToMaster(tpl: AdminCampaignTemplate): MasterTemplate {
   const config = (tpl.config ?? {}) as Record<string, any>;
-  const accessRules: TemplateAccessRules = config.access ?? DEFAULT_ACCESS;
+  const accessRules: TemplateAccessRules = {
+    ...DEFAULT_ACCESS,
+    ...(config.access ?? {}),
+    allowAssignmentOverride: Boolean(config.access?.allowAssignmentOverride),
+  };
 
   return {
     id: tpl.id,

@@ -471,6 +471,16 @@ export interface InstantiateCampaignTemplatePayload {
   locationId?: string;
   targetAmount?: number;
   deadlineDays?: number;
+  /** Override eligibility — only honoured when the template allows it. */
+  force?: boolean;
+}
+
+export interface InstantiateSkipReason {
+  businessId: string;
+  businessName: string | null;
+  reason: "ineligible" | "already_exists" | "not_found";
+  message: string;
+  unmet: string[];
 }
 
 export interface InstantiateCampaignTemplateResult {
@@ -480,6 +490,7 @@ export interface InstantiateCampaignTemplateResult {
   campaignIds?: string[];
   jobId?: string;
   message?: string;
+  skippedReasons?: InstantiateSkipReason[];
 }
 
 export interface TargetCalculationResult {

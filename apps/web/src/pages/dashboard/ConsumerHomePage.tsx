@@ -81,11 +81,11 @@ export function ConsumerHomePage() {
           id: c.id,
           slug: c.slug || c.id,
           title: c.title,
-          mode: (c.category || "donation").toLowerCase(),
-          raisedAmount: c.raisedAmount || 0,
-          goalAmount: c.targetAmount || 1000,
-          location: c.location?.name || "UK High Street",
-          featuredImage: c.imageUrl || "",
+          mode: c.mode || "donation",
+          raisedAmount: Number(c.raisedAmount) || 0,
+          goalAmount: Number(c.goalAmount) || 0,
+          location: c.cityName || c.business?.city || "",
+          featuredImage: c.featuredImage || "",
         }));
         setRecommended(mapped);
         if (mapped.length > 0 && mapped[0]) {

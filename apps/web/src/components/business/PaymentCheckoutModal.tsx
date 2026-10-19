@@ -21,10 +21,12 @@ import {
   PaymentGatewaySelector,
   gatewayName,
 } from "@/components/business/PaymentGatewaySelector";
+import { MCOM_CONFIG } from "@/lib/config";
 import {
   paymentService,
   type PaymentGateway,
   type PaymentResult,
+  type ChargePurpose,
 } from "@/services/payment";
 import { StripeElementsCheckout } from "@/components/payment/StripeElementsCheckout";
 import { PayPalRedirectCheckout } from "@/components/payment/PayPalRedirectCheckout";
@@ -43,6 +45,8 @@ interface PaymentCheckoutModalProps {
   title: string;
   amount: number;
   campaignId?: string;
+  /** Charge purpose; defaults to SELF_FUNDING when a campaignId is present, else DONATION. */
+  purpose?: ChargePurpose;
   onSuccess: (result: PaymentResult) => void;
 }
 
@@ -95,7 +99,7 @@ function WalletPaymentForm({
                 You currently have {balance.toFixed(2)} MCOM credits, but this payment requires {amount.toFixed(2)} MCOM.
               </p>
               <a
-                href="http://localhost:3010/dashboard/wallet"
+                href={`${MCOM_CONFIG.CENTRAL_URL}/dashboard/wallet`}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-2 inline-flex items-center gap-1 font-bold text-red-800 underline hover:text-red-900"
@@ -124,12 +128,15 @@ export function PaymentCheckoutModal({
   title,
   amount,
   campaignId,
+  purpose,
   onSuccess,
 }: PaymentCheckoutModalProps) {
   const [step, setStep] = useState<Step>("choose");
   const [gateway, setGateway] = useState<PaymentGateway>("stripe");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PaymentResult | null>(null);
+
+  const chargePurpose: ChargePurpose = purpose ?? (campaignId ? "SELF_FUNDING" : "DONATION");
 
   // Gateway init states from MCOM Central Hub
   const [initializingGateway, setInitializingGateway] = useState(false);
@@ -176,7 +183,7 @@ export function PaymentCheckoutModal({
         const res = await paymentService.createCharge({
           amountMinor: Math.round(amount * 100),
           method: "stripe",
-          type: campaignId ? "SELF_FUNDING" : "DONATION",
+          type: chargePurpose,
           campaignId,
         });
 
@@ -204,7 +211,7 @@ export function PaymentCheckoutModal({
         const res = await paymentService.createCharge({
           amountMinor: Math.round(amount * 100),
           method: "paypal",
-          type: campaignId ? "SELF_FUNDING" : "DONATION",
+          type: chargePurpose,
           campaignId,
         });
 
@@ -263,7 +270,7 @@ export function PaymentCheckoutModal({
       const res = await paymentService.createCharge({
         amountMinor: Math.round(amount * 100),
         method: "wallet",
-        type: campaignId ? "SELF_FUNDING" : "DONATION",
+        type: chargePurpose,
         campaignId,
       });
 

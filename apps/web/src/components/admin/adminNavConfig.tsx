@@ -139,10 +139,10 @@ export function getAdminNavGroups(): AdminNavGroup[] {
       items: [
         { label: "General Settings", path: "/admin/settings", icon: <span className="text-xs">⚙️</span>, exact: true, implemented: true },
         { label: "Payment Rules", path: "/admin/settings/payments", icon: <span className="text-xs">💳</span>, implemented: true },
-        { label: "Integrations", path: "/admin/system/integrations", icon: <span className="text-xs">🔗</span>, implemented: false },
-        { label: "Users & Roles", path: "/admin/system/users", icon: <span className="text-xs">👥</span>, implemented: false },
-        { label: "Audit Logs", path: "/admin/system/audit-logs", icon: <span className="text-xs">📋</span>, implemented: false },
-        { label: "System Health", path: "/admin/system/health", icon: <span className="text-xs">💓</span>, implemented: false },
+        { label: "Integrations", path: "/admin/system/integrations", icon: <span className="text-xs">🔗</span>, implemented: true },
+        { label: "Users & Roles", path: "/admin/system/users", icon: <span className="text-xs">👥</span>, implemented: true },
+        { label: "Audit Logs", path: "/admin/system/audit-logs", icon: <span className="text-xs">📋</span>, implemented: true },
+        { label: "System Health", path: "/admin/system/health", icon: <span className="text-xs">💓</span>, implemented: true },
       ],
     },
   ];

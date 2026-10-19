@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, Mail, MapPin, MessageSquare, Send, User } from "lucide-react";
+import { supportService } from "@/services/support";
 
 interface FormState {
   name: string;
@@ -58,10 +59,21 @@ export default function ContactPage() {
     if (Object.keys(validation).length > 0) return;
 
     setSubmitting(true);
-    // Frontend-only: simulate sending the message.
-    await new Promise((r) => setTimeout(r, 800));
-    setSubmitting(false);
-    setSubmitted(true);
+    try {
+      await supportService.createTicket({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        topic: form.subject,
+        subject: form.subject,
+        message: form.message.trim(),
+        source: "web",
+      });
+      setSubmitted(true);
+    } catch {
+      setErrors({ message: "We couldn't send your message right now. Please try again." });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

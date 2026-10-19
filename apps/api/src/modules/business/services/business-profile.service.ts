@@ -173,7 +173,9 @@ export class BusinessProfileService {
           campaignGoal: dto.campaignGoal,
           membershipTier: dto.membershipTier,
           status: BusinessStatus.ACTIVE,
-          auditReference: dto.auditReference,
+          // NOTE: pre-audit state is owned by 247GBS Audit and populated from a
+          // delegated read (Business.auditLinkStatus). The legacy
+          // `auditReference` input is no longer stored.
           locationId: location?.id,
           settings: {
             create: {

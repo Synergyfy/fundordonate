@@ -33,23 +33,41 @@ export function ThankYouPage() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    // New MCOM Pay flow: the charge reference is passed directly, so we can
-    // render the confirmation without a legacy donation/pledge lookup.
+    // New MCOM Pay flow: the charge reference is passed directly. Fetch the real
+    // contribution; if the webhook hasn't recorded it yet, show a pending state.
     if (reference) {
-      setTransaction({
-        uid: reference,
-        amount: Number(amountParam) || 0,
-        status: statusParam || "completed",
-        createdAt: new Date().toISOString(),
-        campaign: {
-          id: "",
-          title: campaignParam || "Campaign",
-          slug: "",
-        },
-      });
-      setError("");
-      setLoading(false);
-      return;
+      let cancelled = false;
+      campaignApi
+        .getContributionByReference(reference)
+        .then((c: any) => {
+          if (cancelled) return;
+          setTransaction({
+            uid: c.uid,
+            amount: c.amount,
+            status: c.status,
+            createdAt: c.createdAt,
+            campaign: c.campaign,
+            location: c.business?.location,
+          });
+          setError("");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setTransaction({
+            uid: reference,
+            amount: Number(amountParam) || 0,
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            campaign: { id: "", title: campaignParam || "Campaign", slug: "" },
+          });
+          setError("");
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (!uid) {
@@ -198,7 +216,11 @@ export function ThankYouPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Amount</span>
-              <span className="font-semibold text-gray-900">£{(transaction.amount / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-gray-900">
+                {transaction.amount > 0
+                  ? `£${(transaction.amount / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : "—"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Status</span>

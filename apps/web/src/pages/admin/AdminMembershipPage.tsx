@@ -3,16 +3,23 @@
 // Membership plan management: tiers, levels, pricing, subscribers, revenue.
 // =============================================================================
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/services/admin";
+import { MEMBERSHIP_TIERS } from "@/constants/membershipTiers";
 import {
-  Crown, Gem, Users, TrendingUp,
+  Crown, Users, TrendingUp,
   Loader2,
 } from "lucide-react";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
+
+/** Base ("Standard") contribution in pence, sourced from the canonical tier catalogue. */
+function standardPricePence(tierId: string): number {
+  const tier = MEMBERSHIP_TIERS.find((t) => t.id === tierId);
+  const variant = tier?.variants.find((v) => v.accessLevel === "standard");
+  return (variant?.price ?? 0) * 100;
+}
 
 export default function AdminMembershipPage() {
   const { data: businessesData, isLoading: loadingBiz } = useQuery({
@@ -43,7 +50,7 @@ export default function AdminMembershipPage() {
       bg: "bg-amber-50 border-amber-200",
       icon: "🥉",
       activeCount: tierStats.BRONZE,
-      standardPrice: 5000,
+      standardPrice: standardPricePence("bronze"),
     },
     {
       id: "silver",
@@ -53,7 +60,7 @@ export default function AdminMembershipPage() {
       bg: "bg-gray-50 border-gray-200",
       icon: "🥈",
       activeCount: tierStats.SILVER,
-      standardPrice: 10000,
+      standardPrice: standardPricePence("silver"),
     },
     {
       id: "gold",
@@ -63,7 +70,7 @@ export default function AdminMembershipPage() {
       bg: "bg-yellow-50 border-yellow-200",
       icon: "🥇",
       activeCount: tierStats.GOLD,
-      standardPrice: 25000,
+      standardPrice: standardPricePence("gold"),
     },
     {
       id: "platinum",
@@ -73,7 +80,7 @@ export default function AdminMembershipPage() {
       bg: "bg-purple-50 border-purple-200",
       icon: "💎",
       activeCount: tierStats.PLATINUM,
-      standardPrice: 50000,
+      standardPrice: standardPricePence("platinum"),
     },
   ];
 

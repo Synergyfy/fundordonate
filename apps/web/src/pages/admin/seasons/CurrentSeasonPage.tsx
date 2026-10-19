@@ -5,7 +5,9 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { seasonApi, type Season, type SeasonMetrics, type SeasonCityActivity } from "@/services/season";
+import { adminApi, type ActivityFeedItem } from "@/services/admin";
 import {
   Calendar, TrendingUp, Users, MapPin, Trophy, Settings, Activity,
   ChevronRight, AlertTriangle, Target, BarChart3,
@@ -85,24 +87,29 @@ function OverviewTab({ season, metrics }: { season: Season; metrics: SeasonMetri
       </div>
 
       {/* Attention Required */}
-      <div className="rounded-xl bg-amber-50 border border-amber-200 p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <h3 className="text-sm font-bold text-amber-800">Attention Required</h3>
-        </div>
-        <div className="space-y-2">
-          {[
-            { text: "3 campaigns still active past planned end date", severity: "high" },
-            { text: "Leeds activation below expected threshold", severity: "medium" },
-            { text: "£2.8M surplus awaiting allocation decision", severity: "medium" },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
-              <span className={`h-2 w-2 rounded-full ${item.severity === "high" ? "bg-red-500" : "bg-amber-500"}`} />
-              <span className="text-amber-700">{item.text}</span>
+      {(() => {
+        const alerts: { text: string; severity: "high" | "medium" }[] = [];
+        if (metrics && metrics.progressPercent < 50 && daysLeft < 30) {
+          alerts.push({ text: `Season is ${metrics.progressPercent}% funded with ${daysLeft} days remaining`, severity: "high" });
+        }
+        if (alerts.length === 0) return null;
+        return (
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <h3 className="text-sm font-bold text-amber-800">Attention Required</h3>
             </div>
-          ))}
-        </div>
-      </div>
+            <div className="space-y-2">
+              {alerts.map((item, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <span className={`h-2 w-2 rounded-full ${item.severity === "high" ? "bg-red-500" : "bg-amber-500"}`} />
+                  <span className="text-amber-700">{item.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -250,28 +257,53 @@ function EngagementTab({ season }: { season: Season }) {
 // Activity Tab
 // =============================================================================
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function describeActivity(e: ActivityFeedItem): string {
+  const who = e.user
+    ? [e.user.firstName, e.user.lastName].filter(Boolean).join(" ") || e.user.email
+    : "System";
+  const action = e.action.replace(/_/g, " ").toLowerCase();
+  return `${who}: ${action} (${e.entityType})`;
+}
+
 function ActivityTab(_: { season: Season }) {
-  const events = [
-    { time: "2 hours ago", text: "London campaign reached 50% milestone", type: "milestone" },
-    { time: "5 hours ago", text: "Manchester: 100 new backers this week", type: "participation" },
-    { time: "1 day ago", text: "Birmingham high street activation completed", type: "activation" },
-    { time: "2 days ago", text: "Leeds campaign target adjusted", type: "config" },
-    { time: "3 days ago", text: "Oxford Street business onboarding batch", type: "business" },
-  ];
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-activity-feed"],
+    queryFn: () => adminApi.getActivityFeed(20),
+  });
+  const events: ActivityFeedItem[] = data ?? [];
+
   return (
     <div className="rounded-xl bg-white border p-5">
       <h3 className="text-sm font-bold text-gray-900 mb-4">Operational Feed</h3>
-      <div className="space-y-4">
-        {events.map((e, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <div className="mt-1 h-2 w-2 rounded-full bg-primary-400 flex-shrink-0" />
-            <div>
-              <div className="text-sm text-gray-900">{e.text}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{e.time}</div>
+      {isLoading ? (
+        <div className="flex justify-center py-6">
+          <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+        </div>
+      ) : events.length === 0 ? (
+        <p className="text-sm text-gray-500">No recent activity.</p>
+      ) : (
+        <div className="space-y-4">
+          {events.map((e) => (
+            <div key={e.id} className="flex items-start gap-3">
+              <div className="mt-1 h-2 w-2 rounded-full bg-primary-400 flex-shrink-0" />
+              <div>
+                <div className="text-sm text-gray-900">{describeActivity(e)}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{timeAgo(e.createdAt)}</div>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -53,6 +53,7 @@ model User {
   businesses    Business[]     @relation("BusinessOwner")
   contributions Contribution[] @relation("UserContributions")
   auditLogs     AuditLog[]
+  foundingMemberships FoundingMembership[]
 
   @@index([mcomUserId])
   @@index([userType])
@@ -144,6 +145,7 @@ model HubLocation {
 
   businesses         Business[]
   events             PlatformEvent[]
+  foundingProgrammes FoundingProgramme[]
 
   @@index([parentId])
   @@index([type])
@@ -161,6 +163,17 @@ enum BusinessStatus {
   ACTIVE
   SUSPENDED
   ARCHIVED
+}
+
+/// Local view of a business owner's 247GBS Audit link/pre-audit state.
+/// Populated by the AuditDataService from a user-delegated read (or the
+/// reconciliation job) — never entered by hand.
+enum AuditLinkStatus {
+  NOT_LINKED // owner has no MCOM identity, or has never signed into 247GBS Audit
+  NO_PRE_AUDIT // linked, but no completed pre-audit exists
+  CONSENT_REQUIRED // a pre-audit exists but has not been shared
+  AVAILABLE // a consenting, completed pre-audit is readable
+  ERROR // transient/unexpected failure talking to 247GBS Audit
 }
 
 enum MembershipTier {
@@ -197,8 +210,23 @@ model Business {
   membershipExpiry     DateTime?
   preferredAudience    PreferredAudience @default(BOTH)
   campaignGoal         String?
+  // ── DEPRECATED: fake pre-audit state (superseded by the 247GBS Audit read).
+  //    Kept for one release so nothing crashes mid-migration; do not write.
   auditReference       String?           // AUD-xxxxxx from Public Pre-Audit
   preAuditAnswers      Json              @default("{}") // Pre-audit cached answer tree
+
+  // ── 247GBS Audit snapshot (source of truth = 247GBS Audit) ──
+  auditLinkStatus        AuditLinkStatus @default(NOT_LINKED)
+  auditPreAuditId        String? // 247GBS pre-audit session id
+  auditRecommendedType   String? // SHORT_FORM | LONG_FORM
+  auditDestinationType   String? // SHORT_FORM | LONG_FORM | FUND_OR_DONATE | ...
+  auditDestinationTarget String?
+  auditConsentVersion    String?
+  auditPreAuditCompletedAt DateTime?
+  auditDiagnostic        Json? // full diagnosticSummary
+  auditLinkedAt          DateTime? // first successful AVAILABLE read
+  auditSyncedAt          DateTime? // last successful read
+  auditLastError         String? // last failure reason / provider code
   
   // Location Hierarchy Linkage
   locationId           String?
@@ -214,6 +242,7 @@ model Business {
   contributions        Contribution[]
   settings             BusinessSettings?
   payouts              PayoutRequest[]
+  auditSessions        AuditSessionMirror[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
@@ -239,6 +268,42 @@ model BusinessSettings {
   updatedAt           DateTime @updatedAt
 
   @@map("business_settings")
+}
+
+// =============================================================================
+// 247GBS AUDIT MIRROR
+// =============================================================================
+// A local, read-only mirror of a business owner's audit sessions as returned by
+// 247GBS Audit's partner API. Raw audit answers are never returned by the
+// provider and are never stored here — only calculated metrics + AI insight.
+
+model AuditSessionMirror {
+  id                String   @id @default(uuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// 247GBS audit session id (stable, unique across the provider).
+  auditId           String   @unique
+  status            String // TRIAGE_COMPLETED | SECTOR_SELECTED | IN_PROGRESS | COMPLETED | ABANDONED
+  auditType         String?
+  scopes            String[] @default([])
+  sectorId          String?
+  groupId           String?
+  businessTypeId    String?
+  preAuditSessionId String?
+  calculatedMetrics Json? // capacityDrainPct, totalStockImpact, annualRecovery, impactScore
+  aiInsight         Json?
+
+  completedAt       DateTime?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  syncedAt          DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([status])
+  @@map("audit_session_mirrors")
 }
 
 // =============================================================================
@@ -658,5 +723,109 @@ model PayoutRequest {
   @@index([businessId, status])
   @@index([status, createdAt(sort: Desc)])
   @@map("payout_requests")
+}
+
+// =============================================================================
+// FOUNDING MEMBERSHIP PROGRAMMES
+// =============================================================================
+
+enum FoundingAudience {
+  BUSINESS
+  CONSUMER
+}
+
+enum FoundingProgrammeStatus {
+  OPEN
+  LIMITED
+  FULLY_ALLOCATED
+  CLOSED
+  ARCHIVED
+}
+
+enum FoundingMembershipStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  CANCELLED
+}
+
+model FoundingProgramme {
+  id                 String                  @id @default(uuid())
+  locationId         String
+  location           HubLocation             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  audience           FoundingAudience
+  title              String
+  description        String?                 @db.Text
+  status             FoundingProgrammeStatus @default(OPEN)
+  totalAllocation    Int                     @default(0)
+  allocatedCount     Int                     @default(0)
+  opensAt            DateTime?
+  closesAt           DateTime?
+  /// Price matrix keyed by "{metal}_{level}" in minor units (pence).
+  contributionConfig Json                    @default("{}")
+  benefitConfig      Json                    @default("[]")
+  eligibilityConfig  Json                    @default("{}")
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  memberships FoundingMembership[]
+
+  @@unique([locationId, audience])
+  @@index([locationId])
+  @@index([status])
+  @@map("founding_programmes")
+}
+
+model FoundingMembership {
+  id                 String                   @id @default(uuid())
+  programmeId        String
+  programme          FoundingProgramme        @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier               MembershipTier           @default(BRONZE)
+  accessLevel        String                   @default("standard") // standard | pro | pro_plus
+  status             FoundingMembershipStatus @default(PENDING)
+  contributionAmount BigInt                   @default(0) // minor units (pence)
+  isMonthly          Boolean                  @default(false)
+  reference          String?
+  startedAt          DateTime                 @default(now())
+  expiresAt          DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@unique([programmeId, userId])
+  @@index([programmeId])
+  @@index([userId])
+  @@index([status])
+  @@map("founding_memberships")
+}
+
+// =============================================================================
+// SUPPORT TICKETS
+// =============================================================================
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id        String              @id @default(uuid())
+  userId    String?
+  name      String
+  email     String
+  topic     String
+  subject   String?
+  message   String              @db.Text
+  status    SupportTicketStatus @default(OPEN)
+  source    String              @default("web") // web | consumer_dashboard
+  metadata  Json                @default("{}")
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("support_tickets")
 }
 

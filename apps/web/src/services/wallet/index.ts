@@ -1,4 +1,5 @@
 import api from "../api";
+import { MCOM_CONFIG } from "@/lib/config";
 import type { McomWalletBalance, WalletSummary } from "./type";
 
 export const walletService = {
@@ -23,8 +24,7 @@ export const walletService = {
    * Optional helper to build a top-up URL to MCOM Central Hub.
    */
   getCentralTopUpUrl(): string {
-    const centralUrl = import.meta.env.VITE_MCOM_SOLUTIONS_URL || "http://localhost:3010";
-    return `${centralUrl}/wallet/topup`;
+    return `${MCOM_CONFIG.CENTRAL_URL}/wallet/topup`;
   },
 
   /**

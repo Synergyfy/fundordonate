@@ -21,6 +21,8 @@ export interface ConsumerContribution {
   campaignTitle: string;
   campaignLocation: string;
   campaignImage?: string;
+  campaignGoal?: number;
+  campaignRaised?: number;
   mode: string;
   paymentMethod: string;
   reference?: string;
@@ -147,8 +149,8 @@ function buildCampaignGroups(items: ConsumerContribution[]): {
       image: c.campaignImage,
       contributed: c.amount,
       latestStatus: c.status,
-      goal: 100000,
-      raised: c.amount,
+      goal: c.campaignGoal ?? 0,
+      raised: c.campaignRaised ?? 0,
       ended: false,
     });
   }
@@ -372,9 +374,11 @@ export function ConsumerActivityPage() {
           createdAt: d.createdAt || new Date().toISOString(),
           campaignId: d.campaign?.id || d.campaignId || "",
           campaignSlug: d.campaign?.id || d.campaignId || "",
-          campaignTitle: d.campaign?.title || "Community Campaign",
-          campaignLocation: d.business?.city || "Local High Street",
+          campaignTitle: d.campaign?.title || "Untitled campaign",
+          campaignLocation: d.business?.city || "",
           campaignImage: d.campaign?.imageUrl,
+          campaignGoal: Number(d.campaign?.targetAmount) || 0,
+          campaignRaised: Number(d.campaign?.raisedAmount) || 0,
           mode: "donation",
           paymentMethod: d.paymentMethod || "card",
         }));

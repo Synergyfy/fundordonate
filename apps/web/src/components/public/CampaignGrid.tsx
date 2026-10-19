@@ -18,8 +18,8 @@ interface CampaignGridProps {
 
 /**
  * Campaign grid with loading, empty and error states.
- * Tries the API first; falls back to demo campaigns if the backend is
- * unavailable so a section is never left blank.
+ * Loads published campaigns from the public campaign API; shows an honest
+ * empty state when none are available and an error state when the request fails.
  */
 export function CampaignGrid({
   limit = 6,

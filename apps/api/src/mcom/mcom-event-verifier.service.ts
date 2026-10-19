@@ -65,9 +65,12 @@ export class McomEventVerifierService {
   /**
    * Verify a Bearer token and return its claims. Throws `UnauthorizedException`
    * when the token is malformed, mis-signed, expired, or has the wrong
-   * issuer/audience.
+   * issuer/audience. Optionally enforces the caller (`sub`) and required scopes.
    */
-  async verify(token: string): Promise<JwtPayload> {
+  async verify(
+    token: string,
+    opts?: { expectedSub?: string; requiredScopes?: string[] },
+  ): Promise<JwtPayload> {
     const parts = (token ?? "").split(".");
     if (parts.length !== 3) throw this.unauthorized("malformed token");
     const [headerSeg, payloadSeg, signatureSeg] = parts;
@@ -109,6 +112,23 @@ export class McomEventVerifierService {
     }
     if (!this.audienceMatches(payload.aud)) {
       throw this.unauthorized("audience mismatch");
+    }
+
+    if (opts?.expectedSub && payload.sub !== opts.expectedSub) {
+      throw this.unauthorized(
+        `unexpected caller ${String(payload.sub ?? "(none)")}`,
+      );
+    }
+
+    if (opts?.requiredScopes?.length) {
+      const scopes =
+        typeof payload.scope === "string"
+          ? payload.scope.split(/\s+/).filter(Boolean)
+          : [];
+      const missing = opts.requiredScopes.filter((s) => !scopes.includes(s));
+      if (missing.length > 0) {
+        throw this.unauthorized(`missing scope(s): ${missing.join(", ")}`);
+      }
     }
 
     return payload;

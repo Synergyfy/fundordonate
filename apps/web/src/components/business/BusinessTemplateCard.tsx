@@ -81,6 +81,11 @@ export function BusinessTemplateCard({
   const { met, total, complete } = requirementProgress(t);
   const isClaiming = claiming;
 
+  const unmet: any[] = (t.requirements || []).filter((r: any) => !r.met);
+  const needsAudit = unmet.some(
+    (r: any) => r.action === "audit" || r.id === "pre_audit",
+  );
+
   const accessLabel = t.accessType || "Open";
   const hasContributionReq = t.contributionRequirement?.required;
   const rewardsMode = normalizeBusinessRewardsMode(t.businessRewardsMode);
@@ -180,7 +185,11 @@ export function BusinessTemplateCard({
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <KeyRound className="h-4 w-4" />
-          {unlocking ? "Completing…" : "Complete Requirement"}
+          {unlocking
+            ? "Completing…"
+            : needsAudit
+              ? "Go to 247GBS Audit"
+              : "Complete Requirement"}
         </button>
       )}
     </div>

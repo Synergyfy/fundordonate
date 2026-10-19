@@ -16,6 +16,30 @@ import {
 import type { AttachCampaignRewardDto } from "../dto/attach-campaign-reward.dto";
 import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
 
+/**
+ * Friendly labels for the reward types stored on an issuance. Covers both the
+ * FundOrDonate-local type and the MCOM Rewards provider types ("Voucher",
+ * "gift card", "coupon", "point offer", "physical product").
+ */
+const REWARD_TYPE_LABELS: Record<string, string> = {
+  local: "FundOrDonate reward",
+  voucher: "Voucher",
+  "gift card": "Gift card",
+  giftcard: "Gift card",
+  coupon: "Coupon",
+  "point offer": "Points reward",
+  points: "Points reward",
+  "physical product": "Physical product",
+  membership: "Membership reward",
+};
+
+/** Human label for a reward type — answers "what do I get". */
+function rewardTypeLabel(rewardType?: string | null): string {
+  if (!rewardType) return "Reward";
+  const key = rewardType.trim().toLowerCase();
+  return REWARD_TYPE_LABELS[key] ?? rewardType;
+}
+
 export interface BusinessRewardItem {
   id: string;
   name: string;
@@ -25,11 +49,25 @@ export interface BusinessRewardItem {
   earnedAt?: string;
   progress?: number;
 
-  // ── Provenance: what earned this reward ──────────────────────────────────
+  // ── What the reward actually is / what the owner gets ────────────────────
   /** Lifecycle status of the issuance (ISSUED / REDEEMED / EXPIRED / …). */
   status?: string;
-  /** Reward type/category as stored on the issuance (e.g. "local", "voucher"). */
+  /** Reward type/category as stored on the issuance (e.g. "local", "Voucher"). */
   rewardType?: string | null;
+  /** Monetary value of the reward in pounds GBP (null when open-ended/unknown). */
+  value?: number | null;
+  /** Redemption / voucher code the owner quotes to claim the reward. */
+  code?: string | null;
+  /** Number of units issued. */
+  quantity?: number;
+  /** When the reward expires (ISO string). */
+  expiresAt?: string | null;
+  /** When the reward was redeemed (ISO string). */
+  redeemedAt?: string | null;
+  /** When the reward was revoked (ISO string). */
+  revokedAt?: string | null;
+
+  // ── Provenance: what earned this reward ──────────────────────────────────
   /** The campaign the qualifying contribution was made to. */
   campaignId?: string | null;
   campaignTitle?: string | null;
@@ -110,8 +148,17 @@ export class BusinessRewardService {
         issuances.map((i) => i.campaignId).filter((id): id is string => !!id),
       ),
     ];
+    // Business-owned rewards snapshot their catalogue description on the
+    // campaign attachment; use it to describe what the reward actually is.
+    const attachmentIds = [
+      ...new Set(
+        issuances
+          .map((i) => i.rewardConfigId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
 
-    const [contributions, campaigns] = await Promise.all([
+    const [contributions, campaigns, attachments] = await Promise.all([
       contributionIds.length
         ? this.prisma.contribution.findMany({
             where: { id: { in: contributionIds } },
@@ -138,10 +185,17 @@ export class BusinessRewardService {
             },
           })
         : Promise.resolve([]),
+      attachmentIds.length
+        ? this.prisma.campaignRewardAttachment.findMany({
+            where: { id: { in: attachmentIds } },
+            select: { id: true, description: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const contributionMap = new Map(contributions.map((c) => [c.id, c]));
     const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
+    const attachmentMap = new Map(attachments.map((a) => [a.id, a]));
 
     const earned: BusinessRewardItem[] = issuances.map((i) => {
       const contribution = i.contributionId
@@ -149,19 +203,27 @@ export class BusinessRewardService {
         : undefined;
       const campaignId = i.campaignId ?? contribution?.campaignId ?? null;
       const campaign = campaignId ? campaignMap.get(campaignId) : undefined;
+      const attachment = i.rewardConfigId
+        ? attachmentMap.get(i.rewardConfigId)
+        : undefined;
 
       return {
         id: i.id,
         name: i.rewardTitle ?? "Reward",
+        // Surface what the reward actually is, not just where it came from.
         description:
-          i.rewardType === "local"
-            ? "FundOrDonate reward"
-            : "Issued via MCOM Rewards",
+          attachment?.description?.trim() || rewardTypeLabel(i.rewardType),
         icon: "🎁",
         earned: true,
         earnedAt: i.createdAt.toISOString().split("T")[0],
         status: i.status,
         rewardType: i.rewardType,
+        value: i.value,
+        code: i.code,
+        quantity: i.quantity,
+        expiresAt: i.expiresAt?.toISOString() ?? null,
+        redeemedAt: i.redeemedAt?.toISOString() ?? null,
+        revokedAt: i.revokedAt?.toISOString() ?? null,
         campaignId: campaignId ?? null,
         campaignTitle: campaign?.title ?? null,
         campaignImage:

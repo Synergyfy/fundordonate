@@ -6,24 +6,22 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
 import {
-  Business,
   BusinessCampaign,
   BusinessCampaignStatus,
-  BusinessStatus,
   CampaignTemplate,
-  MembershipTier,
   TemplateApprovalMode,
 } from "@prisma/client";
+import { AuditLinkStatus } from "@prisma/client";
 import { CampaignQueryDto } from "../dto/campaign-query.dto";
 import { SaveCampaignAnswersDto } from "../dto/save-campaign-answers.dto";
 import { normalizeBusinessRewardsMode } from "@/modules/rewards/reward-config.util";
+import { AuditDataService } from "@/modules/audit/services/audit-data.service";
+import {
+  TemplateEligibilityService,
+  type TemplateRequirementCheck,
+} from "@/modules/eligibility/template-eligibility.service";
 
-export interface TemplateRequirementCheck {
-  id: string;
-  label: string;
-  hint: string;
-  met: boolean;
-}
+export type { TemplateRequirementCheck };
 
 export interface BusinessTemplateView {
   id: string;
@@ -50,31 +48,13 @@ export interface BusinessTemplateView {
   businessRewardsMode: string;
 }
 
-/** The template's `config.access` block, as authored in the wizard. */
-interface TemplateAccessConfig {
-  type?: string;
-  eligibility?: string[];
-  minContribution?: string | number;
-}
-
-/** The membership tiers, lowest → highest. */
-const TIER_HIERARCHY: MembershipTier[] = [
-  MembershipTier.BRONZE,
-  MembershipTier.SILVER,
-  MembershipTier.GOLD,
-  MembershipTier.PLATINUM,
-];
-
-const gbp = (pence: number) =>
-  new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: pence % 100 === 0 ? 0 : 2,
-  }).format(pence / 100);
-
 @Injectable()
 export class BusinessCampaignService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditData: AuditDataService,
+    private readonly eligibility: TemplateEligibilityService,
+  ) {}
 
   /**
    * Evaluates the active templates against the business profile and splits them
@@ -94,7 +74,7 @@ export class BusinessCampaignService {
       throw new NotFoundException("Business not found");
     }
 
-    const [templates, contributionAgg] = await Promise.all([
+    const [templates, contributionAgg, auditStatus] = await Promise.all([
       this.prisma.campaignTemplate.findMany({
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -105,12 +85,21 @@ export class BusinessCampaignService {
         where: { businessId, status: "COMPLETED" },
         _sum: { amount: true },
       }),
+      // Local 247GBS Audit snapshot — drives the `pre_audit` eligibility rule.
+      // Refreshed from the provider when stale (a user is present here).
+      this.auditData.refreshIfStale(businessId),
     ]);
 
     const contributedPence = contributionAgg._sum.amount ?? 0;
+    const preAuditMet = auditStatus.linkStatus === AuditLinkStatus.AVAILABLE;
 
     return templates.map((tpl) => {
-      const access = this.evaluateAccess(business, tpl, contributedPence);
+      const access = this.eligibility.evaluate({
+        business,
+        template: tpl,
+        contributedPence,
+        preAuditMet,
+      });
 
       return {
         id: tpl.id,
@@ -142,156 +131,6 @@ export class BusinessCampaignService {
 
   // ── Access evaluation ─────────────────────────────────────────────────────
 
-  /** The `config.access` block authored in the template wizard (or `{}`). */
-  private templateAccess(template: CampaignTemplate): TemplateAccessConfig {
-    const access = (template.config as Record<string, unknown> | null)?.access;
-    return access && typeof access === "object"
-      ? (access as TemplateAccessConfig)
-      : {};
-  }
-
-  /**
-   * The eligibility rules to enforce. Defaults to "verified business account
-   * only" for templates predating the wizard's access step — so nothing is
-   * required that the admin did not explicitly select.
-   */
-  private templateEligibilityRules(template: CampaignTemplate): string[] {
-    const rules = this.templateAccess(template).eligibility;
-    return Array.isArray(rules) && rules.length > 0
-      ? rules.filter((r): r is string => typeof r === "string")
-      : ["business_account"];
-  }
-
-  /** The minimum platform contribution (pence) the min_contribution rule needs. */
-  private requiredContributionPence(template: CampaignTemplate): number {
-    if (template.minContributionAmount > 0) return template.minContributionAmount;
-    const pounds = Number(this.templateAccess(template).minContribution ?? 0);
-    return Number.isFinite(pounds) && pounds > 0 ? Math.round(pounds * 100) : 0;
-  }
-
-  /**
-   * Evaluates a template's access rules against a business and returns the
-   * ordered requirement checklist (shown to the business), whether every
-   * requirement is met, the access model label, and the qualifying contribution.
-   */
-  private evaluateAccess(
-    business: Business,
-    template: CampaignTemplate,
-    contributedPence: number,
-  ): {
-    requirements: TemplateRequirementCheck[];
-    allMet: boolean;
-    accessType: string;
-    contributionRequiredPence: number;
-  } {
-    const rules = this.templateEligibilityRules(template);
-    const requirements: TemplateRequirementCheck[] = [];
-
-    const membershipActive =
-      (business.membershipExpiry?.getTime() ?? 0) > Date.now() ||
-      business.membershipTier !== MembershipTier.BRONZE;
-
-    for (const rule of rules) {
-      switch (rule) {
-        case "business_account":
-          requirements.push({
-            id: "business_account",
-            label: "Verified business account",
-            hint: "Your business account must be active on FundOrDonate.",
-            met: business.status === BusinessStatus.ACTIVE,
-          });
-          break;
-        case "pre_audit":
-          requirements.push({
-            id: "pre_audit",
-            label: "Public Pre-Audit completed",
-            hint: "Complete your FundOrDonate public pre-audit and business verification.",
-            met: !!business.auditReference,
-          });
-          break;
-        case "membership_active":
-          requirements.push({
-            id: "membership_active",
-            label: "Active membership",
-            hint: "Hold an active FundOrDonate membership tier.",
-            met: membershipActive,
-          });
-          break;
-        case "package_tier":
-          requirements.push({
-            id: "package_tier",
-            label: "Purchased package tier",
-            hint: "Hold the required FundOrDonate package tier.",
-            met: membershipActive,
-          });
-          break;
-        case "min_contribution": {
-          const required = this.requiredContributionPence(template);
-          requirements.push({
-            id: "min_contribution",
-            label: `Minimum platform contribution (${gbp(required)})`,
-            hint: "Contribute at least this amount to the platform to unlock the template.",
-            met: required <= 0 || contributedPence >= required,
-          });
-          break;
-        }
-        case "admin_approval":
-          // No per-business grant store exists: this is not a template lock.
-          // Selecting it means an admin reviews the *campaign* after claiming
-          // (reflected by `approvalMode`), so it never blocks the template.
-          requirements.push({
-            id: "admin_approval",
-            label: "Admin approval",
-            hint: "An admin reviews your campaign after you claim this template.",
-            met: true,
-          });
-          break;
-        default:
-          break;
-      }
-    }
-
-    // Membership-tier gate — enforced whenever the template targets above the
-    // base tier (also covers legacy templates that have no access config).
-    requirements.push(this.tierRequirement(business, template));
-
-    return {
-      requirements,
-      allMet: requirements.every((r) => r.met),
-      accessType: this.templateAccess(template).type ?? "automatic",
-      contributionRequiredPence: rules.includes("min_contribution")
-        ? this.requiredContributionPence(template)
-        : 0,
-    };
-  }
-
-  /** The membership-tier gate, or a no-op check when the base tier suffices. */
-  private tierRequirement(
-    business: Business,
-    template: CampaignTemplate,
-  ): TemplateRequirementCheck {
-    const minTier = template.minEligibilityTier;
-    const minIndex = TIER_HIERARCHY.indexOf(minTier);
-    const businessIndex = TIER_HIERARCHY.indexOf(business.membershipTier);
-
-    // Base tier (BRONZE) accepts everyone; only above-base tiers gate access.
-    if (minIndex <= 0) {
-      return {
-        id: "campaign_eligibility",
-        label: `Membership tier (${minTier} or higher)`,
-        hint: "Your membership tier satisfies this template.",
-        met: true,
-      };
-    }
-
-    return {
-      id: "campaign_eligibility",
-      label: `Membership tier (${minTier} or higher)`,
-      hint: `Requires ${minTier} membership or higher.`,
-      met: businessIndex >= minIndex,
-    };
-  }
-
   /**
    * Claims a template for a business, initializing the campaign draft and pre-populating fields.
    */
@@ -321,11 +160,13 @@ export class BusinessCampaignService {
       where: { businessId, status: "COMPLETED" },
       _sum: { amount: true },
     });
-    const access = this.evaluateAccess(
+    const auditStatus = await this.auditData.getStatus(businessId);
+    const access = this.eligibility.evaluate({
       business,
       template,
-      contributionAgg._sum.amount ?? 0,
-    );
+      contributedPence: contributionAgg._sum.amount ?? 0,
+      preAuditMet: auditStatus.linkStatus === AuditLinkStatus.AVAILABLE,
+    });
     if (!access.allMet) {
       const unmet = access.requirements
         .filter((r) => !r.met)
@@ -351,14 +192,26 @@ export class BusinessCampaignService {
 
       // Pre-populate fields based on template configuration and known business data
       const fieldsConfig = (template.fieldsConfig as any[]) || [];
-      const auditAnswers = (business.preAuditAnswers as Record<string, string>) || {};
+      // 247GBS Audit never exposes raw answers — pre-fill audit-sourced fields
+      // from the server-computed pre-audit diagnostic via the field map.
+      const auditFields = fieldsConfig.filter(
+        (f) =>
+          f?.source === "audit" || f?.source === "audit_diagnostic",
+      );
+      const auditDefaults = await this.auditData.getFieldDefaults(
+        businessId,
+        auditFields,
+      );
 
       for (const field of fieldsConfig) {
         let defaultValue = field.value || "";
 
-        // Pre-populate from business identity or audit answers
-        if (field.source === "audit" && auditAnswers[field.id]) {
-          defaultValue = auditAnswers[field.id];
+        // Pre-populate from the 247GBS pre-audit diagnostic or business identity.
+        if (
+          (field.source === "audit" || field.source === "audit_diagnostic") &&
+          auditDefaults[field.id]
+        ) {
+          defaultValue = auditDefaults[field.id];
         } else if (field.source === "business_account") {
           if (field.id === "business_name") defaultValue = business.name;
           if (field.id === "city") defaultValue = business.city;

@@ -157,10 +157,11 @@ function BusinessCityPanel({ location, onClose, season }: { location: MapHubLoca
   const meta = HUB_STATUS_META[location.status as HubStatus] || HUB_STATUS_META.active;
   const campaigns = (location as any).campaignsList || [];
   const fundingRaised = location.fundingRaised || 0;
-  const fundingTarget = location.fundingTarget || 200000;
+  const fundingTarget = Number(location.fundingTarget) || 0;
   const fundingPct = safePct(fundingRaised, fundingTarget);
-  const bizTotal = (location as any).businessesCount || 50;
-  const bizAllocated = Math.floor(bizTotal * 0.6);
+  const rawBizTotal = (location as any).businessesCount ?? (location as any).foundingBusinessTotal;
+  const bizTotal = Number(Array.isArray(rawBizTotal) ? rawBizTotal.length : rawBizTotal) || 0;
+  const bizAllocated = Number((location as any).foundingBusinessAllocated) || 0;
   const bizRemaining = Math.max(0, bizTotal - bizAllocated);
   const lifecycle = (location as any).internalLifecycle || "ACTIVE";
   const lifecycleMeta = ACTIVATION_LIFECYCLE.find(s => s.stage.toLowerCase() === lifecycle.toLowerCase());
@@ -354,9 +355,7 @@ export default function BusinessHubPage() {
     needsActivation: summaryData?.needsActivationCities ?? tabCounts.needs_activation,
   };
 
-  const bizTotalAll = summaryData?.totalFoundingBusiness || 500;
-  const bizAllocAll = Math.floor(bizTotalAll * 0.6);
-  const bizPct = safePct(bizAllocAll, bizTotalAll);
+  const bizTotalAll = Number(summaryData?.totalFoundingBusiness) || 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -386,7 +385,7 @@ export default function BusinessHubPage() {
       <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
-            { label: "Business Spots Filled", value: `${bizAllocAll} / ${bizTotalAll}`, tip: "Total business founding spots filled across all cities." },
+            { label: "Business Founding Members", value: String(bizTotalAll), tip: "Total business founding members across all cities." },
             { label: "Active Cities", value: summary.active, tip: "Cities with active business founding programmes." },
             { label: "Progress Cities", value: summary.makingProgress, tip: "Cities where business founding is growing." },
           ].map(s => (
@@ -404,11 +403,16 @@ export default function BusinessHubPage() {
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col items-center gap-5 sm:flex-row sm:gap-8">
-            <ProgressRing value={bizPct} size={120} strokeWidth={8} color="#2563eb" label="Business" sublabel="allocation" />
+            <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full bg-blue-50 text-center">
+              <div>
+                <div className="text-2xl font-bold text-blue-700">{bizTotalAll}</div>
+                <div className="text-[10px] text-blue-500">members</div>
+              </div>
+            </div>
             <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-lg font-bold text-gray-900">Business Founding Allocation</h2>
-              <p className="mt-1 text-sm text-gray-600">{bizAllocAll} of {bizTotalAll} business founding spots filled across all cities.</p>
-              <p className="mt-1 text-xs text-gray-400">{bizTotalAll - bizAllocAll} spots still available. Find your city below.</p>
+              <h2 className="text-lg font-bold text-gray-900">Business Founding Members</h2>
+              <p className="mt-1 text-sm text-gray-600">{bizTotalAll} businesses have joined founding programmes across all cities.</p>
+              <p className="mt-1 text-xs text-gray-400">Find your city below to join.</p>
             </div>
           </div>
         </div>

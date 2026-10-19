@@ -7,12 +7,39 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  ChevronRight, Plus, Search, FileText, Copy, Play, X, Loader2,
+  ChevronRight, Plus, Search, FileText, Copy, Play, X, Loader2, ShieldCheck,
 } from "lucide-react";
-import { adminApi, type AdminCampaignTemplate, type AdminLocation } from "@/services/admin";
+import { adminApi, type AdminCampaignTemplate, type AdminLocation, type InstantiateSkipReason } from "@/services/admin";
 import { formatDate } from "@/utils/formatters";
 
 type TemplateTab = "all" | "active" | "draft";
+
+/** Human labels for the eligibility rule ids stored in `config.access.eligibility`. */
+const ELIGIBILITY_LABELS: Record<string, string> = {
+  business_account: "Verified business account",
+  pre_audit: "247GBS Audit pre-audit completed",
+  membership_active: "Active membership",
+  package_tier: "Purchased package tier",
+  min_contribution: "Minimum platform contribution",
+  admin_approval: "Admin review after claiming",
+};
+
+function accessConfigOf(t: AdminCampaignTemplate): {
+  eligibility: string[];
+  allowAssignmentOverride: boolean;
+  minContribution?: string;
+} {
+  const access = (t?.config?.access ?? {}) as {
+    eligibility?: string[];
+    allowAssignmentOverride?: boolean;
+    minContribution?: string;
+  };
+  return {
+    eligibility: Array.isArray(access.eligibility) ? access.eligibility : [],
+    allowAssignmentOverride: access.allowAssignmentOverride === true,
+    minContribution: access.minContribution,
+  };
+}
 
 const STATUS_META: Record<
   AdminCampaignTemplate["status"],
@@ -40,6 +67,8 @@ export function CampaignTemplatesPage() {
   const [instBusinessIds, setInstBusinessIds] = useState("");
   const [instAmountGbp, setInstAmountGbp] = useState("50000");
   const [instDeadline, setInstDeadline] = useState("60");
+  const [instForce, setInstForce] = useState(false);
+  const [instSkipped, setInstSkipped] = useState<InstantiateSkipReason[]>([]);
   const [instBusy, setInstBusy] = useState(false);
   const [instMessage, setInstMessage] = useState<string | null>(null);
   const [instError, setInstError] = useState<string | null>(null);
@@ -125,6 +154,8 @@ export function CampaignTemplatesPage() {
     setInstBusinessIds("");
     setInstAmountGbp("50000");
     setInstDeadline("60");
+    setInstForce(false);
+    setInstSkipped([]);
     setInstMessage(null);
     setInstError(null);
   };
@@ -144,6 +175,7 @@ export function CampaignTemplatesPage() {
     setInstBusy(true);
     setInstError(null);
     setInstMessage(null);
+    setInstSkipped([]);
 
     try {
       const res = await adminApi.instantiateTemplate(instantiateTarget.id, {
@@ -151,12 +183,14 @@ export function CampaignTemplatesPage() {
         businessIds: businessIds.length ? businessIds : undefined,
         targetAmount: instAmountGbp ? Math.round(Number(instAmountGbp) * 100) : undefined,
         deadlineDays: instDeadline ? Number(instDeadline) : undefined,
+        force: instForce || undefined,
       });
 
       const skipped = res.skipped ? `, ${res.skipped} skipped` : "";
       setInstMessage(
         res.message ?? `${res.count} campaign${res.count === 1 ? "" : "s"} created${skipped}.`,
       );
+      setInstSkipped(res.skippedReasons ?? []);
       await fetchTemplates();
     } catch (err: any) {
       setInstError(err?.message ?? "Failed to instantiate template");
@@ -368,6 +402,47 @@ export function CampaignTemplatesPage() {
                 </div>
               </div>
 
+              {(() => {
+                const access = accessConfigOf(instantiateTarget);
+                if (access.eligibility.length === 0) return null;
+                return (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                      <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
+                      Eligibility enforced on assignment
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {access.eligibility.map((rule) => (
+                        <li key={rule} className="text-xs text-gray-600">
+                          · {ELIGIBILITY_LABELS[rule] ?? rule}
+                          {rule === "min_contribution" && access.minContribution
+                            ? ` (£${access.minContribution})`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    {access.allowAssignmentOverride ? (
+                      <label className="mt-2.5 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                        <input
+                          type="checkbox"
+                          checked={instForce}
+                          onChange={(e) => setInstForce(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <strong>Force assign</strong> — override eligibility and create campaigns for
+                          ineligible businesses too.
+                        </span>
+                      </label>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-gray-500">
+                        Ineligible businesses are skipped. This template does not allow override.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {instError && (
                 <p className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-sm text-red-700">
                   {instError}
@@ -377,6 +452,20 @@ export function CampaignTemplatesPage() {
                 <p className="rounded-lg border border-green-200 bg-green-50 p-2.5 text-sm text-green-700">
                   {instMessage}
                 </p>
+              )}
+              {instSkipped.length > 0 && (
+                <div className="max-h-40 overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                  <p className="text-xs font-semibold text-amber-800">
+                    {instSkipped.length} business{instSkipped.length === 1 ? "" : "es"} skipped
+                  </p>
+                  <ul className="mt-1 space-y-0.5">
+                    {instSkipped.map((s) => (
+                      <li key={s.businessId} className="text-[11px] text-amber-800">
+                        <strong>{s.businessName ?? s.businessId}</strong>: {s.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
 

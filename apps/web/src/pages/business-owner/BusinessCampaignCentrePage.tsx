@@ -14,7 +14,9 @@ import {
   useClaimTemplate,
   useBusinessCampaigns,
 } from "@/services/campaign/hook";
+import { useBusinessAuditStatus } from "@/services/audit/hook";
 import { BusinessTemplateCard } from "@/components/business/BusinessTemplateCard";
+import { BusinessAuditCard } from "@/components/business/BusinessAuditCard";
 import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
 
 const fmt = (p: number) =>
@@ -45,8 +47,24 @@ export default function BusinessCampaignCentrePage() {
   const { data: templates = [], isLoading: templatesLoading, error: templatesError, refetch: refetchTemplates } = useBusinessTemplates();
   const { data: campaignsData, isLoading: campaignsLoading, error: campaignsError, refetch: refetchCampaigns } = useBusinessCampaigns();
   const claimMutation = useClaimTemplate();
+  const { data: auditStatus } = useBusinessAuditStatus();
 
   const campaigns = campaignsData?.items || [];
+
+  /**
+   * Send a business to 247GBS Audit when a locked template only needs its
+   * pre-audit: sign in via Central Hub if not linked, otherwise open the
+   * pre-audit flow.
+   */
+  const handleCompleteRequirement = (template: any) => {
+    const unmet: any[] = (template?.requirements ?? []).filter((r: any) => !r.met);
+    const auditReq = unmet.find((r) => r.action === "audit" || r.id === "pre_audit");
+    if (!auditReq) return;
+    const links = auditStatus?.deepLinks;
+    if (!links) return;
+    const url = auditStatus?.linkStatus === "NOT_LINKED" ? links.signIn : links.preAudit;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const [preparing, setPreparing] = useState<{ templateId: string; step: number } | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -126,6 +144,9 @@ export default function BusinessCampaignCentrePage() {
           </p>
         </div>
       </div>
+
+      {/* 247GBS Audit status (source of truth for pre-audit templates) */}
+      <BusinessAuditCard />
 
       {/* Tabs */}
       <div className="flex gap-2">
@@ -285,6 +306,7 @@ export default function BusinessCampaignCentrePage() {
               t={t as any}
               claiming={preparing?.templateId === t.id}
               onClaim={() => setPreparing({ templateId: t.id, step: 0 })}
+              onCompleteRequirement={() => handleCompleteRequirement(t)}
             />
           ))}
           {(tab === "available" ? available : locked).length === 0 && (

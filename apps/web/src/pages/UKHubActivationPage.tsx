@@ -97,8 +97,8 @@ export default function UKHubActivationPage() {
               </span>
             </h1>
             <p className="text-lg text-primary-100 leading-relaxed">
-              Find out how you can Fund or Donate to 76 UK Cities, 32 London Boroughs,
-              36 Metropolitan Boroughs or 11 County Boroughs and District Councils.
+              Find out how you can Fund or Donate across UK Cities, London Boroughs,
+              Metropolitan Boroughs and District Councils.
               Discover where Local Hubs are active, making progress, or need activation — and how
               you can help build stronger local communities near you.
             </p>

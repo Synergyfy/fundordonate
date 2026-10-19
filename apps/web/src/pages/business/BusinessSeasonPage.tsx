@@ -7,10 +7,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi, type Season } from "@/services/season";
+import { campaignApi } from "@/services/campaign";
 import {
   ArrowRight, Calendar, Target, Trophy, Gift,
   Store, Users, Megaphone, TrendingUp, Sparkles,
-  CheckCircle, Star, Clock,
+  CheckCircle, Clock,
 } from "lucide-react";
 import { useCountdown } from "@/hooks/useCountdown";
 
@@ -40,15 +41,31 @@ export default function BusinessSeasonPage() {
     placeholderData: undefined,
   });
 
+  const { data: campaignResponse } = useQuery({
+    queryKey: ["season-page-campaigns", citySlug, localAreaSlug, highStreetSlug],
+    queryFn: () =>
+      (campaignApi.list as any)({
+        location: highStreetSlug || localAreaSlug || citySlug,
+        limit: 10,
+      }),
+    enabled: Boolean(citySlug),
+  });
+
   const seasons = seasonResponse?.seasons ?? [];
   const currentSeason = seasons.find((s: Season) => s.status === "ACTIVE") || seasons[0] || null;
+  const campaigns: any[] = campaignResponse?.items ?? [];
 
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
 
-  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Manchester";
-  const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Local Area";
-  const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "High Street";
+  const seasonRaised = Number(currentSeason?.totalRaised) || 0;
+  const seasonTarget = Number(currentSeason?.overallTarget) || 0;
+  const seasonFundingPct =
+    seasonTarget > 0 ? Math.min(100, Math.round((seasonRaised / seasonTarget) * 100)) : 0;
+
+  const cityName = citySlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "your city";
+  const localAreaName = localAreaSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "your area";
+  const streetName = highStreetSlug?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "your high street";
 
   const handleContinue = () => {
     setIsProceeding(true);
@@ -152,19 +169,19 @@ export default function BusinessSeasonPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-white border p-3 text-center">
-                <div className="text-lg font-bold text-purple-600">3</div>
+                <div className="text-lg font-bold text-purple-600">{currentSeason.activeCampaigns ?? 0}</div>
                 <div className="text-[10px] text-purple-500">Active Campaigns</div>
               </div>
               <div className="rounded-lg bg-white border p-3 text-center">
-                <div className="text-lg font-bold text-purple-600">12</div>
+                <div className="text-lg font-bold text-purple-600">{currentSeason.totalBusinessOwners ?? 0}</div>
                 <div className="text-[10px] text-purple-500">Businesses Participating</div>
               </div>
               <div className="rounded-lg bg-white border p-3 text-center">
-                <div className="text-lg font-bold text-purple-600">2</div>
-                <div className="text-[10px] text-purple-500">Community Initiatives</div>
+                <div className="text-lg font-bold text-purple-600">{currentSeason.totalBackers ?? 0}</div>
+                <div className="text-[10px] text-purple-500">Backers</div>
               </div>
               <div className="rounded-lg bg-white border p-3 text-center">
-                <div className="text-lg font-bold text-purple-600">£8,500</div>
+                <div className="text-lg font-bold text-purple-600">{fmt(seasonRaised)}</div>
                 <div className="text-[10px] text-purple-500">Raised This Season</div>
               </div>
             </div>
@@ -177,25 +194,27 @@ export default function BusinessSeasonPage() {
               <h3 className="font-bold text-green-900">Active Campaigns</h3>
             </div>
             <div className="space-y-2">
-              {[
-                { title: "Local Hub Fund", raised: 4500, goal: 10000, mode: "fund" },
-                { title: "High Street Business Support", raised: 2800, goal: 5000, mode: "donation" },
-                { title: "Community Rewards Programme", raised: 1200, goal: 3000, mode: "donation" },
-              ].map((c, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-lg bg-white border p-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-green-600 flex-shrink-0">
-                    <Megaphone className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{c.title}</div>
-                    <div className="text-[10px] text-gray-500">{c.mode}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-green-600">{fmt(c.raised)}</div>
-                    <div className="text-[10px] text-gray-400">of {fmt(c.goal)}</div>
-                  </div>
+              {campaigns.length === 0 ? (
+                <div className="rounded-lg bg-white border p-3 text-center text-xs text-gray-500">
+                  No active campaigns in this area yet.
                 </div>
-              ))}
+              ) : (
+                campaigns.slice(0, 5).map((c: any) => (
+                  <div key={c.id ?? c.slug} className="flex items-center gap-3 rounded-lg bg-white border p-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-green-600 flex-shrink-0">
+                      <Megaphone className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{c.title}</div>
+                      <div className="text-[10px] text-gray-500">{c.mode ?? "donation"}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-green-600">{fmt(Number(c.raisedAmount) || 0)}</div>
+                      <div className="text-[10px] text-gray-400">of {fmt(Number(c.goalAmount) || 0)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -206,11 +225,11 @@ export default function BusinessSeasonPage() {
               <h3 className="font-bold text-gray-900">Funding Objectives</h3>
             </div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">{fmt(8500)} raised of {fmt(18000)} target</span>
-              <span className="text-sm font-bold text-gray-900">47%</span>
+              <span className="text-sm text-gray-600">{fmt(seasonRaised)} raised of {fmt(seasonTarget)} target</span>
+              <span className="text-sm font-bold text-gray-900">{seasonFundingPct}%</span>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full" style={{ width: "47%" }} />
+              <div className="h-full bg-green-500 rounded-full" style={{ width: `${seasonFundingPct}%` }} />
             </div>
           </div>
 
@@ -234,20 +253,17 @@ export default function BusinessSeasonPage() {
           </div>
 
           {/* Incentives */}
-          <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-5 w-5 text-yellow-600" />
-              <h3 className="font-bold text-yellow-900">Available Incentives</h3>
+          {currentSeason.engagementConfig?.incentivesEnabled && (
+            <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="h-5 w-5 text-yellow-600" />
+                <h3 className="font-bold text-yellow-900">Incentives</h3>
+              </div>
+              <p className="text-xs text-yellow-700">
+                Incentives for this season are published by your local hub. Participate in campaigns to qualify.
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {["Early Bird Bonus", "Community Champion", "High Street Hero", "Seasonal Star"].map((reward) => (
-                <span key={reward} className="inline-flex items-center gap-1 rounded-full bg-white border px-2.5 py-1 text-xs font-medium text-yellow-700">
-                  <Star className="h-3 w-3" />
-                  {reward}
-                </span>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* CTA */}
           <button

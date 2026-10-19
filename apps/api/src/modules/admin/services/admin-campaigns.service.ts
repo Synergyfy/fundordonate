@@ -24,12 +24,27 @@ import {
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { ADMIN_TASKS_QUEUE } from "../processors/admin-tasks.constants";
+import { AuditDataService } from "@/modules/audit/services/audit-data.service";
+import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
+import { AuditLinkStatus } from "@prisma/client";
+
+/** Why a business was skipped when an admin assigned a template to it. */
+export interface InstantiateSkipReason {
+  businessId: string;
+  businessName: string | null;
+  reason: "ineligible" | "already_exists" | "not_found";
+  message: string;
+  /** The unmet rule ids when `reason` is `ineligible`. */
+  unmet: string[];
+}
 
 @Injectable()
 export class AdminCampaignsService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(ADMIN_TASKS_QUEUE) private readonly adminQueue: Queue,
+    private readonly auditData: AuditDataService,
+    private readonly eligibility: TemplateEligibilityService,
   ) {}
 
   /**
@@ -639,12 +654,20 @@ export class AdminCampaignsService {
       throw new BadRequestException("No target businesses were resolved for instantiation");
     }
 
+    // Admin override is only honoured when the template explicitly allows it.
+    if (dto.force && !this.eligibility.allowAssignmentOverride(template)) {
+      throw new BadRequestException(
+        "This template does not allow assignment eligibility to be overridden.",
+      );
+    }
+
     const payload = {
       templateId: id,
       businessIds,
       targetAmount: dto.targetAmount,
       deadlineDays: dto.deadlineDays,
       adminUserId,
+      force: dto.force,
     };
 
     if (businessIds.length > 10) {
@@ -663,6 +686,7 @@ export class AdminCampaignsService {
       count: result.created,
       skipped: result.skipped,
       campaignIds: result.campaignIds,
+      skippedReasons: result.skippedReasons,
     };
   }
 
@@ -676,7 +700,13 @@ export class AdminCampaignsService {
     targetAmount?: number;
     deadlineDays?: number;
     adminUserId?: string;
-  }): Promise<{ created: number; skipped: number; campaignIds: string[] }> {
+    force?: boolean;
+  }): Promise<{
+    created: number;
+    skipped: number;
+    campaignIds: string[];
+    skippedReasons: InstantiateSkipReason[];
+  }> {
     const template = await this.prisma.campaignTemplate.findUnique({
       where: { id: params.templateId },
     });
@@ -691,8 +721,14 @@ export class AdminCampaignsService {
     const fieldsConfig = (template.fieldsConfig as any[]) ?? [];
 
     const campaignIds: string[] = [];
+    const skippedReasons: InstantiateSkipReason[] = [];
 
-    // 1. Bulk find existing campaigns for these business IDs
+    // Admin override is only honoured when the template explicitly allows it.
+    const enforceEligibility = !(
+      params.force && this.eligibility.allowAssignmentOverride(template)
+    );
+
+    // 1. Bulk find existing campaigns for these business IDs (idempotency).
     const existingCampaigns = await this.prisma.businessCampaign.findMany({
       where: {
         businessId: { in: params.businessIds },
@@ -702,10 +738,20 @@ export class AdminCampaignsService {
       select: { businessId: true },
     });
     const existingBizSet = new Set(existingCampaigns.map((c) => c.businessId));
-    const eligibleBizIds = params.businessIds.filter((id) => !existingBizSet.has(id));
-    let skipped = params.businessIds.length - eligibleBizIds.length;
+    let eligibleBizIds = params.businessIds.filter((id) => !existingBizSet.has(id));
+    for (const id of params.businessIds) {
+      if (existingBizSet.has(id)) {
+        skippedReasons.push({
+          businessId: id,
+          businessName: null,
+          reason: "already_exists",
+          message: "A campaign for this template already exists for the business.",
+          unmet: [],
+        });
+      }
+    }
 
-    // 2. Bulk find business profiles
+    // 2. Bulk find business rule inputs (a superset of what field pre-fill needs).
     const businesses = await this.prisma.business.findMany({
       where: { id: { in: eligibleBizIds } },
       select: {
@@ -714,10 +760,101 @@ export class AdminCampaignsService {
         city: true,
         highStreet: true,
         category: true,
-        preAuditAnswers: true,
+        status: true,
+        membershipTier: true,
+        membershipExpiry: true,
       },
     });
     const foundBizMap = new Map(businesses.map((b) => [b.id, b]));
+    for (const id of eligibleBizIds) {
+      if (!foundBizMap.has(id)) {
+        skippedReasons.push({
+          businessId: id,
+          businessName: null,
+          reason: "not_found",
+          message: "Business not found.",
+          unmet: [],
+        });
+      }
+    }
+    eligibleBizIds = eligibleBizIds.filter((id) => foundBizMap.has(id));
+
+    // 3. Enforce the template's eligibility rules (same rules the business sees
+    //    when claiming). `pre_audit` is checked against 247GBS Audit: the target
+    //    businesses' snapshots are refreshed server-side first so a business
+    //    that has never opened the Campaign Centre is judged on live data.
+    if (enforceEligibility && eligibleBizIds.length > 0) {
+      const requiresPreAudit = this.eligibility.requiresPreAudit(template);
+      if (requiresPreAudit) {
+        await this.auditData.refreshMany(eligibleBizIds);
+      }
+
+      const contributionGroups = await this.prisma.contribution.groupBy({
+        by: ["businessId"],
+        where: {
+          businessId: { in: eligibleBizIds },
+          status: "COMPLETED",
+        },
+        _sum: { amount: true },
+      });
+      const contributedByBiz = new Map(
+        contributionGroups.map((g) => [g.businessId, g._sum.amount ?? 0]),
+      );
+
+      const preAuditByBiz = new Map<string, boolean>();
+      if (requiresPreAudit) {
+        const statuses = await Promise.all(
+          eligibleBizIds.map((id) => this.auditData.getStatus(id)),
+        );
+        eligibleBizIds.forEach((id, idx) => {
+          preAuditByBiz.set(
+            id,
+            statuses[idx].linkStatus === AuditLinkStatus.AVAILABLE,
+          );
+        });
+      }
+
+      const kept: string[] = [];
+      for (const id of eligibleBizIds) {
+        const business = foundBizMap.get(id)!;
+        const result = this.eligibility.evaluate({
+          business,
+          template,
+          contributedPence: contributedByBiz.get(id) ?? 0,
+          preAuditMet: preAuditByBiz.get(id) ?? false,
+        });
+        if (result.allMet) {
+          kept.push(id);
+        } else {
+          const unmet = result.requirements.filter((r) => !r.met);
+          skippedReasons.push({
+            businessId: id,
+            businessName: business.name,
+            reason: "ineligible",
+            message: `Not eligible — outstanding: ${unmet.map((r) => r.label).join(", ")}.`,
+            unmet: unmet.map((r) => r.id),
+          });
+        }
+      }
+      eligibleBizIds = kept;
+    }
+
+    // Pre-resolve 247GBS Audit field defaults from each business's snapshot
+    // (no user session here — this reads the local mirror, never the provider).
+    const auditFields = fieldsConfig.filter(
+      (f) => f?.source === "audit" || f?.source === "audit_diagnostic",
+    );
+    const auditDefaultsByBiz = new Map<string, Record<string, string>>();
+    if (auditFields.length > 0 && eligibleBizIds.length > 0) {
+      await Promise.all(
+        eligibleBizIds.map(async (id) => {
+          auditDefaultsByBiz.set(
+            id,
+            await this.auditData.getFieldDefaults(id, auditFields),
+          );
+        }),
+      );
+    }
 
     const BATCH_SIZE = 10;
     for (let i = 0; i < eligibleBizIds.length; i += BATCH_SIZE) {
@@ -729,7 +866,7 @@ export class AdminCampaignsService {
             return null;
           }
 
-          const auditAnswers = (business.preAuditAnswers as Record<string, string>) ?? {};
+          const auditAnswers = auditDefaultsByBiz.get(businessId) ?? {};
 
           return this.prisma.$transaction(async (tx) => {
             const campaign = await tx.businessCampaign.create({
@@ -756,7 +893,11 @@ export class AdminCampaignsService {
             for (const field of fieldsConfig) {
               let defaultValue: string = field.value ?? "";
 
-              if (field.source === "audit" && auditAnswers[field.id]) {
+              if (
+                (field.source === "audit" ||
+                  field.source === "audit_diagnostic") &&
+                auditAnswers[field.id]
+              ) {
                 defaultValue = auditAnswers[field.id];
               } else if (field.source === "business_account") {
                 if (field.id === "business_name") defaultValue = business.name;
@@ -789,20 +930,25 @@ export class AdminCampaignsService {
       for (const res of chunkResults) {
         if (res) {
           campaignIds.push(res);
-        } else {
-          skipped++;
         }
       }
     }
+
+    const skipped = skippedReasons.length;
 
     await this.logTemplateAudit(
       "CAMPAIGN_TEMPLATE_INSTANTIATED",
       template.id,
       params.adminUserId,
-      { created: campaignIds.length, skipped, businessIds: params.businessIds },
+      {
+        created: campaignIds.length,
+        skipped,
+        forced: params.force === true && !enforceEligibility,
+        businessIds: params.businessIds,
+      },
     );
 
-    return { created: campaignIds.length, skipped, campaignIds };
+    return { created: campaignIds.length, skipped, campaignIds, skippedReasons };
   }
 
   // ---------------------------------------------------------------------------

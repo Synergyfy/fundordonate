@@ -3,7 +3,7 @@ import { PostList } from "./PostList";
 import { PostComposer } from "./PostComposer";
 import { Leaderboard } from "./Leaderboard";
 import { Gift, Clock, CheckCircle } from "lucide-react";
-import type { DemoReward } from "@/types/rewards";
+import type { RewardItem } from "@/types/rewards";
 
 interface Faq {
   question: string;
@@ -13,7 +13,7 @@ interface Faq {
 interface Props {
   description?: string;
   shortDescription?: string;
-  rewards: DemoReward[];
+  rewards: RewardItem[];
   faqs: Faq[];
   campaignId: string;
   isAuthor?: boolean;
@@ -27,7 +27,7 @@ type Tab = "story" | "rewards" | "leaderboard" | "updates" | "terms";
 const formatCurrency = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(pence / 100);
 
-function getTriggerLabel(reward: DemoReward): string {
+function getTriggerLabel(reward: RewardItem): string {
   const tc = reward.triggerConfig;
   switch (tc.mode) {
     case "min":
