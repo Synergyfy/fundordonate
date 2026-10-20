@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   ExternalLink,
   AlertCircle,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import {
   PaymentGatewaySelector,
@@ -30,7 +32,11 @@ import {
 } from "@/services/payment";
 import { StripeElementsCheckout } from "@/components/payment/StripeElementsCheckout";
 import { PayPalRedirectCheckout } from "@/components/payment/PayPalRedirectCheckout";
-import { useWalletBalance } from "@/hooks/useWalletBalance";
+import {
+  useWalletBalance,
+  getWalletBalanceError,
+} from "@/hooks/useWalletBalance";
+import { useAuthStore } from "@/stores/auth.store";
 
 const formatGbp = (n: number) =>
   new Intl.NumberFormat("en-GB", {
@@ -59,15 +65,55 @@ function WalletPaymentForm({
   amount: number;
   onSubmit: () => void;
 }) {
-  const { data: wallet, isLoading } = useWalletBalance();
+  const authStatus = useAuthStore((s) => s.authStatus);
+  const { data: wallet, isLoading, isError, error, refetch } = useWalletBalance();
   const balance = wallet?.availableBalance ?? 0;
-  const isSufficient = balance >= amount;
+  const isSufficient = Boolean(wallet) && balance >= amount;
+
+  if (authStatus !== "authenticated") {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        Sign in with your MCOM account to pay from your Central Hub wallet.
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
       <div className="py-8 text-center text-sm text-gray-500">
         <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-amber-600" />
         Checking Central Hub MCOM Wallet balance…
+      </div>
+    );
+  }
+
+  // A failed lookup is NOT an empty wallet — never present it as "insufficient".
+  if (isError || !wallet) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="flex items-start gap-2 text-xs text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <div>
+              <p className="font-semibold">Couldn't load your MCOM wallet</p>
+              <p className="mt-0.5 text-red-600">
+                {isError
+                  ? getWalletBalanceError(error)
+                  : "No wallet balance was returned. Please try again."}
+              </p>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          <RefreshCw className="h-4 w-4" /> Retry balance check
+        </button>
+        <p className="text-center text-xs text-gray-500">
+          You can still pay with a card or PayPal.
+        </p>
       </div>
     );
   }
@@ -135,6 +181,7 @@ export function PaymentCheckoutModal({
   const [gateway, setGateway] = useState<PaymentGateway>("stripe");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PaymentResult | null>(null);
+  const queryClient = useQueryClient();
 
   const chargePurpose: ChargePurpose = purpose ?? (campaignId ? "SELF_FUNDING" : "DONATION");
 
@@ -281,6 +328,9 @@ export function PaymentCheckoutModal({
         currency: "MCOM",
         status: "succeeded",
       };
+      // The debit already happened — refresh the cached balance for the next
+      // checkout instead of showing the pre-payment amount.
+      await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
       setResult(payment);
       setStep("success");
       onSuccess(payment);

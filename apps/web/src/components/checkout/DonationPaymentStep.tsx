@@ -13,8 +13,14 @@ interface Props {
 }
 
 export function DonationPaymentStep({ selected, onChange, amountPence = 0 }: Props) {
-  const { isAuthenticated } = useAuthStore();
-  const { data: wallet, isLoading: walletLoading } = useWalletBalance();
+  const authStatus = useAuthStore((s) => s.authStatus);
+  const isAuthenticated = authStatus === "authenticated";
+  const {
+    data: wallet,
+    isLoading: walletLoading,
+    isError: walletError,
+    refetch: refetchWallet,
+  } = useWalletBalance();
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvc, setCardCvc] = useState("");
@@ -135,6 +141,8 @@ export function DonationPaymentStep({ selected, onChange, amountPence = 0 }: Pro
               <span className="text-sm font-extrabold text-amber-900">
                 {wallet.availableBalance.toFixed(2)} MCOM
               </span>
+            ) : walletError ? (
+              <span className="text-xs text-amber-700">Unavailable</span>
             ) : (
               <span className="text-xs text-red-500">Not linked</span>
             )}
@@ -146,6 +154,21 @@ export function DonationPaymentStep({ selected, onChange, amountPence = 0 }: Pro
               <span>
                 Please sign in with your MCOM account to use your central wallet balance.
               </span>
+            </div>
+          ) : walletError ? (
+            <div className="rounded-lg bg-red-50 p-3 text-xs text-red-700 flex flex-wrap items-center gap-2 border border-red-200">
+              <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+              <span className="flex-1">
+                We couldn't check your MCOM wallet balance, so wallet payment is
+                unavailable right now.
+              </span>
+              <button
+                type="button"
+                onClick={() => refetchWallet()}
+                className="inline-flex items-center gap-1 font-bold text-red-800 underline hover:text-red-900"
+              >
+                Retry
+              </button>
             </div>
           ) : wallet && !hasSufficientWalletBalance && amountPounds > 0 ? (
             <div className="rounded-lg bg-red-50 p-3 text-xs text-red-700 flex flex-col gap-2 border border-red-200">

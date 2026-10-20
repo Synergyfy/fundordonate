@@ -3,12 +3,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@/prisma/prisma.service";
 import {
   McomPaymentsService,
+  McomPaymentsError,
   McomWalletBalance,
   McomWebhookPayload,
 } from "@/mcom/mcom-payments.service";
@@ -21,6 +23,17 @@ import { ConfirmChargeDto } from "./dto/confirm-charge.dto";
 import { ContributionStatus, ContributionType } from "@prisma/client";
 import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
 import { RewardRevokeQueueService } from "@/modules/rewards/services/reward-revoke-queue.service";
+
+/**
+ * Placeholder MCOM ids written by an older auto-link routine (`mcom_<localId>`)
+ * are not real Central Hub identities, so treat them as unlinked.
+ */
+function isRealMcomLink(
+  localUserId: string,
+  mcomUserId: string | null | undefined,
+): mcomUserId is string {
+  return Boolean(mcomUserId) && mcomUserId !== `mcom_${localUserId}`;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -36,39 +49,50 @@ export class PaymentsService {
 
   /**
    * Fetch current user's MCOM Central Hub wallet balance.
-   * Auto-links MCOM identity if not yet linked, ensuring wallets exist by default.
+   *
+   * A failed lookup is never reported as a real zero balance: an unlinked
+   * account and an unreachable Central Hub both surface as explicit errors so
+   * the UI can say "unavailable" instead of "insufficient".
    */
   async getWalletBalance(userId: string): Promise<McomWalletBalance> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, mcomUserId: true, email: true },
+      select: { id: true, mcomUserId: true },
     });
 
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    let mcomId = user.mcomUserId;
-    if (!mcomId) {
-      mcomId = `mcom_${user.id}`;
-      await this.prisma.user
-        .update({
-          where: { id: user.id },
-          data: { mcomUserId: mcomId, mcomLinkedAt: new Date() },
-        })
-        .catch(() => {});
+    if (!isRealMcomLink(user.id, user.mcomUserId)) {
+      throw new BadRequestException(
+        "Your account isn't linked to an MCOM Central Hub wallet yet. Sign in through MCOM Central Hub to use your wallet balance.",
+      );
     }
+    const mcomUserId = user.mcomUserId;
 
     try {
-      return await this.mcomPayments.getBalance(mcomId);
-    } catch {
-      return {
-        success: true,
-        balance: 0,
-        availableBalance: 0,
-        status: "ACTIVE",
-        currency: "MCOM",
-      };
+      return await this.mcomPayments.getBalance(mcomUserId);
+    } catch (err) {
+      this.logger.warn(
+        `Wallet balance lookup failed for user ${userId} (${mcomUserId}): ${
+          (err as Error).message
+        }`,
+      );
+      // 400/404/409/422 from Central Hub mean the linked wallet doesn't exist
+      // there — report that accurately rather than as a connectivity failure.
+      // Auth (401/403) and rate-limit (429) failures remain platform errors.
+      if (
+        err instanceof McomPaymentsError &&
+        [400, 404, 409, 422].includes(err.httpStatus)
+      ) {
+        throw new BadRequestException(
+          "Your MCOM wallet could not be found on Central Hub. Sign in with MCOM Central Hub and try again.",
+        );
+      }
+      throw new ServiceUnavailableException(
+        "We couldn't reach MCOM Central Hub to check your wallet balance. Please try again.",
+      );
     }
   }
 
@@ -83,22 +107,16 @@ export class PaymentsService {
         where: { id: userId },
         select: { id: true, mcomUserId: true },
       });
-      mcomUserId = user?.mcomUserId || undefined;
-      if (!mcomUserId && user?.id) {
-        mcomUserId = `mcom_${user.id}`;
-        await this.prisma.user
-          .update({
-            where: { id: user.id },
-            data: { mcomUserId, mcomLinkedAt: new Date() },
-          })
-          .catch(() => {});
-      }
+      mcomUserId =
+        user && isRealMcomLink(user.id, user.mcomUserId)
+          ? user.mcomUserId
+          : undefined;
     }
 
     if (dto.method === PaymentMethod.WALLET) {
       if (!mcomUserId) {
         throw new BadRequestException(
-          "Paying with MCOM Wallet requires you to be logged into your MCOM account.",
+          "Paying with MCOM Wallet requires an account linked to MCOM Central Hub.",
         );
       }
     }

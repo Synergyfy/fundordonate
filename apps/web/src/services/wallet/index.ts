@@ -5,19 +5,12 @@ import type { McomWalletBalance, WalletSummary } from "./type";
 export const walletService = {
   /**
    * Fetch the current authenticated user's MCOM Central Hub wallet balance.
+   *
+   * Failures are intentionally NOT converted into a zero balance — a failed
+   * lookup must be distinguishable from a genuinely empty wallet.
    */
   async getBalance(): Promise<McomWalletBalance> {
-    try {
-      return await api.get("/wallet/balance");
-    } catch {
-      return {
-        success: true,
-        balance: 0,
-        availableBalance: 0,
-        status: "ACTIVE",
-        currency: "MCOM",
-      };
-    }
+    return api.get("/wallet/balance");
   },
 
   /**
