@@ -114,8 +114,12 @@ export const campaignService = {
     return api.get(`/campaigns/slug/${slug}`);
   },
 
-  async getFeatured(limit = 6): Promise<Campaign[]> {
-    return api.get("/campaigns/featured", { params: { limit } });
+  async getFeatured(limit = 6, audience?: string): Promise<Campaign[]> {
+    const res = await api.get<Campaign[] | { items?: Campaign[] }>("/campaigns/featured", {
+      params: { limit, audience },
+    });
+    if (Array.isArray(res)) return res;
+    return res?.items ?? [];
   },
 
   async create(data: {

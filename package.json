@@ -8,10 +8,10 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter @fundordonate/api dev",
-    "dev": "concurrently -n \"web,api\" -c \"cyan,magenta\" \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev": "node api.js && concurrently -n \"web,api\" -c \"cyan,magenta\" \"pnpm dev:web\" \"pnpm dev:api\"",
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter @fundordonate/api build",
-    "build": "pnpm build:web && pnpm build:api",
+    "build": "node api.js && pnpm build:web && pnpm build:api",
     "test": "pnpm --filter web test",
     "db:migrate": "pnpm --filter @fundordonate/api prisma:migrate",
     "db:generate": "pnpm --filter @fundordonate/api prisma:generate",
