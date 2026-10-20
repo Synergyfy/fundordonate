@@ -18,6 +18,17 @@ export class PublicCampaignsController {
     return this.campaignsService.list(query);
   }
 
+  @Get("featured")
+  @ApiOperation({
+    summary: "List featured public campaigns",
+    description:
+      "Returns the highest-raising active campaigns for the homepage featured sections. Optionally filters by audience (business/consumer).",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved featured campaigns" })
+  async featured(@Query() query: PublicCampaignQueryDto) {
+    return this.campaignsService.listFeatured(query.limit, query.audience);
+  }
+
   @Get("slug/:slug")
   @ApiOperation({
     summary: "Get public campaign by slug",
