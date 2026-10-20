@@ -15,12 +15,17 @@
 // =============================================================================
 
 import { useState } from "react";
-import { CreditCard, Coins, ExternalLink, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CreditCard, Coins, ExternalLink, Loader2, AlertCircle, ShieldCheck, RefreshCw } from "lucide-react";
 import { paymentService } from "@/services/payment";
 import type { ChargePurpose, PaymentMethod } from "@/services/payment";
 import { StripeElementsCheckout } from "./StripeElementsCheckout";
 import { PayPalRedirectCheckout } from "./PayPalRedirectCheckout";
-import { useWalletBalance } from "@/hooks/useWalletBalance";
+import {
+  useWalletBalance,
+  getWalletBalanceError,
+} from "@/hooks/useWalletBalance";
+import { useAuthStore } from "@/stores/auth.store";
 
 export interface McomCheckoutResult {
   chargeId: string;
@@ -82,9 +87,13 @@ export function McomCheckoutPanel({
     reference: string;
   } | null>(null);
 
-  const { data: wallet } = useWalletBalance();
+  const { data: wallet, isLoading: walletLoading, isError: walletError, error: walletErrorObj, refetch: refetchWallet } = useWalletBalance();
+  const authStatus = useAuthStore((s) => s.authStatus);
+  const isAuthenticated = authStatus === "authenticated";
+  const queryClient = useQueryClient();
   const walletBalance = wallet?.availableBalance ?? 0;
-  const walletSufficient = walletBalance >= amountPence / 100;
+  const walletSufficient = Boolean(wallet) && walletBalance >= amountPence / 100;
+  const canUseWallet = allowWallet && isAuthenticated && Boolean(wallet) && !walletError;
 
   const createCharge = async (paymentMethod: PaymentMethod) => {
     setError(null);
@@ -134,6 +143,8 @@ export function McomCheckoutPanel({
         // contribution (and queued reward issuance) when status === "paid".
         if (res.status === "paid") {
           setStep("processing");
+          // Refresh the cached balance now that the wallet has been debited.
+          await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
           onSuccess({
             chargeId: res.chargeId,
             reference: res.reference,
@@ -270,14 +281,26 @@ export function McomCheckoutPanel({
           {
             id: "wallet" as PaymentMethod,
             name: "MCOM Wallet",
-            description: walletSufficient
-              ? `Balance ${walletBalance.toFixed(2)} MCOM`
-              : `Insufficient balance (${walletBalance.toFixed(2)} MCOM)`,
+            description: walletLoading
+              ? "Checking balance…"
+              : walletError
+                ? "Balance unavailable"
+                : !isAuthenticated
+                  ? "Sign in with MCOM to spend credits"
+                  : walletSufficient
+                    ? `Balance ${walletBalance.toFixed(2)} MCOM`
+                    : `Insufficient balance (${walletBalance.toFixed(2)} MCOM)`,
             icon: Coins,
-            disabled: !walletSufficient,
-            hint: walletSufficient
+            disabled: !canUseWallet || !walletSufficient,
+            hint: walletLoading
               ? undefined
-              : "Top up your Central Hub wallet to pay with MCOM credits.",
+              : walletError
+                ? "We couldn't check your MCOM wallet. Retry the balance check above."
+                : !isAuthenticated
+                  ? "Sign in with MCOM Central Hub to pay from your wallet."
+                  : walletSufficient
+                    ? undefined
+                    : "Top up your Central Hub wallet to pay with MCOM credits.",
           },
         ]
       : []),
@@ -296,6 +319,23 @@ export function McomCheckoutPanel({
         <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
         Authenticated MCOM Pay gateway · you are only charged when you confirm.
       </p>
+
+      {allowWallet && isAuthenticated && walletError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="font-semibold">Couldn't load your MCOM wallet balance</p>
+            <p className="mt-0.5">{getWalletBalanceError(walletErrorObj)}</p>
+            <button
+              type="button"
+              onClick={() => refetchWallet()}
+              className="mt-2 inline-flex items-center gap-1 font-bold text-amber-900 underline hover:text-amber-950"
+            >
+              <RefreshCw className="h-3 w-3" /> Retry balance check
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {methods.map((m) => {

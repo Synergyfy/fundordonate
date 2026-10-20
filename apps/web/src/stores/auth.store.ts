@@ -52,10 +52,6 @@ interface AuthState {
   centralHubEnabled: boolean;
   centralHubLoading: boolean;
 
-  // Derived (kept for backward compatibility)
-  isLoading: boolean;
-  isAuthenticated: boolean;
-
   adminLogin: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
@@ -105,14 +101,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   sessionError: null,
   centralHubEnabled: false,
   centralHubLoading: false,
-
-  // Backward-compatible derived state
-  get isLoading() {
-    return get().authStatus === "initializing";
-  },
-  get isAuthenticated() {
-    return get().authStatus === "authenticated";
-  },
 
   adminLogin: async (email, password) => {
     const result = await authApi.adminLogin(email, password);
