@@ -7,8 +7,25 @@ interface Donation {
   status: string;
   isAnonymous: boolean;
   campaign: { title: string; slug: string };
-  user: { firstName: string; lastName: string; email: string } | null;
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    username?: string | null;
+    email: string;
+    businessName?: string | null;
+  } | null;
   createdAt: string;
+}
+
+function getDonorName(donation: Donation): string {
+  if (donation.isAnonymous) return "Anonymous";
+  const user = donation.user;
+  if (!user) return "N/A";
+
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (fullName) return fullName;
+
+  return user.businessName || user.username || user.email?.split("@")[0] || "N/A";
 }
 
 const formatCurrency = (a: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(a / 100);
@@ -87,7 +104,7 @@ export function DonationsManagement() {
               <tr key={d.uid} className="hover:bg-gray-50">
                 <td className="px-3 py-3 font-mono text-xs text-gray-500">{d.uid.slice(0, 8)}...</td>
                 <td className="px-3 py-3">
-                  <p className="text-sm font-medium text-gray-800">{d.isAnonymous ? "Anonymous" : d.user ? `${d.user.firstName} ${d.user.lastName}` : "N/A"}</p>
+                  <p className="text-sm font-medium text-gray-800">{getDonorName(d)}</p>
                   {!d.isAnonymous && d.user && <p className="text-xs text-gray-400">{d.user.email}</p>}
                 </td>
                 <td className="px-3 py-3 text-sm text-gray-600 truncate max-w-[150px]">{d.campaign.title}</td>
@@ -126,7 +143,7 @@ export function DonationsManagement() {
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">ID</span><span className="font-mono text-gray-800">{selectedDonation.uid}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Donor</span><span className="text-gray-800">{selectedDonation.isAnonymous ? "Anonymous" : selectedDonation.user ? `${selectedDonation.user.firstName} ${selectedDonation.user.lastName}` : "N/A"}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Donor</span><span className="text-gray-800">{getDonorName(selectedDonation)}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="text-gray-800">{selectedDonation.user?.email || "N/A"}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Campaign</span><span className="text-gray-800">{selectedDonation.campaign.title}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Amount</span><span className="font-semibold text-gray-900">{formatCurrency(selectedDonation.amount)}</span></div>

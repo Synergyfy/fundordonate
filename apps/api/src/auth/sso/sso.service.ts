@@ -124,13 +124,26 @@ export class SsoService {
       throw new UnauthorizedException("SSO token is missing an email");
     }
 
-    const mcomUser: McomUser = {
+    let mcomUser: McomUser = {
       id: payload.userId ?? payload.sub ?? payload.email,
       email: payload.email,
       firstName: payload.firstName ?? null,
       lastName: payload.lastName ?? null,
       role: payload.role,
     };
+
+    // Central's direct-handshake JWT only carries a display `name`, not the
+    // person's first/last name. Fetch the full profile so those fields (and the
+    // business profile) are persisted locally. Fall back to the handshake
+    // claims when the lookup is unavailable so login never depends on it.
+    try {
+      const info = await this.mcom.getUserInfo(token);
+      mcomUser = this.normalize(info);
+    } catch (error) {
+      this.logger.warn(
+        `Direct SSO profile lookup failed; using handshake claims: ${(error as Error).message}`,
+      );
+    }
 
     return this.completeSso(mcomUser, null, undefined, "/");
   }
