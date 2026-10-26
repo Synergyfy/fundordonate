@@ -31,7 +31,7 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
     setLoading(true);
     try {
       const res = await adminApi.getLocations({ type: "CITY", limit: 100 });
-      setCities(res.data || []);
+      setCities(res.items || []);
     } catch {
       setCities([]);
     } finally {
@@ -193,7 +193,7 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
                         <td className="px-5 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <Link
-                              to={`/admin/locations/${city.id}`}
+                              to={`/admin/cities/${city.id}`}
                               className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                             >
                               Manage Hub →
@@ -254,7 +254,7 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
                 <div className="mt-4 border-t pt-3 flex justify-end">
                   <Link
-                    to={`/admin/locations/${city.id}`}
+                    to={`/admin/cities/${city.id}`}
                     className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                   >
                     Manage Hub →

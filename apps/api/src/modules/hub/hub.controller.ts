@@ -37,6 +37,17 @@ export class HubController {
     return this.hubService.getCityBySlug(slug);
   }
 
+  @Get("locations/resolve")
+  @ApiOperation({
+    summary: "Resolve a canonical UK Hub path",
+    description:
+      "Resolves /uk-hub-activation/* paths against HubLocation.fullPath and returns the location, ancestors, children and live stats.",
+  })
+  @ApiResponse({ status: 200, description: "Successfully resolved location path" })
+  async resolveLocationPath(@Query("path") path: string) {
+    return this.hubService.resolveLocationPath(path);
+  }
+
   @Get("locations/tree")
   @ApiOperation({
     summary: "Get public location hierarchy tree",

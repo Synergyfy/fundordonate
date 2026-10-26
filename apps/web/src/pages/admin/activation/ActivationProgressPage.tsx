@@ -35,10 +35,10 @@ export function ActivationProgressPage({ embedded = false }: { embedded?: boolea
   useEffect(() => {
     Promise.all([
       hubProgressApi.getNationalSummary().catch(() => null),
-      adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ data: [], total: 0 })),
+      adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ items: [], total: 0 })),
     ]).then(([sumRes, locsRes]) => {
       setSummary(sumRes);
-      setCities(locsRes.data || []);
+      setCities(locsRes.items || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -63,7 +63,7 @@ export function ActivationProgressPage({ embedded = false }: { embedded?: boolea
             <p className="text-sm text-gray-500">Live operational monitoring across all UK cities</p>
           </div>
           <Link
-            to="/admin/locations"
+            to="/admin/hub-locations"
             className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-100 transition-colors"
           >
             <MapPin className="h-4 w-4" />
@@ -206,7 +206,7 @@ export function ActivationProgressPage({ embedded = false }: { embedded?: boolea
                       </td>
                       <td className="px-5 py-4 text-center">
                         <Link
-                          to={`/admin/locations/${city.id}`}
+                          to={`/admin/hub-locations/${city.id}`}
                           className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                         >
                           Manage Hub →

@@ -28,6 +28,11 @@ export function AdminLocationDetailPage() {
   const [description, setDescription] = useState("");
   const [heroHeadline, setHeroHeadline] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const [mapEnabled, setMapEnabled] = useState(true);
+  const [statusOverride, setStatusOverride] = useState("");
+  const [internalState, setInternalState] = useState("DRAFT");
+  const [primaryImage, setPrimaryImage] = useState("");
+  const [secondaryImage, setSecondaryImage] = useState("");
   const [targetAmount, setTargetAmount] = useState(0);
 
   useEffect(() => {
@@ -40,7 +45,12 @@ export function AdminLocationDetailPage() {
         setName(data.name || "");
         setDescription(data.description || "");
         setHeroHeadline(data.heroHeadline || "");
-        setIsPublic(data.isActive ?? true);
+        setIsPublic(data.isPublic ?? true);
+        setMapEnabled(data.mapEnabled ?? true);
+        setStatusOverride(data.statusOverride || "");
+        setInternalState(data.internalState || "DRAFT");
+        setPrimaryImage(data.primaryImage || "");
+        setSecondaryImage(data.secondaryImage || "");
         setTargetAmount(data.targetAmount || 0);
         setLoading(false);
       })
@@ -58,6 +68,12 @@ export function AdminLocationDetailPage() {
         name,
         description,
         heroHeadline,
+        isPublic,
+        mapEnabled,
+        statusOverride: statusOverride || "",
+        internalState: internalState as any,
+        primaryImage: primaryImage || "",
+        secondaryImage: secondaryImage || "",
         targetAmount: Number(targetAmount),
       });
       alert("Location details saved successfully.");
@@ -82,7 +98,7 @@ export function AdminLocationDetailPage() {
         <AlertCircle className="mx-auto h-8 w-8 text-red-600 mb-2" />
         <h3 className="font-semibold text-gray-900 mb-1">Location not found</h3>
         <p className="text-sm text-gray-600 mb-4">{error || "Unable to find the requested location."}</p>
-        <Link to="/admin/locations" className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm border hover:bg-gray-50">
+        <Link to="/admin/hub-locations" className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm border hover:bg-gray-50">
           <ArrowLeft className="h-4 w-4" /> Back to locations
         </Link>
       </div>
@@ -94,7 +110,7 @@ export function AdminLocationDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/admin/locations" className="rounded-lg p-2 hover:bg-gray-100">
+          <Link to="/admin/hub-locations" className="rounded-lg p-2 hover:bg-gray-100">
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </Link>
           <div>
@@ -104,7 +120,7 @@ export function AdminLocationDetailPage() {
                 {location.type}
               </span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                location.activationStatus === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                location.activationStatus === "ACTIVE" || location.activationStatus === "ACTIVATED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
               }`}>
                 {location.activationStatus}
               </span>
@@ -173,12 +189,93 @@ export function AdminLocationDetailPage() {
               className="w-full rounded-lg border px-3 py-2 text-sm"
             />
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+              <span className="font-medium text-gray-700">Publicly visible</span>
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </label>
+            <label className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+              <span className="font-medium text-gray-700">Show on UK map</span>
+              <input
+                type="checkbox"
+                checked={mapEnabled}
+                onChange={(e) => setMapEnabled(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Public status override
+            </label>
+            <select
+              value={statusOverride}
+              onChange={(e) => setStatusOverride(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Use calculated status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="MAKING_PROGRESS">Making Progress</option>
+              <option value="NEEDS_ACTIVATION">Needs Activation</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Calculated status is currently derived from the activation status. An override takes precedence on all public surfaces.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Primary image URL</label>
+              <input
+                type="url"
+                value={primaryImage}
+                onChange={(e) => setPrimaryImage(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                placeholder="https://…"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Secondary image URL</label>
+              <input
+                type="url"
+                value={secondaryImage}
+                onChange={(e) => setSecondaryImage(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                placeholder="https://…"
+              />
+            </div>
+          </div>
         </div>
       )}
 
       {activeTab === "activation" && (
         <div className="rounded-xl border bg-white p-6 space-y-4">
           <h3 className="font-semibold text-gray-900">Activation Status & Milestones</h3>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Internal lifecycle state</label>
+            <select
+              value={internalState}
+              onChange={(e) => setInternalState(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="DRAFT">Draft</option>
+              <option value="PLANNED">Planned</option>
+              <option value="PREPARING">Preparing</option>
+              <option value="LAUNCHING">Launching</option>
+              <option value="ACTIVE_OPERATION">Active operation</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Internal workflow only. Public status is calculated from activation status and the public override.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-gray-50 border">
               <div className="text-xs text-gray-500">Current Status</div>

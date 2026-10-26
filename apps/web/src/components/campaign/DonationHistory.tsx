@@ -112,7 +112,7 @@ export function DonationHistory() {
               {donations.map((d) => (
                 <Link
                   key={d.id}
-                  to={`/campaigns/${d.campaign.slug}`}
+                  to={`/campaigns/${d.campaign.id}`}
                   className="flex items-center gap-4 rounded-lg border border-gray-100 p-4 transition-colors hover:bg-gray-50"
                 >
                   {d.campaign.featuredImage ? (
@@ -155,7 +155,7 @@ export function DonationHistory() {
             {pledges.map((p) => (
               <Link
                 key={p.id}
-                to={`/campaigns/${p.campaign.slug}`}
+                to={`/campaigns/${p.campaign.id}`}
                 className="flex items-center gap-4 rounded-lg border border-gray-100 p-4 transition-colors hover:bg-gray-50"
               >
                 {p.campaign.featuredImage ? (

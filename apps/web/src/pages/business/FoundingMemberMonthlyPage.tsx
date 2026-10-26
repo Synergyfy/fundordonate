@@ -15,6 +15,7 @@ import { seasonApi, type Season } from "@/services/season";
 import { businessService } from "@/services/business";
 import { userDashboardApi } from "@/services/user-dashboard";
 import { paymentService } from "@/services/payment";
+import { foundingService } from "@/services/founding";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const fmt = (p: number) =>
@@ -150,6 +151,24 @@ export default function FoundingMemberMonthlyPage() {
           return;
         }
       }
+
+      // Record the location-scoped founding membership.
+      const programmes = await foundingService.getProgrammes(citySlug || "");
+      const audience = isConsumerContext ? "CONSUMER" : "BUSINESS";
+      const programme =
+        programmes.find((item) => item.audience === audience) ?? programmes[0];
+      if (!programme) {
+        throw new Error("No founding programme is available for this location yet.");
+      }
+      const membership = await foundingService.joinProgramme({
+        programmeId: programme.id,
+        contributionAmount: Math.round(monthlyAmount * 100),
+        isMonthly: true,
+      });
+      if (!membership) {
+        throw new Error("Your payment succeeded but the founding membership could not be recorded. Please contact support.");
+      }
+
       setStep("complete");
     } catch (err: any) {
       setPaymentError(err?.message || "Payment initiation failed. Please try again.");

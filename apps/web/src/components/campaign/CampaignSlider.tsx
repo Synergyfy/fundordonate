@@ -110,7 +110,7 @@ export function CampaignSlider({ campaigns }: Props) {
           return (
             <Link
               key={campaign.id}
-              to={`/campaigns/${campaign.slug}`}
+              to={`/campaigns/${campaign.id}`}
               className="group w-[350px] min-w-[350px] snap-start overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
             >
               {/* Image */}

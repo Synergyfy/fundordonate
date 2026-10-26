@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { campaignApi } from "@/services/campaign";
 import { getConsumerCommunity } from "@/services/community";
 import { consumerService } from "@/services/consumer";
@@ -441,8 +441,9 @@ function ReviewStep({
   const participationLabel = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.label || participationType;
   const participationEmoji = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.emoji || "";
   const isMonthly = participationType === "founding_monthly";
+  const amountPence = Math.round(amount * 100);
   const matchingReward = campaign.rewards
-    ?.filter((r) => r.amount <= amount)
+    ?.filter((r) => r.amount <= amountPence)
     .sort((a, b) => b.amount - a.amount)[0];
 
   return (
@@ -715,9 +716,9 @@ function ConfirmationStep({
   const participationLabel = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.label || participationType;
   const participationEmoji = PARTICIPATION_OPTIONS.find((p) => p.key === participationType)?.emoji || "";
   // Reward thresholds are in pence; the contribution amount is in pounds.
-  const earned = campaign.rewards?.find(
-    (r) => Math.round(amount * 100) >= (r.amount ?? 0)
-  );
+  const earned = campaign.rewards
+    ?.filter((r) => Math.round(amount * 100) >= (r.amount ?? 0))
+    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0];
   const hasIssuedRewards = (issuedRewards?.length ?? 0) > 0;
   const completedDate = completedAt
     ? new Date(completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
@@ -869,6 +870,8 @@ const EMPTY_CAMPAIGN: Campaign = {
 export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp, onComplete: _onComplete }: ContributionFlowProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectedRewardId = searchParams.get("reward");
   const [fetchedCampaign, setFetchedCampaign] = useState<Campaign | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(Boolean(slug && !campaignProp));
 
@@ -930,6 +933,15 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   const [completedAt, setCompletedAt] = useState("");
   const [paidOffline, setPaidOffline] = useState(false);
   const [issuedRewards, setIssuedRewards] = useState<{ id: string; title: string }[]>([]);
+
+  // Preselect the reward a supporter clicked on the campaign page.
+  useEffect(() => {
+    if (!preselectedRewardId || !campaign.rewards?.length) return;
+    const reward = campaign.rewards.find((r) => r.id === preselectedRewardId);
+    if (!reward) return;
+    setParticipationType((prev) => prev || "back_campaign");
+    setAmount((prev) => (prev > 0 ? prev : reward.amount / 100));
+  }, [preselectedRewardId, campaign.rewards]);
 
   const steps = useMemo(() => {
     let list = STEPS;

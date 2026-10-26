@@ -2,12 +2,16 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Inject,
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
+import { REDIS_CLIENT } from "@/redis/redis.constants";
+import Redis from "ioredis";
 import {
   Prisma,
   BusinessCampaignStatus,
+  CampaignLocationScope,
   TemplateStatus,
 } from "@prisma/client";
 import {
@@ -21,6 +25,7 @@ import {
   UpdateCampaignTemplateDto,
   UpdateCampaignTemplateStatusDto,
 } from "../dto/campaign-admin.dto";
+import { SetCampaignLocationsDto } from "../dto/campaign-locations.dto";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { ADMIN_TASKS_QUEUE } from "../processors/admin-tasks.constants";
@@ -42,6 +47,7 @@ export interface InstantiateSkipReason {
 export class AdminCampaignsService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @InjectQueue(ADMIN_TASKS_QUEUE) private readonly adminQueue: Queue,
     private readonly auditData: AuditDataService,
     private readonly eligibility: TemplateEligibilityService,
@@ -75,7 +81,14 @@ export class AdminCampaignsService {
     }
 
     if (locationId) {
-      where.business = { locationId };
+      where.AND = [
+        {
+          OR: [
+            { locations: { some: { locationId } } },
+            { locations: { none: {} }, business: { locationId } },
+          ],
+        },
+      ];
     }
 
     if (audience && audience !== "all") {
@@ -178,6 +191,13 @@ export class AdminCampaignsService {
         },
         template: true,
         answers: true,
+        locations: {
+          include: {
+            location: {
+              select: { id: true, name: true, slug: true, type: true, fullPath: true },
+            },
+          },
+        },
         requestedChanges: {
           orderBy: { createdAt: "desc" },
         },
@@ -763,6 +783,7 @@ export class AdminCampaignsService {
         status: true,
         membershipTier: true,
         membershipExpiry: true,
+        locationId: true,
       },
     });
     const foundBizMap = new Map(businesses.map((b) => [b.id, b]));
@@ -882,6 +903,16 @@ export class AdminCampaignsService {
                 endDate,
               },
             });
+
+            if (business.locationId) {
+              await tx.campaignLocation.create({
+                data: {
+                  campaignId: campaign.id,
+                  locationId: business.locationId,
+                  scope: CampaignLocationScope.PRIMARY,
+                },
+              });
+            }
 
             const fieldAnswersData: Array<{
               campaignId: string;
@@ -1015,6 +1046,122 @@ export class AdminCampaignsService {
         details,
       },
     });
+  }
+
+  /**
+   * Returns the campaign's location attribution rows.
+   */
+  async getCampaignLocations(campaignId: string) {
+    const campaign = await this.prisma.businessCampaign.findUnique({
+      where: { id: campaignId },
+      select: { id: true },
+    });
+    if (!campaign) {
+      throw new NotFoundException(`Campaign with ID ${campaignId} not found`);
+    }
+
+    return this.prisma.campaignLocation.findMany({
+      where: { campaignId },
+      include: {
+        location: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            type: true,
+            fullPath: true,
+            activationStatus: true,
+            statusOverride: true,
+          },
+        },
+      },
+      orderBy: [{ scope: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
+  /**
+   * Replaces the campaign's location links. A single PRIMARY location owns the
+   * campaign's funding for aggregation; additional locations are visibility-only.
+   */
+  async setCampaignLocations(campaignId: string, dto: SetCampaignLocationsDto) {
+    const campaign = await this.prisma.businessCampaign.findUnique({
+      where: { id: campaignId },
+      select: { id: true },
+    });
+    if (!campaign) {
+      throw new NotFoundException(`Campaign with ID ${campaignId} not found`);
+    }
+
+    const existing = await this.prisma.campaignLocation.findMany({
+      where: { campaignId },
+      select: { locationId: true, scope: true },
+    });
+    const existingPrimary = existing.find(
+      (entry) => entry.scope === CampaignLocationScope.PRIMARY,
+    )?.locationId;
+    const primaryLocationId =
+      dto.primaryLocationId !== undefined ? dto.primaryLocationId || null : existingPrimary ?? null;
+
+    const additionalIds = [...new Set(dto.additionalLocationIds ?? [])].filter(
+      (id) => id && id !== primaryLocationId,
+    );
+    const secondaryIds = [...new Set(dto.secondaryLocationIds ?? [])].filter(
+      (id) => id && id !== primaryLocationId && !additionalIds.includes(id),
+    );
+    const locationIds = [
+      ...new Set([primaryLocationId, ...secondaryIds, ...additionalIds].filter(Boolean)),
+    ] as string[];
+
+    if (locationIds.length > 0) {
+      const found = await this.prisma.hubLocation.findMany({
+        where: { id: { in: locationIds }, isActive: true },
+        select: { id: true },
+      });
+      if (found.length !== locationIds.length) {
+        const foundIds = new Set(found.map((location) => location.id));
+        const missing = locationIds.filter((id) => !foundIds.has(id));
+        throw new BadRequestException(`Unknown or inactive location(s): ${missing.join(", ")}`);
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.campaignLocation.deleteMany({ where: { campaignId } });
+      if (primaryLocationId) {
+        await tx.campaignLocation.create({
+          data: {
+            campaignId,
+            locationId: primaryLocationId,
+            scope: CampaignLocationScope.PRIMARY,
+          },
+        });
+      }
+      if (additionalIds.length > 0) {
+        await tx.campaignLocation.createMany({
+          data: additionalIds.map((locationId) => ({
+            campaignId,
+            locationId,
+            scope: CampaignLocationScope.INCLUDED,
+          })),
+        });
+      }
+      if (secondaryIds.length > 0) {
+        await tx.campaignLocation.createMany({
+          data: secondaryIds.map((locationId) => ({
+            campaignId,
+            locationId,
+            scope: CampaignLocationScope.SECONDARY,
+          })),
+        });
+      }
+    });
+
+    try {
+      await this.redis.del("hub:cities:all", "hub:summary:national", "hub:location:tree");
+    } catch {
+      // Cache invalidation is best-effort.
+    }
+
+    return this.getCampaignLocations(campaignId);
   }
 
   /**

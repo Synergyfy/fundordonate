@@ -29,12 +29,13 @@ export function HighStreetsPage({ embedded = false }: { embedded?: boolean } = {
   const fetchLocations = useCallback(async () => {
     setLoading(true);
     try {
-      const [streetsRes, citiesRes] = await Promise.all([
+      const [streetsRes, commercialRes, citiesRes] = await Promise.all([
         adminApi.getLocations({ type: "HIGH_STREET", limit: 100 }),
-        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ data: [] })),
+        adminApi.getLocations({ type: "COMMERCIAL_AREA", limit: 100 }),
+        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ items: [] })),
       ]);
-      setStreets(streetsRes.data || []);
-      setCities(citiesRes.data || []);
+      setStreets([...(streetsRes.items || []), ...(commercialRes.items || [])]);
+      setCities(citiesRes.items || []);
     } catch {
       setStreets([]);
       setCities([]);
@@ -70,7 +71,7 @@ export function HighStreetsPage({ embedded = false }: { embedded?: boolean } = {
             <p className="text-sm text-gray-500">Live operational monitoring of all {streets.length} registered UK high streets</p>
           </div>
           <Link
-            to="/admin/locations"
+            to="/admin/hub-locations"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             <Plus className="h-4 w-4" /> Add Location
@@ -170,7 +171,7 @@ export function HighStreetsPage({ embedded = false }: { embedded?: boolean } = {
                       </td>
                       <td className="px-5 py-4 text-center">
                         <Link
-                          to={`/admin/locations/${street.id}`}
+                          to={`/admin/hub-locations/${street.id}`}
                           className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                         >
                           Manage →

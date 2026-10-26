@@ -112,6 +112,7 @@ export function getAdminNavGroups(): AdminNavGroup[] {
         { label: "Businesses", path: "/admin/businesses/directory", icon: <span className="text-xs">📒</span>, implemented: true },
         { label: "Consumers", path: "/admin/consumers/list", icon: <span className="text-xs">👤</span>, implemented: true },
         { label: "Founding Members", path: "/admin/founding-members", icon: <span className="text-xs">⭐</span>, implemented: true },
+        { label: "Founding Programmes", path: "/admin/founding-programmes", icon: <span className="text-xs">🎖️</span>, implemented: true },
         { label: "Backers", path: "/admin/backers", icon: <span className="text-xs">🤝</span>, implemented: true },
         { label: "Donors", path: "/admin/donors", icon: <span className="text-xs">❤️</span>, implemented: true },
       ],

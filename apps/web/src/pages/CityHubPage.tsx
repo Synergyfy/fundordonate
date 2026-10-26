@@ -55,12 +55,24 @@ const fmtCurrency = (v: number) =>
 
 const fmtNumber = (n: number) => new Intl.NumberFormat("en-GB").format(n);
 
+const mapPublicStatus = (status?: string | null) => {
+  const value = (status ?? "").toUpperCase();
+  if (value === "ACTIVE" || value === "ACTIVATED") return "ACTIVE" as const;
+  if (value === "MAKING_PROGRESS" || value === "IN_PROGRESS" || value === "PREPARING" || value === "LAUNCHING") {
+    return "MAKING_PROGRESS" as const;
+  }
+  return "NEEDS_ACTIVATION" as const;
+};
+
+const toHubPath = (fullPath?: string | null) =>
+  (fullPath ?? "").replace(/^united-kingdom\/?/, "").replace(/^\/+|\/+$/g, "");
+
 // ───────────────────── Page ─────────────────────
 
 export default function CityHubPage() {
   const loc = useLocation();
   // Strip the route prefix to get the path segments after /uk-hub-activation/
-  const locationPath = loc.pathname.replace(/^\/uk-hub-activation\/?/, "");
+  const locationPath = loc.pathname.replace(/^\/uk-hub-activation\/?/, "").replace(/^united-kingdom\/?/, "");
   const segments = locationPath.split("/").filter(s => Boolean(s) && s !== "c-campaigns" && s !== "b-campaigns");
   const citySlug = segments[0] || "";
   const areaSlug = segments[1] || "";
@@ -75,108 +87,65 @@ export default function CityHubPage() {
   const countdown = useCountdown(currentSeason?.endDate || new Date().toISOString());
   const isActive = currentSeason?.status === "ACTIVE" && new Date(currentSeason.endDate) > new Date();
 
-  const { data: hierarchy, isLoading: hierarchyLoading } = useQuery({
-    queryKey: ["city-hierarchy", citySlug],
-    queryFn: () => locationService.getCityWithHierarchy(citySlug),
-    enabled: !!citySlug,
+  const { data: resolved, isLoading: hierarchyLoading } = useQuery({
+    queryKey: ["hub-path", locationPath],
+    queryFn: () => locationService.resolveHubPath(locationPath),
+    enabled: Boolean(locationPath),
   });
 
   const { data: campaignResponse } = useQuery({
-    queryKey: ["city-campaigns", citySlug, areaSlug, streetSlug],
+    queryKey: ["city-campaigns", locationPath],
     queryFn: () =>
       (campaignApi.list as any)({
-        location: streetSlug || areaSlug || citySlug,
+        location: segments[segments.length - 1] || citySlug,
         limit: 50,
       }),
-    enabled: Boolean(citySlug),
+    enabled: Boolean(locationPath),
   });
 
   const campaigns: any[] = campaignResponse?.items ?? [];
 
   const { location, ancestors, children, childLinkPrefix, sectionTitle, isHighStreet } = React.useMemo(() => {
-    if (!hierarchy) {
+    if (!resolved?.location) {
       return { location: null, ancestors: [], children: [], childLinkPrefix: "", sectionTitle: "", isHighStreet: false };
     }
-    const city = (hierarchy as any).city || hierarchy;
+    const loc = resolved.location as any;
+    const ancestorItems = ((resolved.ancestors || []) as any[])
+      .filter((ancestor) => ancestor.type !== "NATIONAL")
+      .map((ancestor) => ({
+        label: ancestor.name,
+        slug: ancestor.slug,
+        fullPath: toHubPath(ancestor.fullPath) || ancestor.slug,
+        type: ancestor.type,
+      }));
+    const locationChildren = ((resolved.children || []) as any[]).map((child) => ({
+      ...child,
+      publicStatus:
+        child.publicStatus ||
+        mapPublicStatus(child.statusOverride || child.activationStatus || child.status),
+    }));
+    const childPath = toHubPath(loc.fullPath) || loc.slug;
+    const highStreet =
+      loc.type === "HIGH_STREET" || loc.type === "COMMERCIAL_AREA";
     const areaTerm = getAreaTerminology(citySlug);
-
-    if (!areaSlug) {
-      return {
-        location: city,
-        ancestors: [],
-        children: (hierarchy.localAreas || []).map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          slug: a.slug,
-          type: "LOCAL_AREA" as const,
-          publicStatus: a.publicStatus || (a.status === "active" ? "ACTIVE" : a.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"),
-          shortDescription: a.description || `Local Area in ${city.name}`,
-        })),
-        childLinkPrefix: `/uk-hub-activation/${citySlug}`,
-        sectionTitle: `${areaTerm}s in ${city.name}`,
-        isHighStreet: false,
-      };
-    }
-
-    const matchedArea = (hierarchy.localAreas || []).find((a: any) => a.slug === areaSlug);
-    const areaLocation = matchedArea || {
-      id: `area-${citySlug}-${areaSlug}`,
-      name: areaSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-      slug: areaSlug,
-      type: "LOCAL_AREA" as const,
-      publicStatus: "MAKING_PROGRESS",
-      shortDescription: "",
-      fundingTarget: 0,
-      fundingRaised: 0,
-      foundingBusinessAllocated: 0,
-      foundingConsumerAllocated: 0,
-    };
-
-    if (!streetSlug) {
-      const highStreets = matchedArea?.highStreetsList || [];
-      return {
-        location: areaLocation,
-        ancestors: [{ label: city.name, slug: city.slug, fullPath: city.slug, type: "CITY" as const }],
-        children: highStreets.map((hs: any) => ({
-          id: hs.id,
-          name: hs.name,
-          slug: hs.slug,
-          type: "HIGH_STREET" as const,
-          publicStatus: hs.publicStatus || (hs.status === "active" ? "ACTIVE" : hs.status === "making_progress" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION"),
-          shortDescription: hs.description || `High Street in ${areaLocation.name}`,
-        })),
-        childLinkPrefix: `/uk-hub-activation/${citySlug}/${areaSlug}`,
-        sectionTitle: `High Streets in ${areaLocation.name}`,
-        isHighStreet: false,
-      };
-    }
-
-    const matchedStreet = matchedArea?.highStreetsList?.find((hs: any) => hs.slug === streetSlug);
-    const streetLocation = matchedStreet || {
-      id: `hs-${citySlug}-${areaSlug}-${streetSlug}`,
-      name: streetSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-      slug: streetSlug,
-      type: "HIGH_STREET" as const,
-      publicStatus: "ACTIVE",
-      description: "",
-      fundingTarget: 0,
-      fundingRaised: 0,
-      foundingBusinessAllocated: 0,
-      foundingConsumerAllocated: 0,
-    };
-
+    const section =
+      loc.type === "CITY"
+        ? `${areaTerm}s in ${loc.name}`
+        : highStreet
+          ? ""
+          : `High Streets in ${loc.name}`;
     return {
-      location: streetLocation,
-      ancestors: [
-        { label: city.name, slug: city.slug, fullPath: city.slug, type: "CITY" as const },
-        { label: areaLocation.name, slug: areaLocation.slug, fullPath: `${city.slug}/${areaLocation.slug}`, type: "LOCAL_AREA" as const },
-      ],
-      children: [],
-      childLinkPrefix: "",
-      sectionTitle: "",
-      isHighStreet: true,
+      location: {
+        ...loc,
+        publicStatus: loc.publicStatus || mapPublicStatus(loc.statusOverride || loc.activationStatus),
+      },
+      ancestors: ancestorItems,
+      children: locationChildren,
+      childLinkPrefix: `/uk-hub-activation/${childPath}`,
+      sectionTitle: section,
+      isHighStreet: highStreet,
     };
-  }, [hierarchy, citySlug, areaSlug, streetSlug]);
+  }, [resolved, citySlug]);
 
   if (hierarchyLoading) {
     return (
@@ -210,13 +179,17 @@ export default function CityHubPage() {
       : location.publicStatus === "ACTIVE"
         ? 100
         : 0;
-  const rawBusinesses = (location as any).businessesCount ?? (location as any).businesses;
+  const rawBusinesses = (location as any).businessCount ?? (location as any).businessesCount ?? (location as any).businesses;
   const totalBusinesses = Number(Array.isArray(rawBusinesses) ? rawBusinesses.length : rawBusinesses) || 0;
   const totalConsumers = Number((location as any).consumersCount ?? (location as any).consumers) || 0;
-  const totalHighStreets = (hierarchy?.localAreas || []).reduce((acc: number, a: any) => acc + (a.highStreetsList?.length || 0), 0);
-  const totalLocalAreas = hierarchy?.localAreas?.length || children.length;
+  const totalHighStreets =
+    (location as any).childCounts?.highStreets ??
+    children.filter((child: any) => child.type === "HIGH_STREET" || child.type === "COMMERCIAL_AREA").length;
+  const totalLocalAreas =
+    (location as any).childCounts?.localAreas ??
+    children.filter((child: any) => ["BOROUGH", "DISTRICT", "LOCAL_AREA"].includes(child.type)).length;
   const parentPath = ancestors.length > 0
-    ? `/uk-hub-activation/${ancestors.map(a => a.slug).join("/")}`
+    ? `/uk-hub-activation/${ancestors[ancestors.length - 1].fullPath}`
     : "/uk-hub-activation";
 
   return (
@@ -245,7 +218,9 @@ export default function CityHubPage() {
               {location.type === "CITY" && `${location.name} City Hub`}
               {location.type === "LOCAL_AREA" && location.name}
               {location.type === "BOROUGH" && `${location.name} Borough`}
+              {location.type === "DISTRICT" && `${location.name} District`}
               {location.type === "HIGH_STREET" && location.name}
+              {location.type === "COMMERCIAL_AREA" && location.name}
             </h1>
 
             {/* Dynamic subtitle based on location type */}
@@ -384,6 +359,36 @@ export default function CityHubPage() {
         </section>
       )}
 
+      {/* ═══════════════ FOUNDING PROGRAMMES ═══════════════ */}
+      {location.type === "CITY" && (
+        <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+          <div className="rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 p-6 text-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold">Founding Member Programmes</h2>
+                <p className="mt-1 text-sm text-primary-100">
+                  Join {location.name}'s founding programme and shape the hub from day one.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  to={`/founding/${citySlug}?audience=business`}
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+                >
+                  Business Founding Member
+                </Link>
+                <Link
+                  to={`/founding/${citySlug}?audience=consumer`}
+                  className="rounded-lg border border-white/40 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                >
+                  Consumer Founding Member
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ═══════════════ CHILDREN LIST / HIGH STREET CHOICE ═══════════════ */}
       {isHighStreet ? (
         <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
@@ -391,7 +396,7 @@ export default function CityHubPage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {/* For Business */}
             <Link
-              to={`/uk-hub-activation/${segments[0]}/${segments[1]}/${segments[2]}/business`}
+              to={`/uk-hub-activation/${toHubPath(location.fullPath) || location.slug}/business`}
               className="group rounded-xl bg-white border p-8 transition-all hover:shadow-lg hover:-translate-y-0.5 hover:border-blue-300"
             >
               <div className="flex items-center gap-3 mb-4">
@@ -414,7 +419,7 @@ export default function CityHubPage() {
 
             {/* For Consumer */}
             <Link
-              to={`/uk-hub-activation/${segments[0]}/${segments[1]}/${segments[2]}/consumer`}
+              to={`/uk-hub-activation/${toHubPath(location.fullPath) || location.slug}/consumer`}
               className="group rounded-xl bg-white border p-8 transition-all hover:shadow-lg hover:-translate-y-0.5 hover:border-pink-300"
             >
               <div className="flex items-center gap-3 mb-4">
@@ -454,7 +459,9 @@ export default function CityHubPage() {
                     : child.publicStatus === "ACTIVE"
                       ? 100
                       : 0;
-                const childLink = `${childLinkPrefix}/${child.slug}`;
+                const childLink = child.fullPath
+                  ? `/uk-hub-activation/${toHubPath(child.fullPath)}`
+                  : `${childLinkPrefix}/${child.slug}`;
                 return (
                   <Link
                     key={child.id}

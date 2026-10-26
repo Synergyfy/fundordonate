@@ -34,10 +34,10 @@ export function AdminRollUpConfig() {
   useEffect(() => {
     Promise.all([
       hubProgressApi.getRollUpConfig(),
-      adminApi.getLocations({ limit: 100 }).catch(() => ({ data: [], total: 0 })),
+      adminApi.getLocations({ limit: 100 }).catch(() => ({ items: [], total: 0 })),
     ]).then(([configData, locsRes]) => {
       setConfig(configData);
-      setLocations(locsRes.data || []);
+      setLocations(locsRes.items || []);
       setLoading(false);
     });
   }, []);

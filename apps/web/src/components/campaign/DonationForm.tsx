@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContributionDestination } from "./ContributionDestination";
 import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
@@ -10,6 +10,8 @@ interface Props {
   hierarchyLevel?: string | null;
   locationName?: string;
   contributionType?: "backer" | "founding_member";
+  /** Reward threshold in pence, used to preselect the donation amount. */
+  preselectedAmountPence?: number;
 }
 
 const PRESET_AMOUNTS = [10, 25, 50, 100, 250, 500];
@@ -17,7 +19,7 @@ const PRESET_AMOUNTS = [10, 25, 50, 100, 250, 500];
 const formatCurrency = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(pence / 100);
 
-export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarchyLevel, locationName, contributionType }: Props) {
+export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarchyLevel, locationName, contributionType, preselectedAmountPence }: Props) {
   const navigate = useNavigate();
   const [amount, setAmount] = useState<string>("");
   const [customAmount, setCustomAmount] = useState(false);
@@ -30,6 +32,13 @@ export function DonationForm({ campaignId, campaignTitle, minAmount = 1, hierarc
 
   // `amount` is a pounds string from the input; convert once to pence.
   const donationAmount = Math.round((parseFloat(amount) || 0) * 100);
+
+  useEffect(() => {
+    if (preselectedAmountPence == null || preselectedAmountPence <= 0) return;
+    setAmount(String(preselectedAmountPence / 100));
+    setCustomAmount(true);
+    setShowPayment(false);
+  }, [preselectedAmountPence]);
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();

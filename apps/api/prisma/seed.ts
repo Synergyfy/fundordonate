@@ -4,6 +4,7 @@ import {
   ContributionType,
   FoundingAudience,
   FoundingProgrammeStatus,
+  HubLocationInternalState,
   HubLocationType,
   MembershipTier,
   PreferredAudience,
@@ -268,11 +269,35 @@ async function main() {
 
   const streetLocationsMap = new Map<string, string>(); // streetName -> locationId
 
+  const nationalHub = await prisma.hubLocation.upsert({
+    where: { slug: "united-kingdom" },
+    update: { type: HubLocationType.NATIONAL, fullPath: "united-kingdom", isPublic: true, internalState: HubLocationInternalState.ACTIVE_OPERATION },
+    create: {
+      name: "United Kingdom National Hub",
+      slug: "united-kingdom",
+      type: HubLocationType.NATIONAL,
+      fullPath: "united-kingdom",
+      activationStatus: "ACTIVATED",
+      internalState: HubLocationInternalState.ACTIVE_OPERATION,
+      isPublic: true,
+      mapEnabled: false,
+      mapZoomLevel: 5,
+    },
+  });
+
   for (const c of citiesData) {
     const city = await prisma.hubLocation.upsert({
       where: { slug: c.slug },
       update: {
+        parentId: nationalHub.id,
+        fullPath: `united-kingdom/${c.slug}`,
         activationStatus: c.status,
+        internalState:
+          c.status === "ACTIVATED"
+            ? HubLocationInternalState.ACTIVE_OPERATION
+            : c.status === "IN_PROGRESS"
+              ? HubLocationInternalState.LAUNCHING
+              : HubLocationInternalState.PLANNED,
         targetAmount: BigInt(c.target),
         latitude: c.lat,
         longitude: c.lon,
@@ -288,7 +313,15 @@ async function main() {
         name: c.name,
         slug: c.slug,
         type: HubLocationType.CITY,
+        parentId: nationalHub.id,
+        fullPath: `united-kingdom/${c.slug}`,
         activationStatus: c.status,
+        internalState:
+          c.status === "ACTIVATED"
+            ? HubLocationInternalState.ACTIVE_OPERATION
+            : c.status === "IN_PROGRESS"
+              ? HubLocationInternalState.LAUNCHING
+              : HubLocationInternalState.PLANNED,
         targetAmount: BigInt(c.target),
         latitude: c.lat,
         longitude: c.lon,
@@ -307,12 +340,14 @@ async function main() {
     for (const a of c.areas) {
       const area = await prisma.hubLocation.upsert({
         where: { slug: a.slug },
-        update: { parentId: city.id },
+        update: { parentId: city.id, fullPath: `united-kingdom/${c.slug}/${a.slug}` },
         create: {
           name: a.name,
           slug: a.slug,
           type: HubLocationType.LOCAL_AREA,
           parentId: city.id,
+          fullPath: `united-kingdom/${c.slug}/${a.slug}`,
+          internalState: HubLocationInternalState.PLANNED,
           shortDescription: `${a.name} Local Area in ${c.name}`,
         },
       });
@@ -321,12 +356,17 @@ async function main() {
         const streetSlug = `${a.slug}-${st.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
         const street = await prisma.hubLocation.upsert({
           where: { slug: streetSlug },
-          update: { parentId: area.id },
+          update: {
+            parentId: area.id,
+            fullPath: `united-kingdom/${c.slug}/${a.slug}/${streetSlug}`,
+          },
           create: {
             name: st,
             slug: streetSlug,
             type: HubLocationType.HIGH_STREET,
             parentId: area.id,
+            fullPath: `united-kingdom/${c.slug}/${a.slug}/${streetSlug}`,
+            internalState: HubLocationInternalState.PLANNED,
             shortDescription: `${st} High Street, ${a.name}`,
           },
         });
@@ -1037,6 +1077,16 @@ async function main() {
         });
 
         // Seed sample contribution to back the campaign
+        if (business.locationId) {
+          await prisma.campaignLocation.create({
+            data: {
+              campaignId: camp.id,
+              locationId: business.locationId,
+              scope: "PRIMARY",
+            },
+          });
+        }
+
         await prisma.contribution.create({
           data: {
             businessId: business.id,

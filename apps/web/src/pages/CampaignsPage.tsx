@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/services/api";
@@ -18,7 +18,7 @@ export interface CampaignWithLocation {
   description?: string;
   featuredImage?: string;
   mode?: string;
-  targetAudience?: string;
+  targetAudience?: "business" | "consumer" | "both";
   goalAmount: number;
   raisedAmount: number;
   deadline: string;
@@ -40,11 +40,6 @@ export interface CampaignWithLocation {
     logoUrl?: string | null;
     coverImageUrl?: string | null;
   };
-}
-
-function getCampaignUrl(c: CampaignWithLocation): string {
-  const audience = c.targetAudience === "consumer" ? "consumer" : "business";
-  return `/uk-hub-activation/${c.citySlug}/${c.areaSlug}/${c.streetSlug}/${audience}/campaign/${c.slug}`;
 }
 
 function formatCurrency(pence: number): string {
@@ -95,14 +90,19 @@ export default function CampaignsPage({ audience }: CampaignsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const modeParam = searchParams.get("mode");
   const modeTab = modeParam === "fund" || modeParam === "donation" ? modeParam : null;
+  const locationParam = searchParams.get("location") || searchParams.get("city") || "all";
   const copy = PAGE_COPY[audience];
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeSort, setActiveSort] = useState("trending");
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedCity, setSelectedCity] = useState("all");
+  const [selectedCity, setSelectedCity] = useState(locationParam);
   const [selectedArea, setSelectedArea] = useState("all");
   const [selectedStreet, setSelectedStreet] = useState("all");
+
+  useEffect(() => {
+    setSelectedCity(searchParams.get("location") || searchParams.get("city") || "all");
+  }, [searchParams]);
 
   const { data: liveData } = useQuery({
     queryKey: ["public-campaigns", audience],
@@ -192,7 +192,9 @@ export default function CampaignsPage({ audience }: CampaignsPageProps) {
     }
 
     if (audience) {
-      result = result.filter(c => c.targetAudience === audience);
+      result = result.filter(
+        (c) => c.targetAudience === audience || c.targetAudience === "both",
+      );
     }
 
     if (modeTab) {
@@ -428,7 +430,7 @@ export default function CampaignsPage({ audience }: CampaignsPageProps) {
             {filtered.map(c => {
               const progress = Math.min(Math.round((c.raisedAmount / c.goalAmount) * 100), 100);
               const dLeft = daysLeft(c.deadline);
-              const href = getCampaignUrl(c);
+              const href = `/campaigns/${c.id}`;
 
               return (
                 <Link
@@ -453,10 +455,14 @@ export default function CampaignsPage({ audience }: CampaignsPageProps) {
                     <span className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold backdrop-blur-sm ${
                       c.targetAudience === "business"
                         ? "bg-blue-600 text-white"
-                        : "bg-pink-600 text-white"
+                        : c.targetAudience === "both"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-pink-600 text-white"
                     }`}>
                       {c.targetAudience === "business" ? (
                         <><Store className="h-3.5 w-3.5" /> For Business</>
+                      ) : c.targetAudience === "both" ? (
+                        <><Users className="h-3.5 w-3.5" /> For Everyone</>
                       ) : (
                         <><Users className="h-3.5 w-3.5" /> For Consumer</>
                       )}

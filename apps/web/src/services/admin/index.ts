@@ -193,6 +193,21 @@ export const adminService = {
     return api.put(`/campaigns/${id}`, data);
   },
 
+  async getCampaignLocations(campaignId: string): Promise<any[]> {
+    return api.get(`/admin/campaigns/${campaignId}/locations`);
+  },
+
+  async setCampaignLocations(
+    campaignId: string,
+    payload: {
+      primaryLocationId?: string;
+      secondaryLocationIds?: string[];
+      additionalLocationIds?: string[];
+    },
+  ): Promise<any[]> {
+    return api.put(`/admin/campaigns/${campaignId}/locations`, payload);
+  },
+
   async deleteCampaign(id: string): Promise<any> {
     return api.delete(`/campaigns/${id}`);
   },
@@ -380,6 +395,60 @@ export const adminService = {
 
   async getFoundingMembers(): Promise<AdminFoundingMember[]> {
     return api.get("/admin/founding-members");
+  },
+
+  async getFoundingProgrammes(params: {
+    locationId?: string;
+    audience?: string;
+    status?: string;
+  } = {}): Promise<any[]> {
+    return api.get("/admin/founding/programmes", { params });
+  },
+
+  async createFoundingProgramme(payload: {
+    locationId: string;
+    audience: "BUSINESS" | "CONSUMER";
+    title: string;
+    description?: string;
+    status?: string;
+    totalAllocation?: number;
+    opensAt?: string;
+    closesAt?: string;
+    contributionConfig?: Record<string, number>;
+    benefitConfig?: string[];
+    eligibilityConfig?: Record<string, unknown>;
+  }): Promise<any> {
+    return api.post("/admin/founding/programmes", payload);
+  },
+
+  async updateFoundingProgramme(
+    id: string,
+    payload: {
+      title?: string;
+      description?: string;
+      status?: string;
+      totalAllocation?: number;
+      opensAt?: string;
+      closesAt?: string;
+      contributionConfig?: Record<string, number>;
+      benefitConfig?: string[];
+      eligibilityConfig?: Record<string, unknown>;
+    },
+  ): Promise<any> {
+    return api.put(`/admin/founding/programmes/${id}`, payload);
+  },
+
+  async deleteFoundingProgramme(id: string): Promise<any> {
+    return api.delete(`/admin/founding/programmes/${id}`);
+  },
+
+  async getFoundingMemberships(params: {
+    programmeId?: string;
+    locationId?: string;
+    audience?: string;
+    status?: string;
+  } = {}): Promise<any[]> {
+    return api.get("/admin/founding/memberships", { params });
   },
 
   // ---------------------------------------------------------------------------

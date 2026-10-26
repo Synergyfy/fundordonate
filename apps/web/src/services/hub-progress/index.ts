@@ -24,8 +24,8 @@ export const hubProgressService = {
       totalCampaignDonations: res.totalDonations ?? 0,
       totalCampaignPledges: res.totalPledges ?? 0,
       totalBackers: res.totalBackers ?? 0,
-      totalFoundingBusiness: res.totalBusinesses ?? 0,
-      totalFoundingConsumer: res.totalConsumers ?? 0,
+      totalFoundingBusiness: res.totalFoundingBusiness ?? 0,
+      totalFoundingConsumer: res.totalFoundingConsumer ?? 0,
       campaignCount: res.totalCampaigns ?? 0,
       contributionVelocity: res.contributionVelocity ?? [],
     };
@@ -75,7 +75,7 @@ export const hubProgressService = {
    * Update roll-up configuration (admin only).
    */
   async updateRollUpConfig(config: Partial<RollUpConfig>): Promise<RollUpConfig> {
-    return api.put("/admin/locations/rollup-config", config);
+    return api.put("/admin/locations/rollup-config", { config });
   },
 
   /**

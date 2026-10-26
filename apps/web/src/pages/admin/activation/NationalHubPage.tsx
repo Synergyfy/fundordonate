@@ -42,17 +42,17 @@ export function NationalHubPage() {
   useEffect(() => {
     Promise.all([
       hubProgressApi.getNationalSummary().catch(() => null),
-      adminApi.getLocations({ limit: 100 }).catch(() => ({ data: [], total: 0 })),
+      adminApi.getLocations({ limit: 100 }).catch(() => ({ items: [], total: 0 })),
     ]).then(([sumRes, locsRes]) => {
       setSummary(sumRes);
-      setLocations(locsRes.data || []);
+      setLocations(locsRes.items || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
   const cities = useMemo(() => locations.filter((l) => l.type === "CITY"), [locations]);
-  const localAreas = useMemo(() => locations.filter((l) => l.type === "BOROUGH" || l.type === "LOCAL_AREA"), [locations]);
-  const highStreets = useMemo(() => locations.filter((l) => l.type === "HIGH_STREET"), [locations]);
+  const localAreas = useMemo(() => locations.filter((l) => l.type === "BOROUGH" || l.type === "DISTRICT" || l.type === "LOCAL_AREA"), [locations]);
+  const highStreets = useMemo(() => locations.filter((l) => l.type === "HIGH_STREET" || l.type === "COMMERCIAL_AREA"), [locations]);
 
   const activeCitiesCount = summary?.activeCitiesCount ?? cities.filter((c) => c.status === "ACTIVE").length;
   const totalFundingRaised = summary?.totalFundingRaised ?? cities.reduce((acc, c) => acc + ((c as any).fundingRaised || 0), 0);

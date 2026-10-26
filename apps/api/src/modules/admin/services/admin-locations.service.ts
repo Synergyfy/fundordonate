@@ -21,6 +21,31 @@ import Redis from "ioredis";
 export class AdminLocationsService {
   private readonly logger = new Logger(AdminLocationsService.name);
 
+  /**
+   * Valid parent/child combinations from the UK Hub hierarchy. Kept intentionally
+   * flexible (local areas and high streets can sit at multiple levels) while
+   * still rejecting nonsensical relationships such as HIGH_STREET → NATIONAL.
+   */
+  private static readonly ALLOWED_PARENTS: Record<HubLocationType, HubLocationType[]> = {
+    NATIONAL: [],
+    CITY: [HubLocationType.NATIONAL],
+    BOROUGH: [HubLocationType.CITY],
+    DISTRICT: [HubLocationType.CITY],
+    LOCAL_AREA: [HubLocationType.CITY, HubLocationType.BOROUGH, HubLocationType.DISTRICT],
+    HIGH_STREET: [
+      HubLocationType.CITY,
+      HubLocationType.BOROUGH,
+      HubLocationType.DISTRICT,
+      HubLocationType.LOCAL_AREA,
+    ],
+    COMMERCIAL_AREA: [
+      HubLocationType.CITY,
+      HubLocationType.BOROUGH,
+      HubLocationType.DISTRICT,
+      HubLocationType.LOCAL_AREA,
+    ],
+  };
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
@@ -28,9 +53,121 @@ export class AdminLocationsService {
 
   private async invalidateLocationCache() {
     try {
-      await this.redis.del("admin:locations:tree");
+      await this.redis.del(
+        "admin:locations:tree",
+        "hub:location:tree",
+        "hub:cities:all",
+        "hub:summary:national",
+      );
     } catch (err: any) {
       this.logger.warn(`Failed to invalidate locations cache: ${err.message}`);
+    }
+  }
+
+  /**
+   * Resolves the parent a location must use and validates the combination.
+   * Cities without an explicit parent are attached to the National Hub.
+   */
+  private async resolveValidParent(
+    type: HubLocationType,
+    parentId: string | null | undefined,
+    currentId?: string,
+  ): Promise<string | null> {
+    if (type === HubLocationType.NATIONAL) {
+      if (parentId) {
+        throw new BadRequestException("The National Hub cannot have a parent location.");
+      }
+      return null;
+    }
+
+    let effectiveParentId = parentId ?? null;
+    if (!effectiveParentId && type === HubLocationType.CITY) {
+      const national = await this.prisma.hubLocation.findFirst({
+        where: { type: HubLocationType.NATIONAL },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!national) {
+        throw new BadRequestException(
+          "A National Hub must exist before a City can be created.",
+        );
+      }
+      effectiveParentId = national.id;
+    }
+
+    if (!effectiveParentId) {
+      throw new BadRequestException(`A ${type} location must have a parent location.`);
+    }
+
+    if (currentId && effectiveParentId === currentId) {
+      throw new BadRequestException("A location cannot be its own parent.");
+    }
+
+    const parent = await this.prisma.hubLocation.findUnique({
+      where: { id: effectiveParentId },
+      select: { id: true, type: true, parentId: true },
+    });
+    if (!parent) {
+      throw new BadRequestException(`Parent location with ID ${effectiveParentId} does not exist`);
+    }
+
+    const allowed = AdminLocationsService.ALLOWED_PARENTS[type];
+    if (!allowed.includes(parent.type)) {
+      throw new BadRequestException(
+        `Invalid hierarchy: ${type} cannot be a child of ${parent.type}. ` +
+          `Allowed parents: ${allowed.length ? allowed.join(", ") : "none"}.`,
+      );
+    }
+
+    // Guard against moving a location underneath one of its own descendants.
+    if (currentId) {
+      let cursor: string | null = parent.id;
+      while (cursor) {
+        if (cursor === currentId) {
+          throw new BadRequestException("A location cannot be moved beneath one of its descendants.");
+        }
+        const node: { parentId: string | null } | null = await this.prisma.hubLocation.findUnique({
+          where: { id: cursor },
+          select: { parentId: true },
+        });
+        cursor = node?.parentId ?? null;
+      }
+    }
+
+    return effectiveParentId;
+  }
+
+  /**
+   * Recomputes `fullPath` for the whole tree. Cheap at UK Hub scale and keeps
+   * canonical paths consistent after slug/parent changes.
+   */
+  private async recomputeFullPaths() {
+    const locations = await this.prisma.hubLocation.findMany({
+      select: { id: true, slug: true, parentId: true, fullPath: true },
+    });
+    const byId = new Map(locations.map((l) => [l.id, l]));
+    const pathFor = (id: string, seen = new Set<string>()): string => {
+      if (seen.has(id)) return byId.get(id)?.slug ?? id;
+      seen.add(id);
+      const node = byId.get(id);
+      if (!node) return id;
+      if (!node.parentId || !byId.has(node.parentId)) return node.slug;
+      return `${pathFor(node.parentId, seen)}/${node.slug}`;
+    };
+
+    const updates = locations
+      .map((location) => ({ ...location, nextPath: pathFor(location.id) }))
+      .filter((location) => location.fullPath !== location.nextPath);
+
+    if (updates.length > 0) {
+      await this.prisma.$transaction(
+        updates.map((location) =>
+          this.prisma.hubLocation.update({
+            where: { id: location.id },
+            data: { fullPath: location.nextPath },
+          }),
+        ),
+      );
     }
   }
 
@@ -142,8 +279,16 @@ export class AdminLocationsService {
         parentId: loc.parentId,
         shortDescription: loc.shortDescription,
         postcodePrefix: loc.postcodePrefix,
+        fullPath: loc.fullPath,
+        internalState: loc.internalState,
         latitude: loc.latitude,
         longitude: loc.longitude,
+        mapEnabled: loc.mapEnabled,
+        mapZoomLevel: loc.mapZoomLevel,
+        isPublic: loc.isPublic,
+        statusOverride: loc.statusOverride,
+        primaryImage: loc.primaryImage,
+        secondaryImage: loc.secondaryImage,
         targetAmount: Number(loc.targetAmount),
         activationStatus: loc.activationStatus,
         businessCount: loc._count.businesses,
@@ -234,19 +379,25 @@ export class AdminLocationsService {
       throw new ConflictException(`Location slug '${slug}' already exists`);
     }
 
-    if (dto.parentId) {
-      const parent = await this.prisma.hubLocation.findUnique({ where: { id: dto.parentId } });
-      if (!parent) {
-        throw new BadRequestException(`Parent location with ID ${dto.parentId} does not exist`);
+    if (dto.type === HubLocationType.NATIONAL) {
+      const national = await this.prisma.hubLocation.findFirst({
+        where: { type: HubLocationType.NATIONAL },
+        select: { id: true },
+      });
+      if (national) {
+        throw new ConflictException("A National Hub already exists.");
       }
     }
+
+    const parentId = await this.resolveValidParent(dto.type, dto.parentId);
 
     const created = await this.prisma.hubLocation.create({
       data: {
         name: dto.name,
         slug,
         type: dto.type,
-        parentId: dto.parentId,
+        parentId,
+        internalState: dto.internalState ?? "DRAFT",
         shortDescription: dto.shortDescription,
         description: dto.description,
         heroHeadline: dto.heroHeadline,
@@ -254,16 +405,23 @@ export class AdminLocationsService {
         postcodePrefix: dto.postcodePrefix,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        mapEnabled: dto.mapEnabled ?? true,
+        mapZoomLevel: dto.mapZoomLevel ?? 6,
+        primaryImage: dto.primaryImage,
+        secondaryImage: dto.secondaryImage,
+        statusOverride: dto.statusOverride,
         targetAmount: dto.targetAmount ? BigInt(dto.targetAmount) : BigInt(0),
         activationStatus: dto.activationStatus || "PENDING",
         metadata: dto.metadata ?? {},
       },
     });
 
+    await this.recomputeFullPaths();
     await this.invalidateLocationCache();
 
     return {
       ...created,
+      fullPath: created.fullPath ?? created.slug,
       targetAmount: Number(created.targetAmount),
     };
   }
@@ -284,13 +442,21 @@ export class AdminLocationsService {
       }
     }
 
+    const nextType = (dto.type ?? location.type) as HubLocationType;
+    const requestedParentId =
+      dto.parentId !== undefined ? (dto.parentId || null) : location.parentId;
+    const nextParentId = await this.resolveValidParent(nextType, requestedParentId, id);
+
     const data: Prisma.HubLocationUpdateInput = {};
 
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.slug !== undefined) data.slug = dto.slug;
     if (dto.type !== undefined) data.type = dto.type;
-    if (dto.parentId !== undefined) {
-      data.parent = dto.parentId ? { connect: { id: dto.parentId } } : { disconnect: true };
+    if (dto.internalState !== undefined) data.internalState = dto.internalState;
+    if (nextParentId) {
+      data.parent = { connect: { id: nextParentId } };
+    } else {
+      data.parent = { disconnect: true };
     }
     if (dto.shortDescription !== undefined) data.shortDescription = dto.shortDescription;
     if (dto.description !== undefined) data.description = dto.description;
@@ -299,6 +465,12 @@ export class AdminLocationsService {
     if (dto.postcodePrefix !== undefined) data.postcodePrefix = dto.postcodePrefix;
     if (dto.latitude !== undefined) data.latitude = dto.latitude;
     if (dto.longitude !== undefined) data.longitude = dto.longitude;
+    if (dto.mapEnabled !== undefined) data.mapEnabled = dto.mapEnabled;
+    if (dto.mapZoomLevel !== undefined) data.mapZoomLevel = dto.mapZoomLevel;
+    if (dto.primaryImage !== undefined) data.primaryImage = dto.primaryImage;
+    if (dto.secondaryImage !== undefined) data.secondaryImage = dto.secondaryImage;
+    if (dto.statusOverride !== undefined) data.statusOverride = dto.statusOverride;
+    if (dto.isPublic !== undefined) data.isPublic = dto.isPublic;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.targetAmount !== undefined) data.targetAmount = BigInt(dto.targetAmount);
     if (dto.activationStatus !== undefined) data.activationStatus = dto.activationStatus;
@@ -309,6 +481,7 @@ export class AdminLocationsService {
       data,
     });
 
+    await this.recomputeFullPaths();
     await this.invalidateLocationCache();
 
     return {
@@ -357,6 +530,10 @@ export class AdminLocationsService {
       throw new NotFoundException(`Location with ID ${id} not found`);
     }
 
+    if (location.type === HubLocationType.NATIONAL) {
+      throw new BadRequestException("The National Hub cannot be deleted.");
+    }
+
     if (location._count.children > 0) {
       throw new BadRequestException("Cannot delete location with child locations. Deactivate it instead.");
     }
@@ -366,6 +543,7 @@ export class AdminLocationsService {
     }
 
     await this.prisma.hubLocation.delete({ where: { id } });
+    await this.recomputeFullPaths();
     await this.invalidateLocationCache();
 
     return { success: true, deletedId: id };
@@ -422,11 +600,19 @@ export class AdminLocationsService {
       this.prisma.hubLocation.findMany({ select: { id: true, parentId: true, type: true } }),
       this.prisma.businessCampaign.findMany({
         where: { status: "ACTIVE", business: { status: "ACTIVE" } },
-        select: { raisedAmount: true, business: { select: { locationId: true } } },
+        select: {
+          raisedAmount: true,
+          business: { select: { locationId: true } },
+          locations: {
+            where: { scope: "PRIMARY" },
+            select: { locationId: true },
+            take: 1,
+          },
+        },
       }),
     ]);
 
-    // Walk a business location up the hierarchy to find its owning city.
+    // Walk a campaign's primary (or legacy business) location up to its city.
     const locationById = new Map(locations.map((l) => [l.id, l]));
     const cityOf = (locationId: string | null): string | null => {
       let current = locationId;
@@ -441,7 +627,9 @@ export class AdminLocationsService {
 
     const raisedByCity = new Map<string, number>();
     for (const campaign of campaigns) {
-      const cityId = cityOf(campaign.business?.locationId ?? null);
+      const locationId =
+        campaign.locations[0]?.locationId ?? campaign.business?.locationId ?? null;
+      const cityId = cityOf(locationId);
       if (!cityId) continue;
       raisedByCity.set(cityId, (raisedByCity.get(cityId) ?? 0) + campaign.raisedAmount);
     }

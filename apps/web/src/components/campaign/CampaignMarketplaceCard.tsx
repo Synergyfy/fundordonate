@@ -65,7 +65,7 @@ export function CampaignMarketplaceCard({ campaign }: Props) {
 
   return (
     <Link
-      to={`/campaigns/${campaign.slug}`}
+      to={`/campaigns/${campaign.id}`}
       className="group block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-lg"
     >
       {/* Image */}
