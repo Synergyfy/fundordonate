@@ -115,6 +115,13 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   const [coverage, setCoverage] = useState<LocationCoverage>(initialCoverage ?? DEFAULT_COVERAGE);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Guard against an unexpected payload shape (the API has returned a flat
+  // list in the past) so consumers never crash on `tree.cities`.
+  const cities = useMemo<LocationTreeCity[]>(
+    () => (tree && Array.isArray(tree.cities) ? tree.cities : []),
+    [tree],
+  );
+
   const loadTree = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -135,11 +142,11 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
 
   // Build search index
   const searchResults = useMemo(() => {
-    if (!tree || !searchQuery.trim()) return [];
+    if (!cities.length || !searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     const results: SearchableLocation[] = [];
 
-    for (const city of tree.cities) {
+    for (const city of cities) {
       if (city.name.toLowerCase().includes(q) || city.slug.toLowerCase().includes(q)) {
         results.push({ id: city.id, name: city.name, type: "city", fullPath: city.fullPath ?? "" });
       }
@@ -160,16 +167,15 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
       }
     }
     return results.slice(0, 20);
-  }, [tree, searchQuery]);
+  }, [cities, searchQuery]);
 
   // Counts
-  const totalCityCount = tree?.cities.length ?? 0;
+  const totalCityCount = cities.length;
   const selectedCityCount = coverage.selectedCities.length;
 
   const totalLocalAreaCount = useMemo(() => {
-    if (!tree) return 0;
-    return tree.cities.reduce((sum, c) => sum + c.localAreas.length, 0);
-  }, [tree]);
+    return cities.reduce((sum, c) => sum + c.localAreas.length, 0);
+  }, [cities]);
 
   const selectedLocalAreaCount = useMemo(() => {
     if (coverage.includeNational) return totalLocalAreaCount;
@@ -177,9 +183,8 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, [coverage, totalLocalAreaCount]);
 
   const totalHighStreetCount = useMemo(() => {
-    if (!tree) return 0;
-    return tree.cities.reduce((sum, c) => sum + c.localAreas.reduce((s, a) => s + a.highStreets.length, 0), 0);
-  }, [tree]);
+    return cities.reduce((sum, c) => sum + c.localAreas.reduce((s, a) => s + a.highStreets.length, 0), 0);
+  }, [cities]);
 
   const selectedHighStreetCount = useMemo(() => {
     if (coverage.includeNational) return totalHighStreetCount;
@@ -187,9 +192,8 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, [coverage, totalHighStreetCount]);
 
   const totalBusinessCount = useMemo(() => {
-    if (!tree) return 0;
-    return tree.cities.reduce((sum, c) => sum + c.localAreas.reduce((s, a) => s + a.highStreets.reduce((st, h) => st + h.businesses.length, 0), 0), 0);
-  }, [tree]);
+    return cities.reduce((sum, c) => sum + c.localAreas.reduce((s, a) => s + a.highStreets.reduce((st, h) => st + h.businesses.length, 0), 0), 0);
+  }, [cities]);
 
   const selectedBusinessCount = useMemo(() => {
     if (coverage.includeNational) return totalBusinessCount;
@@ -231,12 +235,12 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, []);
 
   const selectAllCities = useCallback(() => {
-    if (!tree) return;
+    if (!cities.length) return;
     setCoverage((prev) => ({
       ...prev,
-      selectedCities: tree.cities.map((c) => c.id),
+      selectedCities: cities.map((c) => c.id),
     }));
-  }, [tree]);
+  }, [cities]);
 
   const clearAllCities = useCallback(() => {
     setCoverage((prev) => ({
@@ -268,18 +272,18 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, []);
 
   const selectAllLocalAreas = useCallback((cityId: string) => {
-    if (!tree) return;
-    const city = tree.cities.find((c) => c.id === cityId);
+    if (!cities.length) return;
+    const city = cities.find((c) => c.id === cityId);
     if (!city) return;
     setCoverage((prev) => ({
       ...prev,
       selectedLocalAreas: [...new Set([...prev.selectedLocalAreas, ...city.localAreas.map((a) => a.id)])],
     }));
-  }, [tree]);
+  }, [cities]);
 
   const clearAllLocalAreas = useCallback((cityId: string) => {
-    if (!tree) return;
-    const city = tree.cities.find((c) => c.id === cityId);
+    if (!cities.length) return;
+    const city = cities.find((c) => c.id === cityId);
     if (!city) return;
     const areaIds = city.localAreas.map((a) => a.id);
     const streetIds = city.localAreas.flatMap((a) => a.highStreets.map((s) => s.id));
@@ -290,7 +294,7 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
       selectedHighStreets: prev.selectedHighStreets.filter((id) => !streetIds.includes(id)),
       selectedBusinesses: prev.selectedBusinesses.filter((id) => !bizIds.includes(id)),
     }));
-  }, [tree]);
+  }, [cities]);
 
   // High street actions
   const toggleHighStreet = useCallback((street: LocationTreeHighStreet) => {
@@ -310,8 +314,8 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, []);
 
   const selectAllHighStreets = useCallback((areaId: string) => {
-    if (!tree) return;
-    for (const city of tree.cities) {
+    if (!cities.length) return;
+    for (const city of cities) {
       const area = city.localAreas.find((a) => a.id === areaId);
       if (area) {
         setCoverage((prev) => ({
@@ -321,11 +325,11 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
         break;
       }
     }
-  }, [tree]);
+  }, [cities]);
 
   const clearAllHighStreets = useCallback((areaId: string) => {
-    if (!tree) return;
-    for (const city of tree.cities) {
+    if (!cities.length) return;
+    for (const city of cities) {
       const area = city.localAreas.find((a) => a.id === areaId);
       if (area) {
         const streetIds = area.highStreets.map((s) => s.id);
@@ -338,7 +342,7 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
         break;
       }
     }
-  }, [tree]);
+  }, [cities]);
 
   // Business actions
   const toggleBusiness = useCallback((business: LocationTreeBusiness) => {
@@ -353,8 +357,8 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
   }, []);
 
   const selectAllBusinesses = useCallback((streetId: string) => {
-    if (!tree) return;
-    for (const city of tree.cities) {
+    if (!cities.length) return;
+    for (const city of cities) {
       for (const area of city.localAreas) {
         const street = area.highStreets.find((s) => s.id === streetId);
         if (street) {
@@ -366,11 +370,11 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
         }
       }
     }
-  }, [tree]);
+  }, [cities]);
 
   const clearAllBusinesses = useCallback((streetId: string) => {
-    if (!tree) return;
-    for (const city of tree.cities) {
+    if (!cities.length) return;
+    for (const city of cities) {
       for (const area of city.localAreas) {
         const street = area.highStreets.find((s) => s.id === streetId);
         if (street) {
@@ -383,7 +387,7 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
         }
       }
     }
-  }, [tree]);
+  }, [cities]);
 
   // Remove all selected
   const removeSelected = useCallback(() => {
@@ -399,7 +403,7 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
 
   // Import locations from CSV
   const importLocations = useCallback((csv: string): ImportResult => {
-    if (!tree) return { success: false, imported: 0, skipped: 0, errors: ["Location tree not loaded"] };
+    if (!cities.length) return { success: false, imported: 0, skipped: 0, errors: ["Location tree not loaded"] };
 
     const lines = csv.trim().split("\n");
     const errors: string[] = [];
@@ -420,7 +424,7 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
 
       if (!cityName) { skipped++; continue; }
 
-      const city = tree.cities.find((c) => c.name.toLowerCase() === cityName.toLowerCase() || c.slug.toLowerCase() === cityName.toLowerCase());
+      const city = cities.find((c) => c.name.toLowerCase() === cityName.toLowerCase() || c.slug.toLowerCase() === cityName.toLowerCase());
       if (!city) { errors.push(`Line ${i + 1}: City "${cityName}" not found`); skipped++; continue; }
 
       newCities.add(city.id);
@@ -472,16 +476,16 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
     }));
 
     return { success: errors.length === 0, imported, skipped, errors };
-  }, [tree, coverage]);
+  }, [cities, coverage]);
 
   // Summary
   const getSummary = useCallback((): LocationSummary => {
-    if (!tree) return { includeNational: false, cities: [], totalLocations: 0 };
+    if (!cities.length) return { includeNational: false, cities: [], totalLocations: 0 };
 
-    const cities: LocationSummary["cities"] = [];
+    const summaryCities: LocationSummary["cities"] = [];
     let total = 0;
 
-    for (const city of tree.cities) {
+    for (const city of cities) {
       if (!coverage.selectedCities.includes(city.id) && !coverage.includeNational) continue;
 
       const areas: LocationSummary["cities"][number]["areas"] = [];
@@ -506,13 +510,13 @@ export function useLocationTree(initialCoverage?: LocationCoverage): UseLocation
       }
 
       total += areas.length || 1;
-      cities.push({ id: city.id, name: city.name, areas });
+      summaryCities.push({ id: city.id, name: city.name, areas });
     }
 
     if (coverage.includeNational) total += 1;
 
-    return { includeNational: coverage.includeNational, cities, totalLocations: total };
-  }, [tree, coverage]);
+    return { includeNational: coverage.includeNational, cities: summaryCities, totalLocations: total };
+  }, [cities, coverage]);
 
   return {
     tree,

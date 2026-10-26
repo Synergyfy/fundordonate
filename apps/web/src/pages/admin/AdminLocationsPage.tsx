@@ -45,6 +45,13 @@ export function AdminLocationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">UK Hub Locations</h1>
           <p className="text-sm text-gray-500">{locations.length} locations registered in the database</p>
         </div>
+        <Link
+          to="/admin/locations/new"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+        >
+          <Plus className="h-4 w-4" />
+          Add City Hub
+        </Link>
       </div>
 
       {/* Controls */}
@@ -65,9 +72,13 @@ export function AdminLocationsPage() {
           className="rounded-lg border px-3 py-2 text-sm bg-white"
         >
           <option value="all">All Types</option>
+          <option value="NATIONAL">National Hub</option>
           <option value="CITY">City</option>
-          <option value="LOCAL_AREA">Local Area / Borough</option>
+          <option value="BOROUGH">Borough</option>
+          <option value="DISTRICT">District</option>
+          <option value="LOCAL_AREA">Local Area</option>
           <option value="HIGH_STREET">High Street</option>
+          <option value="COMMERCIAL_AREA">Commercial Area</option>
         </select>
       </div>
 
@@ -85,6 +96,7 @@ export function AdminLocationsPage() {
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Location Name</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Type</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">Lifecycle</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Parent</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
               </tr>
@@ -100,15 +112,20 @@ export function AdminLocationsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      l.activationStatus === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                      l.activationStatus === "ACTIVE" || l.activationStatus === "ACTIVATED" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                     }`}>
                       {l.activationStatus || "DRAFT"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-medium text-gray-600">
+                      {l.internalState?.replace(/_/g, " ") || "DRAFT"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{l.parentId || "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      to={`/admin/locations/${l.id}`}
+                      to={`/admin/hub-locations/${l.id}`}
                       className="text-xs font-medium text-primary-600 hover:text-primary-700"
                     >
                       Manage &rarr;

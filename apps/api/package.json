@@ -17,6 +17,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
+    "verify:hub": "tsx scripts/verify-hub.ts",
     "db:push": "prisma db push"
   },
   "prisma": {

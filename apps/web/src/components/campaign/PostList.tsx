@@ -19,10 +19,12 @@ export function PostList({ campaignId, refreshKey }: Props) {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchPosts = async (pageNum: number, append = false) => {
     if (pageNum === 1) setLoading(true);
     else setLoadingMore(true);
+    setError(null);
 
     try {
       const res = await campaignApi.getPosts(campaignId, pageNum, 10);
@@ -34,6 +36,7 @@ export function PostList({ campaignId, refreshKey }: Props) {
       setTotalPages(res.totalPages);
     } catch (err) {
       console.error(err);
+      setError("Campaign updates could not be loaded. Please try again.");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -56,6 +59,21 @@ export function PostList({ campaignId, refreshKey }: Props) {
             <div className="mt-3 h-3 w-24 rounded bg-gray-200" />
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (error && posts.length === 0) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
+        <p className="text-sm text-red-700">{error}</p>
+        <button
+          type="button"
+          onClick={() => fetchPosts(1)}
+          className="btn-secondary mt-4"
+        >
+          Retry
+        </button>
       </div>
     );
   }

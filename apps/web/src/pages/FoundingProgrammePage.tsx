@@ -6,7 +6,7 @@
 // =============================================================================
 
 import { useState, useMemo } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { locationService } from "@/services/location";
 import { foundingService } from "@/services/founding";
@@ -87,10 +87,18 @@ function JoinForm({ programme, isBusiness, selection }: { programme: FoundingPro
 
 export default function FoundingProgrammePage() {
   const { programmeId } = useParams();
+  const [searchParams] = useSearchParams();
   const id = programmeId ?? "";
   const match = id.match(/^fp-(.+)-(business|consumer)$/);
   const citySlug = match ? match[1]! : id.replace(/^fp-/, "");
-  const audience = match ? (match[2] === "business" ? "BUSINESS" : "CONSUMER") : "BUSINESS";
+  const requestedAudience = searchParams.get("audience")?.toLowerCase();
+  const audience = match
+    ? match[2] === "business"
+      ? "BUSINESS"
+      : "CONSUMER"
+    : requestedAudience === "consumer"
+      ? "CONSUMER"
+      : "BUSINESS";
 
   const { data: cities = [], isLoading: citiesLoading } = useQuery({
     queryKey: ["hubCities"],

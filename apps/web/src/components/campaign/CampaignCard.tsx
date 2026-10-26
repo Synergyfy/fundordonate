@@ -55,7 +55,7 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 
   return (
     <Link
-      to={`/campaigns/${campaign.slug}`}
+      to={`/campaigns/${campaign.id}`}
       className="group block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
       aria-label={ariaLabel}
       role="article"

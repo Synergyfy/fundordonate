@@ -172,13 +172,6 @@ export default function BusinessOwnerSettingsPage() {
           <h2 className="text-sm font-bold text-gray-900">Security & Credentials</h2>
         </div>
         <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => alert("Password reset link dispatched to your verified contact email.")}
-            className="w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 text-left transition-colors"
-          >
-            Request Password Reset
-          </button>
           <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-500">
             Authentication is secured via JWT and federated access. Sessions automatically renew.
           </div>

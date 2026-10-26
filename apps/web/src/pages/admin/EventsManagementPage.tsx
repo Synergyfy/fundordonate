@@ -57,10 +57,10 @@ export function EventsManagementPage() {
           scope: scopeFilter || undefined,
           search: search || undefined,
         }),
-        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ data: [] })),
+        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ items: [] })),
       ]);
       setEvents(eventsRes.items || (eventsRes as any).events || []);
-      setCities(citiesRes.data || []);
+      setCities(citiesRes.items || []);
     } catch {
       setEvents([]);
     } finally {

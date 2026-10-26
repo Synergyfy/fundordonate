@@ -69,8 +69,13 @@ export class AdminFinanceService {
             select: {
               id: true,
               email: true,
+              username: true,
               firstName: true,
               lastName: true,
+              businesses: {
+                select: { name: true },
+                take: 1,
+              },
             },
           },
           business: {
@@ -96,7 +101,12 @@ export class AdminFinanceService {
         ...c,
         uid: c.id,
         status: String(c.status).toLowerCase(),
-        user: c.backer,
+        user: c.backer
+          ? {
+              ...c.backer,
+              businessName: c.backer.businesses?.[0]?.name ?? null,
+            }
+          : null,
         donorId: c.backerId,
         campaignId: c.campaignId,
         isAnonymous: Boolean((c.metadata as Record<string, unknown>)?.isAnonymous),

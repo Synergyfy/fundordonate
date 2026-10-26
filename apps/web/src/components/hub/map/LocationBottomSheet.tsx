@@ -124,7 +124,7 @@ export function LocationBottomSheet({ location, onClose }: LocationBottomSheetPr
                 {campaigns.slice(0, 2).map(c => (
                   <Link
                     key={c.slug}
-                    to={`/campaigns/${c.slug}`}
+                    to={`/campaigns/${c.id ?? c.slug}`}
                     className="flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-xs text-gray-700 hover:bg-primary-50"
                   >
                     <span className="truncate">{c.title}</span>

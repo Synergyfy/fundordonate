@@ -29,14 +29,15 @@ export function LocalAreasPage({ embedded = false }: { embedded?: boolean } = {}
   const fetchLocations = useCallback(async () => {
     setLoading(true);
     try {
-      const [boroughsRes, localAreasRes, citiesRes] = await Promise.all([
+      const [boroughsRes, districtRes, localAreasRes, citiesRes] = await Promise.all([
         adminApi.getLocations({ type: "BOROUGH", limit: 100 }),
+        adminApi.getLocations({ type: "DISTRICT", limit: 100 }),
         adminApi.getLocations({ type: "LOCAL_AREA", limit: 100 }),
-        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ data: [] })),
+        adminApi.getLocations({ type: "CITY", limit: 50 }).catch(() => ({ items: [] })),
       ]);
-      const combined = [...(boroughsRes.data || []), ...(localAreasRes.data || [])];
+      const combined = [...(boroughsRes.items || []), ...(districtRes.items || []), ...(localAreasRes.items || [])];
       setAreas(combined);
-      setCities(citiesRes.data || []);
+      setCities(citiesRes.items || []);
     } catch {
       setAreas([]);
       setCities([]);
@@ -72,7 +73,7 @@ export function LocalAreasPage({ embedded = false }: { embedded?: boolean } = {}
             <p className="text-sm text-gray-500">Live operational monitoring of all {areas.length} registered UK local areas</p>
           </div>
           <Link
-            to="/admin/locations"
+            to="/admin/hub-locations"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             <Plus className="h-4 w-4" /> Add Location
@@ -172,7 +173,7 @@ export function LocalAreasPage({ embedded = false }: { embedded?: boolean } = {}
                       </td>
                       <td className="px-5 py-4 text-center">
                         <Link
-                          to={`/admin/locations/${area.id}`}
+                          to={`/admin/hub-locations/${area.id}`}
                           className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                         >
                           Manage →

@@ -4,9 +4,13 @@ import {
   BusinessCampaignStatus,
   PreferredAudience,
   Prisma,
+  TemplateOrigin,
+  type CampaignRewardAttachment,
 } from "@prisma/client";
 import { PublicCampaignQueryDto } from "./dto/public-campaign-query.dto";
 import {
+  businessRewardsAttachmentAllowed,
+  businessRewardsReplaceTemplate,
   effectiveConditions,
   minQualifyingPence,
 } from "@/modules/rewards/reward-config.util";
@@ -25,6 +29,7 @@ interface StoredRewardCondition {
 interface StoredRewardConfig {
   id?: string;
   name?: string;
+  description?: string;
   rule?: string;
   source?: string;
   mcomRewardId?: string | null;
@@ -35,6 +40,11 @@ interface StoredRewardConfig {
   qualificationMode?: string;
   conditions?: StoredRewardCondition[];
   trigger?: StoredRewardCondition;
+  quantityType?: string;
+  quantityLimit?: number | string | null;
+  claimDeadlineDays?: number | string | null;
+  order?: number;
+  items?: { title: string; physicalType?: string }[];
 }
 
 /** Public (non-sensitive) view of a campaign reward rule. */
@@ -54,6 +64,11 @@ export interface PublicCampaignReward {
   triggerConfig: { mode: string; min?: number; max?: number; exact?: number };
   issuedCount: number;
   status: "active";
+  order?: number;
+  quantityType?: string;
+  quantityLimit?: number | null;
+  quantityClaimed?: number;
+  claimDeadlineDays?: number;
   items: { title: string; physicalType?: string }[];
 }
 
@@ -64,7 +79,7 @@ export interface PublicCampaignItem {
   description: string;
   shortDescription: string;
   mode: "fund" | "donation";
-  targetAudience: "business" | "consumer";
+  targetAudience: "business" | "consumer" | "both";
   goalAmount: number; // In pence
   raisedAmount: number; // In pence
   percentage: number;
@@ -92,10 +107,18 @@ export interface PublicCampaignItem {
   areaName: string;
   streetSlug: string;
   streetName: string;
+  /** Canonical HubLocation context for the campaign. */
+  locationId?: string | null;
+  location?: string;
+  hierarchyLevel?: "national" | "city" | "borough" | "district" | "local_area" | "high_street" | "commercial_area";
   author: {
+    id: string;
     firstName: string;
     lastName: string;
+    username: string;
   };
+  /** Campaign-level presentation settings (FAQs, terms, …). */
+  settings?: Record<string, unknown>;
   _count?: {
     contributions?: number;
     donations?: number;
@@ -109,7 +132,8 @@ export interface PublicCampaignItem {
 type PublicCampaignRecord = Prisma.BusinessCampaignGetPayload<{
   include: {
     template: true;
-    business: true;
+    business: { include: { location: true } };
+    locations: { include: { location: true } };
     _count: { select: { contributions: true } };
   };
 }>;
@@ -126,9 +150,68 @@ export class PublicCampaignsService {
       .replace(/^-+|-+$/g, "");
   }
 
+  private toHierarchyLevel(
+    type?: string | null,
+  ): PublicCampaignItem["hierarchyLevel"] | undefined {
+    switch ((type ?? "").toUpperCase()) {
+      case "NATIONAL":
+        return "national";
+      case "CITY":
+        return "city";
+      case "BOROUGH":
+        return "borough";
+      case "DISTRICT":
+        return "district";
+      case "LOCAL_AREA":
+        return "local_area";
+      case "HIGH_STREET":
+        return "high_street";
+      case "COMMERCIAL_AREA":
+        return "commercial_area";
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Resolves a location slug/id to itself plus all descendants. Campaigns are
+   * owned by the business location, so a city hub must include high-street
+   * activity beneath it without duplicating campaigns.
+   */
+  private async resolveLocationScope(ref: string): Promise<string[] | null> {
+    const root = await this.prisma.hubLocation.findFirst({
+      where: { OR: [{ id: ref }, { slug: ref }] },
+      select: { id: true },
+    });
+    if (!root) return null;
+
+    const locations = await this.prisma.hubLocation.findMany({
+      select: { id: true, parentId: true },
+    });
+    const children = new Map<string, string[]>();
+    for (const location of locations) {
+      if (!location.parentId) continue;
+      const siblings = children.get(location.parentId) ?? [];
+      siblings.push(location.id);
+      children.set(location.parentId, siblings);
+    }
+
+    const scope: string[] = [];
+    const queue = [root.id];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (scope.includes(id)) continue;
+      scope.push(id);
+      queue.push(...(children.get(id) ?? []));
+    }
+    return scope;
+  }
+
   /** Maps a campaign row (with relations) to its public, non-sensitive shape. */
   private toPublicItem(c: PublicCampaignRecord): PublicCampaignItem {
     const biz = c.business;
+    const primaryLink = c.locations?.find((link) => link.scope === "PRIMARY");
+    const campaignLocation = primaryLink?.location ?? biz.location ?? null;
     const citySlug = this.slugify(biz.city);
     const areaSlug = this.slugify(biz.localArea);
     const streetSlug = this.slugify(biz.highStreet);
@@ -138,8 +221,12 @@ export class PublicCampaignsService {
         ? Math.min(100, Math.round((c.raisedAmount / c.targetAmount) * 100))
         : 0;
 
-    const audience: "business" | "consumer" =
-      biz.preferredAudience === PreferredAudience.BUSINESS ? "business" : "consumer";
+    const audience: "business" | "consumer" | "both" =
+      biz.preferredAudience === PreferredAudience.BUSINESS
+        ? "business"
+        : biz.preferredAudience === PreferredAudience.CONSUMER
+          ? "consumer"
+          : "both";
     const mode = c.template.origin === "AUDIT" ? "fund" : "donation";
     const catName = biz.category || "Community & Commerce";
 
@@ -193,10 +280,24 @@ export class PublicCampaignsService {
       areaName: biz.localArea,
       streetSlug,
       streetName: biz.highStreet,
+      locationId: campaignLocation?.id ?? null,
+      location:
+        campaignLocation?.name ||
+        biz.highStreet ||
+        biz.localArea ||
+        biz.city ||
+        undefined,
+      hierarchyLevel: this.toHierarchyLevel(campaignLocation?.type),
       author: {
+        id: biz.ownerId,
         firstName: biz.name,
         lastName: "",
+        username: biz.slug,
       },
+      settings:
+        c.settings && typeof c.settings === "object" && !Array.isArray(c.settings)
+          ? (c.settings as Record<string, unknown>)
+          : {},
       _count: {
         contributions: c._count?.contributions || 0,
         donations: c.backerCount || c._count?.contributions || 0,
@@ -254,25 +355,69 @@ export class PublicCampaignsService {
     };
 
     const businessWhere: Prisma.BusinessWhereInput = {};
+    const andClauses: Prisma.BusinessCampaignWhereInput[] = [];
 
     // Filter by audience (business vs consumer) - strictly isolated
     if (query.audience && query.audience.toLowerCase() !== "all") {
       const aud = query.audience.toLowerCase();
       if (aud === "business") {
-        businessWhere.preferredAudience = PreferredAudience.BUSINESS;
+        businessWhere.preferredAudience = {
+          in: [PreferredAudience.BUSINESS, PreferredAudience.BOTH],
+        };
       } else if (aud === "consumer") {
-        businessWhere.preferredAudience = PreferredAudience.CONSUMER;
+        businessWhere.preferredAudience = {
+          in: [PreferredAudience.CONSUMER, PreferredAudience.BOTH],
+        };
       }
     }
 
-    // Filter by city
+    // Filter by city (resolved through the location hierarchy when possible).
     if (query.city) {
-      businessWhere.city = { equals: query.city, mode: "insensitive" };
+      const cityLocation = await this.prisma.hubLocation.findFirst({
+        where: {
+          type: "CITY",
+          OR: [
+            { name: { equals: query.city, mode: "insensitive" } },
+            { slug: { equals: this.slugify(query.city) } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (cityLocation) {
+        const scope = (await this.resolveLocationScope(cityLocation.id)) ?? [];
+        andClauses.push({
+          OR: [
+            { locations: { some: { locationId: { in: scope } } } },
+            { locations: { none: {} }, business: { locationId: { in: scope } } },
+          ],
+        });
+      } else {
+        businessWhere.city = { equals: query.city, mode: "insensitive" };
+      }
     }
 
-    // Filter by location ID
-    if (query.locationId) {
-      businessWhere.locationId = query.locationId;
+    // Filter by location hierarchy (slug/id) — includes descendants. Prefer the
+    // explicit CampaignLocation relationship and fall back to the business's
+    // registered location for legacy campaigns that have no links yet.
+    const locationRef = query.location || query.locationId;
+    if (locationRef) {
+      const scope = await this.resolveLocationScope(locationRef);
+      if (!scope) {
+        return { items: [], total: 0, page: query.page, limit: query.limit };
+      }
+      andClauses.push({
+        OR: [
+          { locations: { some: { locationId: { in: scope } } } },
+          {
+            locations: { none: {} },
+            business: { locationId: { in: scope } },
+          },
+        ],
+      });
+    }
+
+    if (Object.keys(businessWhere).length > 0) {
+      where.business = businessWhere;
     }
 
     // Filter by category
@@ -282,6 +427,9 @@ export class PublicCampaignsService {
 
     if (Object.keys(businessWhere).length > 0) {
       where.business = businessWhere;
+    }
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     // Search query
@@ -310,6 +458,7 @@ export class PublicCampaignsService {
               location: true,
             },
           },
+          locations: { include: { location: true } },
           _count: {
             select: { contributions: true },
           },
@@ -337,6 +486,7 @@ export class PublicCampaignsService {
   async listFeatured(
     limit = 6,
     audience?: string,
+    mode?: string,
   ): Promise<{
     items: PublicCampaignItem[];
     total: number;
@@ -348,12 +498,29 @@ export class PublicCampaignsService {
       status: BusinessCampaignStatus.ACTIVE,
     };
 
+    // Mode is derived from the template origin: AUDIT templates are fund
+    // campaigns, every other template is a donation campaign.
+    const normalizedMode = mode?.toLowerCase();
+    if (normalizedMode === "fund") {
+      where.template = { origin: TemplateOrigin.AUDIT };
+    } else if (normalizedMode === "donation" || normalizedMode === "donate") {
+      where.template = { origin: { not: TemplateOrigin.AUDIT } };
+    }
+
     if (audience && audience.toLowerCase() !== "all") {
       const aud = audience.toLowerCase();
       if (aud === "business") {
-        where.business = { preferredAudience: PreferredAudience.BUSINESS };
+        where.business = {
+          preferredAudience: {
+            in: [PreferredAudience.BUSINESS, PreferredAudience.BOTH],
+          },
+        };
       } else if (aud === "consumer") {
-        where.business = { preferredAudience: PreferredAudience.CONSUMER };
+        where.business = {
+          preferredAudience: {
+            in: [PreferredAudience.CONSUMER, PreferredAudience.BOTH],
+          },
+        };
       }
     }
 
@@ -365,6 +532,7 @@ export class PublicCampaignsService {
         include: {
           template: true,
           business: { include: { location: true } },
+          locations: { include: { location: true } },
           _count: { select: { contributions: true } },
         },
       }),
@@ -386,7 +554,9 @@ export class PublicCampaignsService {
       where: { id },
       include: {
         template: true,
-        business: true,
+        business: { include: { location: true } },
+        locations: { include: { location: true } },
+        rewardAttachments: { orderBy: { createdAt: "asc" } },
         _count: { select: { contributions: true } },
       },
     });
@@ -397,7 +567,12 @@ export class PublicCampaignsService {
 
     return {
       ...this.toPublicItem(c),
-      rewards: await this.buildRewards(c.id, c.template?.rewardsConfig),
+      rewards: await this.buildRewards(
+        c.id,
+        c.template?.rewardsConfig,
+        c.rewardAttachments,
+        c.template?.businessRewardsMode,
+      ),
     };
   }
 
@@ -414,38 +589,74 @@ export class PublicCampaignsService {
   }> {
     const campaign = await this.prisma.businessCampaign.findUnique({
       where: { id: campaignId },
-      include: { template: true },
+      include: {
+        template: true,
+        rewardAttachments: { orderBy: { createdAt: "asc" } },
+      },
     });
 
     if (!campaign) {
       throw new NotFoundException("Campaign not found");
     }
 
-    const data = await this.buildRewards(campaignId, campaign.template?.rewardsConfig);
+    const data = await this.buildRewards(
+      campaignId,
+      campaign.template?.rewardsConfig,
+      campaign.rewardAttachments,
+      campaign.template?.businessRewardsMode,
+    );
     return { data, total: data.length };
   }
 
-  /** Map stored reward configs (+ issuance counts) into public reward views. */
+  /** Map stored reward configs + attached rewards (+ issuance counts) into public reward views. */
   private async buildRewards(
     campaignId: string,
     rawConfig: unknown,
+    attachments: CampaignRewardAttachment[] = [],
+    businessRewardsMode?: string | null,
   ): Promise<PublicCampaignReward[]> {
     const configs: StoredRewardConfig[] = Array.isArray(rawConfig)
       ? (rawConfig as unknown as StoredRewardConfig[])
       : [];
+    const enabledAttachments = attachments.filter(
+      (a) => a.enabled && (!a.expiresAt || a.expiresAt.getTime() > Date.now()),
+    );
 
-    if (configs.length === 0) return [];
+    const includeTemplateRewards =
+      configs.length > 0 &&
+      !(businessRewardsReplaceTemplate(businessRewardsMode) && enabledAttachments.length > 0);
 
-    const counts = await this.prisma.rewardIssuance.groupBy({
-      by: ["mcomRewardId"],
+    if (!includeTemplateRewards && enabledAttachments.length === 0) return [];
+
+    const issuances = await this.prisma.rewardIssuance.findMany({
       where: { campaignId },
-      _count: { _all: true },
+      select: { mcomRewardId: true, businessRewardId: true, rewardConfigId: true },
     });
-    const countMap = new Map(counts.map((c) => [c.mcomRewardId, c._count._all]));
+    const countMap = new Map<string, number>();
+    for (const issuance of issuances) {
+      for (const key of [
+        issuance.mcomRewardId,
+        issuance.businessRewardId,
+        issuance.rewardConfigId,
+      ]) {
+        if (!key) continue;
+        countMap.set(key, (countMap.get(key) ?? 0) + 1);
+      }
+    }
 
-    return configs
-      .filter((cfg) => cfg && typeof cfg === "object")
-      .map((cfg, index) => this.toPublicReward(cfg, index, countMap));
+    const templateRewards = includeTemplateRewards
+      ? configs
+          .filter((cfg) => cfg && typeof cfg === "object")
+          .map((cfg, index) => this.toPublicReward(cfg, index, countMap))
+      : [];
+
+    const attachmentRewards = businessRewardsAttachmentAllowed(businessRewardsMode)
+      ? enabledAttachments.map((attachment, index) =>
+          this.toPublicAttachmentReward(attachment, index, countMap),
+        )
+      : [];
+
+    return [...templateRewards, ...attachmentRewards];
   }
 
   private toPublicReward(
@@ -458,11 +669,25 @@ export class PublicCampaignsService {
     // Minimum qualifying contribution in pence — falls back to the rule copy
     // for legacy configs that predate `conditions[]`.
     const amount = minQualifyingPence(cfg);
+    const issuedCount =
+      countMap.get(cfg.mcomRewardId ?? cfg.id ?? "") ??
+      countMap.get(cfg.id ?? "") ??
+      0;
+    const quantityLimit =
+      cfg.quantityLimit !== null && cfg.quantityLimit !== undefined && cfg.quantityLimit !== ""
+        ? Number(cfg.quantityLimit)
+        : null;
+    const claimDeadlineDays =
+      cfg.claimDeadlineDays !== null &&
+      cfg.claimDeadlineDays !== undefined &&
+      cfg.claimDeadlineDays !== ""
+        ? Number(cfg.claimDeadlineDays)
+        : undefined;
 
     return {
       id: cfg.id ?? `cfg-${index}`,
       title: cfg.name ?? "Reward",
-      description: cfg.rule ?? "",
+      description: cfg.description ?? cfg.rule ?? "",
       source: cfg.source ?? "fundordonate",
       mcomRewardId: cfg.mcomRewardId ?? null,
       rewardType: cfg.rewardCategory ?? null,
@@ -477,8 +702,59 @@ export class PublicCampaignsService {
         ...(condition.maxPence != null ? { max: condition.maxPence } : {}),
         ...(condition.exactPence != null ? { exact: condition.exactPence } : {}),
       },
-      issuedCount: countMap.get(cfg.mcomRewardId ?? cfg.id ?? "") ?? 0,
+      issuedCount,
       status: "active",
+      order: cfg.order ?? index,
+      quantityType:
+        cfg.quantityType ?? (quantityLimit != null ? "limited" : undefined),
+      quantityLimit,
+      quantityClaimed: issuedCount,
+      claimDeadlineDays,
+      items: Array.isArray(cfg.items)
+        ? cfg.items.filter((item) => item && typeof item === "object")
+        : [],
+    };
+  }
+
+  /** Map a business-owned MCOM reward attached to the campaign. */
+  private toPublicAttachmentReward(
+    attachment: CampaignRewardAttachment,
+    index: number,
+    countMap: Map<string, number>,
+  ): PublicCampaignReward {
+    const cfg: StoredRewardConfig = {
+      conditions: Array.isArray(attachment.conditions)
+        ? (attachment.conditions as unknown as StoredRewardCondition[])
+        : [],
+    };
+    const condition = this.normalizeCondition(cfg);
+    const issuedCount = countMap.get(attachment.businessRewardId) ?? 0;
+    const quantityLimit = attachment.maxQuantity ?? null;
+
+    return {
+      id: attachment.id,
+      title: attachment.title,
+      description: attachment.description ?? "",
+      source: "mcom",
+      mcomRewardId: attachment.businessRewardId,
+      rewardType: attachment.rewardType ?? null,
+      fulfilmentType: null,
+      audience: null,
+      qualificationMode: attachment.qualificationMode ?? "independent",
+      valueGbp: null,
+      amount: minQualifyingPence(cfg),
+      triggerConfig: {
+        mode: this.normalizeMode(condition.mode),
+        ...(condition.minPence != null ? { min: condition.minPence } : {}),
+        ...(condition.maxPence != null ? { max: condition.maxPence } : {}),
+        ...(condition.exactPence != null ? { exact: condition.exactPence } : {}),
+      },
+      issuedCount,
+      status: "active",
+      order: index,
+      quantityType: quantityLimit != null ? "limited" : undefined,
+      quantityLimit,
+      quantityClaimed: issuedCount,
       items: [],
     };
   }

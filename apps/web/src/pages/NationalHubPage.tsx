@@ -784,7 +784,7 @@ export default function NationalHubPage() {
             <div className="flex flex-col gap-4 lg:flex-row">
               <div className="relative flex-1 min-w-0">
                 <div className="overflow-hidden rounded-xl border bg-white shadow-sm" style={{ height: "60vh", minHeight: 400 }}>
-                  <UkMap locations={allCities} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
+                  <UkMap locations={allCities.filter((c: any) => c.mapVisible !== false)} selectedSlug={selectedMapSlug} onSelect={(slug) => setSelectedMapSlug(slug === selectedMapSlug ? null : slug)} statusFilter={activeTab === "all" ? "all" : activeTab} />
                 </div>
                 <MapLegend />
               </div>

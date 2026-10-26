@@ -26,7 +26,7 @@ export class PublicCampaignsController {
   })
   @ApiResponse({ status: 200, description: "Successfully retrieved featured campaigns" })
   async featured(@Query() query: PublicCampaignQueryDto) {
-    return this.campaignsService.listFeatured(query.limit, query.audience);
+    return this.campaignsService.listFeatured(query.limit, query.audience, query.mode);
   }
 
   @Get("slug/:slug")

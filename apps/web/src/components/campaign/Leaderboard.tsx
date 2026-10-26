@@ -134,7 +134,17 @@ export function Leaderboard({
   }
 
   if (!leaderboard || leaderboard.entries.length === 0) {
-    return null;
+    return (
+      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <Trophy className="h-5 w-5 text-amber-500" />
+          <h3 className="text-lg font-bold text-gray-900">{displayTitle}</h3>
+        </div>
+        <p className="text-sm text-gray-500">
+          No contributions have been recorded for this {scopeLabel.toLowerCase()} yet. Be the first to support it.
+        </p>
+      </div>
+    );
   }
 
   return (

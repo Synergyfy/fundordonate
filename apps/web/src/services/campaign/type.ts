@@ -264,6 +264,8 @@ export interface Campaign {
   }[];
   // Campaign Context
   location?: string;
+  locationId?: string | null;
+  hierarchyLevel?: string;
   isEvergreen?: boolean;
   participationTypes?: string;
   backerTiersEnabled?: boolean;

@@ -208,9 +208,9 @@ export function AddCityWizard() {
    * Geographic data only suggests layers — nothing here becomes official
    * unless the admin walked through the wizard and confirmed it.
    */
-  const persistConfirmations = async () => {
+  const persistConfirmations = async (): Promise<string | null> => {
     const cityName = (data.cityName || data.selectedCity || "").trim();
-    if (!cityName) return;
+    if (!cityName) return null;
     const citySlug = cityName.toLowerCase().replace(/\s+/g, "-");
 
     try {
@@ -225,7 +225,7 @@ export function AddCityWizard() {
           makingProgressRules: data.makingProgressRules,
           activeRules: data.activeRules,
         },
-      });
+      } as any);
 
       for (const area of data.localAreas) {
         if (area.included) {
@@ -249,8 +249,12 @@ export function AddCityWizard() {
           }
         }
       }
-    } catch (err) {
+
+      return cityLoc.id;
+    } catch (err: any) {
       console.error("Failed to persist city creation via adminApi:", err);
+      alert(err?.message || "Failed to create the city hub. Please review the details and try again.");
+      return null;
     }
   };
 
@@ -366,9 +370,9 @@ export function AddCityWizard() {
               </button>
             )}
             <button
-              onClick={isLastStep ? () => {
-                persistConfirmations();
-                navigate(`/admin/cities/${data.cityName?.toLowerCase().replace(/\s+/g, "-") || "new"}`);
+              onClick={isLastStep ? async () => {
+                const cityId = await persistConfirmations();
+                if (cityId) navigate(`/admin/cities/${cityId}`);
               } : goNext}
               className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
             >

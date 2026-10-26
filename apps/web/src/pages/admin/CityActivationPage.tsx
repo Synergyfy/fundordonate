@@ -53,21 +53,21 @@ export function CityActivationPage() {
     setLoading(true);
     try {
       const res = await adminApi.getLocations({ type: "CITY", limit: 100 });
-      const records: ActivationRecord[] = (res.data || []).map((loc: any) => ({
+      const records: ActivationRecord[] = (res.items || []).map((loc: any) => ({
         id: loc.id,
         name: loc.name,
         slug: loc.slug || loc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        lifecycle: (loc.internalLifecycle || (loc.status === "ACTIVE" ? "ACTIVE" : "ACTIVATING")) as LocationInternalLifecycle,
-        publicStatus: (loc.publicStatus || (loc.status === "ACTIVE" ? "ACTIVE" : "MAKING_PROGRESS")) as LocationPublicStatus,
+        lifecycle: (loc.internalLifecycle || (loc.activationStatus === "ACTIVATED" ? "ACTIVE_OPERATION" : "LAUNCHING")) as LocationInternalLifecycle,
+        publicStatus: (loc.statusOverride || (loc.activationStatus === "ACTIVATED" ? "ACTIVE" : loc.activationStatus === "IN_PROGRESS" ? "MAKING_PROGRESS" : "NEEDS_ACTIVATION")) as LocationPublicStatus,
         activationProgress: loc.activationProgress ?? (loc.fundingTarget > 0 ? Math.min(100, Math.round((loc.fundingRaised / loc.fundingTarget) * 100)) : 0),
         activationThreshold: loc.activationThreshold || 80,
-        fundingTarget: loc.fundingTarget || 10000000,
+        fundingTarget: loc.fundingTarget || loc.targetAmount || 0,
         fundingRaised: loc.fundingRaised || 0,
         foundingBusinessAllocated: loc.foundingBusinessAllocated || 0,
-        foundingBusinessTotal: loc.foundingBusinessTotal || 100,
+        foundingBusinessTotal: loc.foundingBusinessTotal || 0,
         foundingConsumerAllocated: loc.foundingConsumerAllocated || 0,
-        foundingConsumerTotal: loc.foundingConsumerTotal || 500,
-        region: loc.region || "United Kingdom",
+        foundingConsumerTotal: loc.foundingConsumerTotal || 0,
+        region: loc.region || loc.metadata?.region || "United Kingdom",
       }));
       setCities(records);
     } catch {
@@ -239,7 +239,7 @@ export function CityActivationPage() {
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-xs text-gray-400">Status: {city.publicStatus}</span>
                   <Link
-                    to={`/admin/locations/${city.id}`}
+                    to={`/admin/hub-locations/${city.id}`}
                     className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                   >
                     Manage Hub →

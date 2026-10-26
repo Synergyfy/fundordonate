@@ -13,7 +13,7 @@ interface MapMarker {
   latitude: number | null;
   longitude: number | null;
   mapZoomLevel: number | null;
-  mapVisible: boolean;
+  mapEnabled: boolean;
   publicStatus: LocationPublicStatus;
   fundingRaised: number;
 }
@@ -37,7 +37,7 @@ export function MapManagementPage() {
     setLoading(true);
     try {
       const res = await adminApi.getLocations({ limit: 100 });
-      const items: MapMarker[] = (res.data || []).map((loc: any) => ({
+      const items: MapMarker[] = (res.items || []).map((loc: any) => ({
         id: loc.id,
         name: loc.name,
         slug: loc.slug || loc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
@@ -45,7 +45,7 @@ export function MapManagementPage() {
         latitude: loc.latitude ?? null,
         longitude: loc.longitude ?? null,
         mapZoomLevel: loc.mapZoomLevel ?? 6,
-        mapVisible: loc.mapVisible ?? true,
+        mapEnabled: loc.mapEnabled ?? true,
         publicStatus: (loc.publicStatus || (loc.status === "ACTIVE" ? "ACTIVE" : "MAKING_PROGRESS")) as LocationPublicStatus,
         fundingRaised: loc.fundingRaised || 0,
       }));
@@ -63,8 +63,8 @@ export function MapManagementPage() {
 
   const filtered = useMemo(() => {
     let list = markers;
-    if (visibilityFilter === "VISIBLE") list = list.filter((m) => m.mapVisible);
-    if (visibilityFilter === "HIDDEN") list = list.filter((m) => !m.mapVisible);
+    if (visibilityFilter === "VISIBLE") list = list.filter((m) => m.mapEnabled);
+    if (visibilityFilter === "HIDDEN") list = list.filter((m) => !m.mapEnabled);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((m) => m.name.toLowerCase().includes(q));
@@ -72,7 +72,7 @@ export function MapManagementPage() {
     return list;
   }, [markers, visibilityFilter, search]);
 
-  const visibleCount = markers.filter((m) => m.mapVisible).length;
+  const visibleCount = markers.filter((m) => m.mapEnabled).length;
   const hiddenCount = markers.length - visibleCount;
   const avgZoom = markers.length > 0 ? Math.round(markers.reduce((s, m) => s + (m.mapZoomLevel || 6), 0) / markers.length) : 6;
 
@@ -80,11 +80,11 @@ export function MapManagementPage() {
     try {
       await adminApi.updateLocation(id, {
         mapZoomLevel: editZoom,
-        mapVisible: editVisible,
+        mapEnabled: editVisible,
       });
       setMarkers((prev) =>
         prev.map((m) =>
-          m.id === id ? { ...m, mapZoomLevel: editZoom, mapVisible: editVisible } : m
+          m.id === id ? { ...m, mapZoomLevel: editZoom, mapEnabled: editVisible } : m
         )
       );
     } catch (err) {
@@ -97,7 +97,7 @@ export function MapManagementPage() {
   const startEdit = (m: MapMarker) => {
     setEditingId(m.id);
     setEditZoom(m.mapZoomLevel || 6);
-    setEditVisible(m.mapVisible);
+    setEditVisible(m.mapEnabled);
   };
 
   return (
@@ -214,8 +214,8 @@ export function MapManagementPage() {
                         <span>Visible</span>
                       </label>
                     ) : (
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${m.mapVisible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                        {m.mapVisible ? "Yes" : "Hidden"}
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${m.mapEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        {m.mapEnabled ? "Yes" : "Hidden"}
                       </span>
                     )}
                   </td>
@@ -235,7 +235,7 @@ export function MapManagementPage() {
                           <button onClick={() => startEdit(m)} className="rounded px-2 py-1 text-xs text-primary-600 hover:bg-primary-50">
                             Edit
                           </button>
-                          <Link to={`/admin/locations/${m.id}`} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">
+                          <Link to={`/admin/hub-locations/${m.id}`} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">
                             Hub →
                           </Link>
                         </>

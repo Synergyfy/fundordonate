@@ -189,14 +189,27 @@ export interface AdminLocation {
   latitude?: number | null;
   longitude?: number | null;
   isActive: boolean;
+  isPublic?: boolean;
   targetAmount: number;
   activationStatus: string;
+  statusOverride?: string | null;
+  internalState?:
+    | "DRAFT"
+    | "PLANNED"
+    | "PREPARING"
+    | "LAUNCHING"
+    | "ACTIVE_OPERATION"
+    | "ARCHIVED";
+  fullPath?: string | null;
   status?: string;
   fundingTarget?: number;
   fundingRaised?: number;
   raisedAmount?: number;
   region?: string;
+  mapEnabled?: boolean;
   mapZoomLevel?: number;
+  primaryImage?: string | null;
+  secondaryImage?: string | null;
   children?: AdminLocation[];
   metadata?: Record<string, any>;
   businessCount?: number;
@@ -237,6 +250,7 @@ export interface CreateLocationPayload {
   slug?: string;
   type: string;
   parentId?: string;
+  internalState?: string;
   shortDescription?: string;
   description?: string;
   heroHeadline?: string;
@@ -245,7 +259,11 @@ export interface CreateLocationPayload {
   latitude?: number;
   longitude?: number;
   mapZoomLevel?: number;
-  mapVisible?: boolean;
+  mapEnabled?: boolean;
+  primaryImage?: string;
+  secondaryImage?: string;
+  statusOverride?: string;
+  isPublic?: boolean;
   targetAmount?: number;
   activationStatus?: string;
   metadata?: Record<string, any>;
@@ -254,7 +272,7 @@ export interface CreateLocationPayload {
 export interface UpdateLocationPayload extends Partial<CreateLocationPayload> {
   isActive?: boolean;
   mapZoomLevel?: number;
-  mapVisible?: boolean;
+  mapEnabled?: boolean;
 }
 
 // =============================================================================

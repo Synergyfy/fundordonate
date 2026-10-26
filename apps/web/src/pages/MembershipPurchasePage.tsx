@@ -50,7 +50,7 @@ export default function MembershipPurchasePage() {
     });
   }, [locationId]);
 
-  const userIsBusiness = user?.userType === "BUSINESS";
+  const userIsBusiness = user?.userType?.toLowerCase() === "business";
 
   const filteredProgrammes = programmes.filter((p) => {
     if (p.audience === "BUSINESS" && userIsBusiness) return true;

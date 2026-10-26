@@ -67,6 +67,7 @@ import {
   EventsManagementPage,
   MapManagementPage,
   AdminLocationDetailPage,
+  AdminLocationsPage,
   AdminCityManagementPage,
   AdminRollUpConfig,
   AdminHubContentPage,
@@ -123,6 +124,7 @@ import {
   ConsumersListPage,
   // People & Participation
   AdminFoundingMembersPage,
+  AdminFoundingPage,
   AdminMembershipPage,
   // Business Owner Journey
   BusinessOnboardingPage,
@@ -373,6 +375,7 @@ function App() {
 
         {/* ─── Protected campaign creation ─── */}
         <Route path="/campaigns/create" element={<ProtectedRoute><PublicLayout><CampaignBuilder /></PublicLayout></ProtectedRoute>} />
+        <Route path="/membership/:locationId" element={<ProtectedRoute><MembershipPurchasePage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             ADMIN DASHBOARD — /admin
@@ -389,6 +392,8 @@ function App() {
           {/* UK Activation */}
           <Route path="/admin/hub-locations" element={<AdminNationalHubPage />} />
           <Route path="/admin/hub-locations/:id" element={<AdminLocationDetailPage />} />
+          <Route path="/admin/locations" element={<AdminLocationsPage />} />
+          <Route path="/admin/locations/new" element={<AdminAddCityWizard />} />
           <Route path="/admin/cities" element={<AdminCitiesPage />} />
           <Route path="/admin/cities/new" element={<AdminAddCityWizard />} />
           <Route path="/admin/cities/:id" element={<AdminCityManagementPage />} />
@@ -468,6 +473,7 @@ function App() {
           <Route path="/admin/businesses" element={<BusinessesManagementPage />} />
           <Route path="/admin/backers" element={<BackersManagementPage />} />
           <Route path="/admin/founding-members" element={<AdminFoundingMembersPage />} />
+          <Route path="/admin/founding-programmes" element={<AdminFoundingPage />} />
           <Route path="/admin/membership" element={<AdminMembershipPage />} />
           <Route path="/admin/donors" element={<AdminDonorsPage />} />
 
@@ -526,7 +532,6 @@ function App() {
           <Route path="/admin/system/health" element={<SystemHealthPage />} />
 
           {/* Cross-role pages (within admin layout) */}
-          <Route path="/membership/:locationId" element={<MembershipPurchasePage />} />
           <Route path="/profile/contributor" element={<ContributorProfilePage />} />
           <Route path="/terminal/:campaignId" element={<TerminalDonationPage />} />
           <Route path="/terminal" element={<TerminalDonationPage />} />

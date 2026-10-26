@@ -52,6 +52,7 @@ model User {
   subscription  Subscription?
   businesses    Business[]     @relation("BusinessOwner")
   contributions Contribution[] @relation("UserContributions")
+  campaignPosts CampaignPost[] @relation("CampaignPostAuthor")
   auditLogs     AuditLog[]
   foundingMemberships FoundingMembership[]
 
@@ -121,6 +122,15 @@ enum HubLocationType {
   COMMERCIAL_AREA
 }
 
+enum HubLocationInternalState {
+  DRAFT
+  PLANNED
+  PREPARING
+  LAUNCHING
+  ACTIVE_OPERATION
+  ARCHIVED
+}
+
 model HubLocation {
   id                 String          @id @default(uuid())
   name               String
@@ -136,7 +146,20 @@ model HubLocation {
   postcodePrefix     String?
   latitude           Float?
   longitude          Float?
+  /// Canonical hierarchy path (e.g. united-kingdom/manchester/northern-quarter).
+  fullPath           String?
   isActive           Boolean         @default(true)
+  /// Distinct from isActive: controls public visibility even while operating.
+  isPublic           Boolean         @default(true)
+  /// Internal admin workflow state; never exposed as the public status.
+  internalState      HubLocationInternalState @default(DRAFT)
+  /// Public activation status override resolved by the location service.
+  statusOverride     String?
+  /// Whether the location should appear on the UK map.
+  mapEnabled         Boolean         @default(true)
+  mapZoomLevel       Int             @default(6)
+  primaryImage       String?
+  secondaryImage     String?
   targetAmount       BigInt          @default(0)
   activationStatus   String          @default("PENDING") // PENDING | IN_PROGRESS | ACTIVATED | PAUSED
   metadata           Json            @default("{}")
@@ -146,10 +169,13 @@ model HubLocation {
   businesses         Business[]
   events             PlatformEvent[]
   foundingProgrammes FoundingProgramme[]
+  campaignLocations  CampaignLocation[]
 
   @@index([parentId])
   @@index([type])
   @@index([slug])
+  @@index([fullPath])
+  @@index([mapEnabled])
   @@map("hub_locations")
 }
 
@@ -398,6 +424,8 @@ model BusinessCampaign {
   startDate            DateTime?
   endDate              DateTime?
   backerCount          Int                    @default(0)
+  /// Campaign-level settings: FAQ copy, terms and other presentation config.
+  settings             Json                   @default("{}")
   
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
@@ -406,11 +434,52 @@ model BusinessCampaign {
   requestedChanges     CampaignRequestedChange[]
   contributions        Contribution[]
   rewardAttachments    CampaignRewardAttachment[]
+  posts                CampaignPost[]
+  locations            CampaignLocation[]
 
   @@index([businessId, status])
   @@index([templateId])
   @@index([status, endDate])
   @@map("business_campaigns")
+}
+
+enum CampaignLocationScope {
+  PRIMARY
+  SECONDARY
+  INCLUDED
+}
+
+/// Attribution and visibility links between a campaign and the UK Hub
+/// hierarchy. Exactly one PRIMARY row defines financial ownership.
+model CampaignLocation {
+  id         String                @id @default(uuid())
+  campaignId String
+  campaign   BusinessCampaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  locationId String
+  location   HubLocation           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  scope      CampaignLocationScope @default(INCLUDED)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([campaignId, locationId])
+  @@index([campaignId, scope])
+  @@index([locationId, scope])
+  @@map("campaign_locations")
+}
+
+model CampaignPost {
+  id         String           @id @default(uuid())
+  campaignId String
+  campaign   BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?            @relation("CampaignPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  title      String
+  content    String           @db.Text
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([campaignId, createdAt(sort: Desc)])
+  @@map("campaign_posts")
 }
 
 model CampaignFieldAnswer {

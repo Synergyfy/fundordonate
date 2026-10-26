@@ -1,5 +1,10 @@
 import type {
   LocationFlatItem,
+  LocationTreeBusiness,
+  LocationTreeCity,
+  LocationTreeHighStreet,
+  LocationTreeLocalArea,
+  LocationTreeNode,
   LocationTreeResponse,
 } from "@/types/campaign-wizard";
 import type {
@@ -10,11 +15,113 @@ import api from "../api";
 
 const API_BASE = "/api";
 
+// ── Location tree normalisation ──
+
+interface RawLocationNode {
+  id: string;
+  name: string;
+  slug: string;
+  type?: string;
+  parentId?: string | null;
+  activationStatus?: string | null;
+  publicStatus?: string | null;
+  isActive?: boolean;
+  children?: RawLocationNode[];
+}
+
+function toBaseNode(node: RawLocationNode, parentName: string): LocationTreeNode {
+  return {
+    id: node.id,
+    name: node.name,
+    slug: node.slug,
+    type: node.type ?? "UNKNOWN",
+    fullPath: [parentName, node.name].filter(Boolean).join(" / ") || null,
+    publicStatus:
+      node.publicStatus ??
+      node.activationStatus ??
+      (node.isActive === false ? "INACTIVE" : "ACTIVE"),
+  };
+}
+
+/**
+ * The public `/locations/tree` endpoint returns raw root locations with nested
+ * `children`. The wizard expects a `{ national, cities }` shape with
+ * `localAreas`, `highStreets` and `businesses` keys, so normalise it here.
+ */
+function normalizeLocationTree(raw: unknown): LocationTreeResponse {
+  let roots: RawLocationNode[] = [];
+
+  if (Array.isArray(raw)) {
+    roots = raw as RawLocationNode[];
+  } else if (raw && typeof raw === "object") {
+    const candidate = raw as { cities?: unknown; data?: unknown };
+    if (Array.isArray(candidate.cities)) {
+      roots = candidate.cities as RawLocationNode[];
+    } else if (Array.isArray(candidate.data)) {
+      roots = candidate.data as RawLocationNode[];
+    }
+  }
+
+  // The public tree is rooted at the National Hub. Location pickers want the
+  // city layer, so unwrap a NATIONAL container before normalising.
+  const nationalRoots = roots.filter((node) => (node.type ?? "").toUpperCase() === "NATIONAL");
+  if (nationalRoots.length > 0) {
+    roots = nationalRoots.flatMap((node) => node.children ?? []);
+  }
+
+  const cities: LocationTreeCity[] = roots
+    .filter((node) => (node.type ?? "CITY").toUpperCase() === "CITY")
+    .map((city) => {
+      const cityBase = toBaseNode(city, "");
+      const localAreas: LocationTreeLocalArea[] = (city.children ?? []).map(
+        (area) => {
+          const areaBase = toBaseNode(area, cityBase.fullPath ?? "");
+          const highStreets: LocationTreeHighStreet[] = (area.children ?? []).map(
+            (street) => {
+              const streetBase = toBaseNode(street, areaBase.fullPath ?? "");
+              const businesses: LocationTreeBusiness[] = (street.children ?? []).map(
+                (business) => ({
+                  ...toBaseNode(business, streetBase.fullPath ?? ""),
+                  type: "BUSINESS",
+                }),
+              );
+              return {
+                ...streetBase,
+                type: "HIGH_STREET",
+                businesses,
+              };
+            },
+          );
+          return {
+            ...areaBase,
+            type: (areaBase.type as LocationTreeLocalArea["type"]) ?? "LOCAL_AREA",
+            highStreets,
+          };
+        },
+      );
+      return {
+        ...cityBase,
+        type: "CITY",
+        localAreas,
+      };
+    });
+
+  return { national: null, cities };
+}
+
 // ── Public Endpoints ──
 
 export async function fetchLocationTree(): Promise<LocationTreeResponse> {
-  const res = await api.get<LocationTreeResponse>("/locations/tree");
-  return res;
+  const res = await api.get<unknown>("/locations/tree");
+  return normalizeLocationTree(res);
+}
+
+export async function resolveHubPath(path: string): Promise<any | null> {
+  try {
+    return await api.get("/locations/resolve", { params: { path } });
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchLocations(params?: {
@@ -49,6 +156,12 @@ export async function fetchHubCities(): Promise<HubLocation[]> {
       longitude: c.longitude,
       mapX: c.mapX,
       mapY: c.mapY,
+      mapVisible: c.mapEnabled ?? true,
+      mapEnabled: c.mapEnabled ?? true,
+      mapZoomLevel: c.mapZoomLevel ?? 6,
+      fullPath: c.fullPath,
+      primaryImage: c.imageOne,
+      secondaryImage: c.imageTwo,
       shortDescription: c.shortDescription || `${c.name} Hub`,
       description: c.description || `${c.name} Hub Activation`,
       isActive: c.isActive ?? true,
@@ -224,23 +337,22 @@ export async function getLocationById(id: string): Promise<HubLocation | null> {
 
 export async function getCityWithHierarchy(citySlug: string) {
   try {
-    const city = await fetchCityDetail(citySlug);
+    const [city, hubCities] = await Promise.all([
+      fetchCityDetail(citySlug),
+      fetchHubCities().catch(() => []),
+    ]);
     if (!city) return null;
+    const hubCity = hubCities.find((item) => item.slug === citySlug || item.id === city.id);
     const localAreas = (city.children || []).map((area: any) => ({
-      id: area.id,
-      name: area.name,
-      slug: area.slug,
+      ...area,
       highStreets: area.children?.length ?? 0,
       highStreetsList: (area.children || []).map((hs: any) => ({
-        id: hs.id,
-        name: hs.name,
-        slug: hs.slug,
+        ...hs,
       })),
     }));
     return {
-      id: city.id,
-      name: city.name,
-      slug: city.slug,
+      ...city,
+      ...(hubCity || {}),
       localAreas,
     };
   } catch {
@@ -291,6 +403,7 @@ export const locationService = {
   fetchCityDetail,
   fetchHubCities,
   fetchAdminLocations,
+  resolveHubPath,
   getEffectiveStatus,
   getActivationProgress,
   calculateDistance,

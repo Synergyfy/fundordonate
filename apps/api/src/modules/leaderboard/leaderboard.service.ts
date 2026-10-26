@@ -50,7 +50,15 @@ export class LeaderboardService {
     };
 
     let scopeName: string | undefined;
-    if (scopeId && level !== "national") {
+    if (scopeId && level === "campaign") {
+      // Campaign leaderboards are scoped by campaign id, not by hub location.
+      const campaign = await this.prisma.businessCampaign.findUnique({
+        where: { id: scopeId },
+        select: { title: true },
+      });
+      scopeName = campaign?.title;
+      where.campaignId = scopeId;
+    } else if (scopeId && level !== "national") {
       const location = await this.prisma.hubLocation.findUnique({
         where: { id: scopeId },
         include: { children: { include: { children: true } } },
@@ -59,7 +67,15 @@ export class LeaderboardService {
         ? [location.id, ...location.children.flatMap((c) => [c.id, ...c.children.map((g) => g.id)])]
         : [scopeId];
       scopeName = location?.name;
-      where.campaign = { business: { locationId: { in: locationIds } } };
+      where.campaign = {
+        OR: [
+          { locations: { some: { locationId: { in: locationIds } } } },
+          {
+            locations: { none: {} },
+            business: { locationId: { in: locationIds } },
+          },
+        ],
+      };
     } else if (scopeId) {
       const location = await this.prisma.hubLocation.findUnique({ where: { id: scopeId } });
       scopeName = location?.name;
@@ -95,6 +111,20 @@ export class LeaderboardService {
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
+    // `grouped._count` counts contributions, not campaigns. Count distinct
+    // campaigns per backer so the "campaigns backed" figure is accurate.
+    const campaignRows = backerIds.length
+      ? await this.prisma.contribution.groupBy({
+          by: ["backerId", "campaignId"],
+          where: { ...where, backerId: { in: backerIds } },
+        })
+      : [];
+    const campaignCountMap = new Map<string, number>();
+    for (const row of campaignRows) {
+      if (!row.backerId) continue;
+      campaignCountMap.set(row.backerId, (campaignCountMap.get(row.backerId) ?? 0) + 1);
+    }
+
     const entries: LeaderboardEntryView[] = grouped.map((g, index) => {
       const userId = g.backerId!;
       const user = userMap.get(userId);
@@ -108,7 +138,7 @@ export class LeaderboardService {
         name,
         rank: index + 1,
         totalContributed: g._sum.amount ?? 0,
-        campaignCount: g._count._all ?? 0,
+        campaignCount: campaignCountMap.get(userId) ?? 0,
         ...(user
           ? {
               user: {

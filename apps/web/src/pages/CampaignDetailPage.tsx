@@ -18,6 +18,18 @@ export function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contributionType, setContributionType] = useState<ContributionType | null>(null);
+  const [pendingRewardId, setPendingRewardId] = useState<string | null>(null);
+
+  const handleSelectReward = (rewardId: string) => {
+    setPendingRewardId(rewardId);
+    setContributionType("backer");
+    window.setTimeout(() => {
+      document.getElementById("contribute")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+  };
 
   useEffect(() => {
     if (!slug) return;
@@ -86,6 +98,9 @@ export function CampaignDetailPage() {
   }
 
   const isEnded = campaign.status === "completed" || campaign.status === "expired" || campaign.status === "cancelled";
+  const selectedReward = (campaign.rewards || []).find(
+    (reward: any) => reward.id === pendingRewardId,
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -112,7 +127,11 @@ export function CampaignDetailPage() {
 
       {/* Main Content */}
       <div className="container-page py-8">
-        <CampaignDetailBody campaign={campaign} user={user} />
+        <CampaignDetailBody
+          campaign={campaign}
+          user={user}
+          onSelectReward={handleSelectReward}
+        />
       </div>
 
       {/* Related Campaigns */}
@@ -144,6 +163,16 @@ export function CampaignDetailPage() {
                   <span className="capitalize">{campaign.hierarchyLevel.replace("_", " ")} Campaign</span>
                   {campaign.location && <span className="text-gray-400">· {campaign.location}</span>}
                 </span>
+                {campaign.citySlug && (
+                  <div className="mt-2">
+                    <Link
+                      to={`/uk-hub-activation/${campaign.citySlug}`}
+                      className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                    >
+                      View the {campaign.cityName || campaign.citySlug} City Hub →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
@@ -177,6 +206,7 @@ export function CampaignDetailPage() {
                     hierarchyLevel={campaign.hierarchyLevel}
                     locationName={campaign.location || undefined}
                     contributionType={contributionType}
+                    preselectedAmountPence={selectedReward?.amount}
                   />
                 ) : (
                   <PledgeForm
@@ -186,6 +216,7 @@ export function CampaignDetailPage() {
                     hierarchyLevel={campaign.hierarchyLevel}
                     locationName={campaign.location || undefined}
                     contributionType={contributionType}
+                    preselectedRewardId={pendingRewardId ?? undefined}
                   />
                 )}
               </div>

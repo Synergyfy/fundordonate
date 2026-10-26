@@ -57,7 +57,7 @@ export function CampaignLocationManager({
             className="flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2"
           >
             <div className="min-w-0 flex-1">
-              <Link to={`/campaigns/${c.slug}`} className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block">
+              <Link to={`/campaigns/${c.id}`} className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block">
                 {c.title}
               </Link>
               <span className="text-xs text-gray-400">{c.mode} · {c.status}</span>
