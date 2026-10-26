@@ -94,6 +94,7 @@ export const campaignService = {
     search?: string;
     status?: string;
     mode?: string;
+    audience?: string;
     authorId?: string;
     categoryId?: string;
     tag?: string;
@@ -114,9 +115,9 @@ export const campaignService = {
     return api.get(`/campaigns/slug/${slug}`);
   },
 
-  async getFeatured(limit = 6, audience?: string): Promise<Campaign[]> {
+  async getFeatured(limit = 6, audience?: string, mode?: string): Promise<Campaign[]> {
     const res = await api.get<Campaign[] | { items?: Campaign[] }>("/campaigns/featured", {
-      params: { limit, audience },
+      params: { limit, audience, mode },
     });
     if (Array.isArray(res)) return res;
     return res?.items ?? [];

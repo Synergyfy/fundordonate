@@ -24,7 +24,7 @@ export interface DetailCampaign {
   featuredImage?: string;
   videoUrl?: string;
   platformFee?: number;
-  settings: string;
+  settings?: string | Record<string, unknown>;
   createdAt: string;
   ownerContribution?: number;
   campaignTarget?: number;
@@ -40,6 +40,12 @@ export interface DetailCampaign {
   hierarchyLevel?: string | null;
   locationId?: string | null;
   location?: string;
+  citySlug?: string;
+  cityName?: string;
+  areaSlug?: string;
+  areaName?: string;
+  streetSlug?: string;
+  streetName?: string;
   campaignType?: string | { id: string; name: string; slug: string; isOpportunity?: boolean; eligibleTiers?: string; eligibleLevels?: string; parentInitiative?: string } | null;
   participationTypes?: string;
   backerTiersEnabled?: boolean;
@@ -54,6 +60,7 @@ interface CampaignDetailBodyProps {
   user?: { id?: string } | null;
   ctaLabel?: string;
   onCtaClick?: () => void;
+  onSelectReward?: (rewardId: string) => void;
 }
 
 const formatCurrency = (pence: number) =>
@@ -78,7 +85,7 @@ function getCountdownLabel(daysLeft: number): string {
   return `${daysLeft} days left`;
 }
 
-export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick }: CampaignDetailBodyProps) {
+export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick, onSelectReward }: CampaignDetailBodyProps) {
   const countdown = useCountdown(campaign.deadline || new Date().toISOString());
   const isCountdownActive =
     campaign.status !== "completed" &&
@@ -99,22 +106,32 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick }: Cam
     : "bg-secondary-500 hover:bg-secondary-600";
   const contributorLabel = campaign.mode === "fund" ? "Backers" : "Donors";
 
-  let faqs: { question: string; answer: string }[] = [];
+  let settings: Record<string, any> = {};
   try {
-    const settings = JSON.parse(campaign.settings || "{}");
-    if (settings.faqs && Array.isArray(settings.faqs)) {
-      faqs = settings.faqs.map((f: any) => ({
-        question: f.question || f.q || "",
-        answer: f.answer || f.a || "",
-      })).filter((f: { question: string; answer: string }) => f.question && f.answer);
-    }
-  } catch { /* ignore */ }
+    settings =
+      typeof campaign.settings === "string"
+        ? JSON.parse(campaign.settings || "{}")
+        : campaign.settings || {};
+  } catch { /* ignore malformed settings */ }
+
+  let faqs: { question: string; answer: string }[] = [];
+  if (Array.isArray(settings.faqs)) {
+    faqs = settings.faqs.map((f: any) => ({
+      question: f.question || f.q || "",
+      answer: f.answer || f.a || "",
+    })).filter((f: { question: string; answer: string }) => f.question && f.answer);
+  }
+
+  const terms =
+    typeof settings.terms === "string" || (settings.terms && typeof settings.terms === "object")
+      ? (settings.terms as string | Record<string, unknown>)
+      : undefined;
 
   return (
     <>
         <div className="flex flex-col">
         {/* Title & Meta */}
-        <div className="mb-8 order-1 lg:order-2">
+        <div className="mb-6">
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -214,14 +231,22 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick }: Cam
           )}
         </div>
         {/* Gallery + Campaign Timeline (desktop: side by side, mobile: stacked) */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-8 order-2 lg:order-1">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-6">
           {/* Gallery - 2/3 on desktop */}
-          <div className="lg:col-span-2">
-            <CampaignImageGallery
-              featuredImage={campaign.featuredImage || undefined}
-              images={campaign.images || []}
-              title={campaign.title}
-            />
+          <div className="flex flex-col gap-4 lg:col-span-2">
+            <div className="lg:min-h-[320px] lg:flex-1">
+              <CampaignImageGallery
+                featuredImage={campaign.featuredImage || undefined}
+                images={campaign.images || []}
+                title={campaign.title}
+                fill
+              />
+            </div>
+            {campaign.author && (
+              <div className="hidden shrink-0 lg:block">
+                <CampaignAuthorCard author={campaign.author} />
+              </div>
+            )}
           </div>
 
           {/* Campaign Timeline - 1/3 on desktop, after gallery on mobile */}
@@ -404,9 +429,11 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick }: Cam
               </div>
             )}
 
-            {/* Author Card */}
+            {/* Author card stays after the timeline on mobile */}
             {campaign.author && (
-              <CampaignAuthorCard author={campaign.author} />
+              <div className="lg:hidden">
+                <CampaignAuthorCard author={campaign.author} />
+              </div>
             )}
           </div>
         </div>
@@ -418,11 +445,14 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick }: Cam
           shortDescription={campaign.shortDescription || undefined}
           rewards={campaign.rewards || []}
           faqs={faqs}
+          terms={terms}
           campaignId={campaign.id}
           isAuthor={user?.id === campaign.author?.id}
           goalAmount={campaign.goalAmount}
           raisedAmount={campaign.raisedAmount}
           deadline={campaign.deadline}
+          canContribute={!isEnded}
+          onSelectReward={onSelectReward}
         />
 
         {/* Child Campaigns */}

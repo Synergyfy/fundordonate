@@ -13,12 +13,16 @@ export interface NationalHubSummaryDto {
   totalFundingRaised: number;
   totalBusinesses: number;
   totalCampaigns: number;
+  totalFoundingBusiness: number;
+  totalFoundingConsumer: number;
+  totalBackers: number;
 }
 
 export interface CityHubItemDto {
   id: string;
   name: string;
   slug: string;
+  fullPath?: string | null;
   region: string;
   status: "active" | "making_progress" | "needs_activation";
   activationProgress: number;
@@ -30,6 +34,13 @@ export interface CityHubItemDto {
   campaigns: number;
   mapX: number;
   mapY: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  mapEnabled?: boolean;
+  mapZoomLevel?: number | null;
+  isPublic?: boolean;
+  imageOne?: string | null;
+  imageTwo?: string | null;
   shortDescription: string;
   heroHeadline: string | null;
   postcodePrefix: string | null;
@@ -46,6 +57,227 @@ export class HubService {
   ) {}
 
   /**
+   * Resolves the effective public status. Admin overrides win; otherwise the
+   * internal activation status is mapped onto the three public states.
+   */
+  private resolvePublicStatus(
+    activationStatus?: string | null,
+    statusOverride?: string | null,
+  ): "active" | "making_progress" | "needs_activation" {
+    const value = (statusOverride || activationStatus || "").toUpperCase();
+    if (value === "ACTIVE" || value === "ACTIVATED") return "active";
+    if (
+      value === "MAKING_PROGRESS" ||
+      value === "IN_PROGRESS" ||
+      value === "PREPARING" ||
+      value === "LAUNCHING"
+    ) {
+      return "making_progress";
+    }
+    return "needs_activation";
+  }
+
+  private progressFor(raised: number, target: number): number {
+    if (target <= 0) return 0;
+    return Math.min(100, Math.round((raised / target) * 100));
+  }
+
+  /**
+   * Single source of truth for UK Hub roll-ups.
+   *
+   * A campaign belongs to its PRIMARY CampaignLocation (falling back to the
+   * business's HubLocation for legacy rows). We walk that location up to its
+   * City so high-street activity contributes exactly once to its city (and
+   * therefore to the national total).
+   */
+  private async buildCityAggregates() {
+    const [locations, businesses, campaigns, memberships] = await Promise.all([
+      this.prisma.hubLocation.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          type: true,
+          parentId: true,
+          fullPath: true,
+          isPublic: true,
+          activationStatus: true,
+          statusOverride: true,
+          targetAmount: true,
+          metadata: true,
+          latitude: true,
+          longitude: true,
+          mapEnabled: true,
+          mapZoomLevel: true,
+          shortDescription: true,
+          heroHeadline: true,
+          postcodePrefix: true,
+          primaryImage: true,
+          secondaryImage: true,
+        },
+      }),
+      this.prisma.business.findMany({
+        where: { status: "ACTIVE" },
+        select: { id: true, locationId: true },
+      }),
+      this.prisma.businessCampaign.findMany({
+        where: { status: BusinessCampaignStatus.ACTIVE },
+        select: {
+          id: true,
+          raisedAmount: true,
+          targetAmount: true,
+          business: { select: { locationId: true } },
+          locations: {
+            where: { scope: "PRIMARY" },
+            select: { locationId: true },
+            take: 1,
+          },
+        },
+      }),
+      this.prisma.foundingMembership.findMany({
+        where: { status: "ACTIVE" },
+        select: {
+          programme: { select: { audience: true, locationId: true } },
+        },
+      }),
+    ]);
+
+    const locationById = new Map(locations.map((location) => [location.id, location]));
+    const cityCache = new Map<string, (typeof locations)[number] | null>();
+    const cityOf = (locationId: string | null): (typeof locations)[number] | null => {
+      if (!locationId) return null;
+      if (cityCache.has(locationId)) return cityCache.get(locationId) ?? null;
+      let current = locationById.get(locationId);
+      let found: (typeof locations)[number] | null = null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current.id)) {
+        seen.add(current.id);
+        if (current.type === HubLocationType.CITY) {
+          found = current;
+          break;
+        }
+        current = current.parentId ? locationById.get(current.parentId) : undefined;
+      }
+      cityCache.set(locationId, found);
+      return found;
+    };
+
+    const cityLocations = locations
+      .filter((location) => location.type === HubLocationType.CITY)
+      .filter((location) => location.isPublic !== false)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    type Aggregate = {
+      city: (typeof locations)[number];
+      raised: number;
+      targetFromCampaigns: number;
+      campaigns: number;
+      businesses: number;
+      localAreas: number;
+      highStreets: number;
+      foundingBusiness: number;
+      foundingConsumer: number;
+      backers: Set<string>;
+      campaignIds: Set<string>;
+    };
+
+    const aggregates = new Map<string, Aggregate>();
+    for (const city of cityLocations) {
+      aggregates.set(city.id, {
+        city,
+        raised: 0,
+        targetFromCampaigns: 0,
+        campaigns: 0,
+        businesses: 0,
+        localAreas: 0,
+        highStreets: 0,
+        foundingBusiness: 0,
+        foundingConsumer: 0,
+        backers: new Set(),
+        campaignIds: new Set(),
+      });
+    }
+
+    // Count descendants once, per city.
+    for (const location of locations) {
+      if (location.type === HubLocationType.CITY) continue;
+      const city = cityOf(location.id);
+      if (!city) continue;
+      const aggregate = aggregates.get(city.id);
+      if (!aggregate) continue;
+      if (
+        location.type === HubLocationType.BOROUGH ||
+        location.type === HubLocationType.DISTRICT ||
+        location.type === HubLocationType.LOCAL_AREA
+      ) {
+        aggregate.localAreas += 1;
+      } else if (
+        location.type === HubLocationType.HIGH_STREET ||
+        location.type === HubLocationType.COMMERCIAL_AREA
+      ) {
+        aggregate.highStreets += 1;
+      }
+    }
+
+    // Business participation follows the business's registered location.
+    for (const business of businesses) {
+      const city = cityOf(business.locationId);
+      if (!city) continue;
+      const aggregate = aggregates.get(city.id);
+      if (aggregate) aggregate.businesses += 1;
+    }
+
+    // Financial attribution follows the campaign's PRIMARY location (falling
+    // back to the business location for legacy campaigns without a link).
+    for (const campaign of campaigns) {
+      const primaryLocationId =
+        campaign.locations[0]?.locationId ?? campaign.business?.locationId ?? null;
+      const city = cityOf(primaryLocationId);
+      if (!city) continue;
+      const aggregate = aggregates.get(city.id);
+      if (!aggregate) continue;
+      aggregate.campaigns += 1;
+      aggregate.raised += campaign.raisedAmount;
+      aggregate.targetFromCampaigns += campaign.targetAmount;
+      aggregate.campaignIds.add(campaign.id);
+    }
+
+    // Founding participation belongs to the programme's location.
+    for (const membership of memberships) {
+      const city = cityOf(membership.programme?.locationId ?? null);
+      if (!city) continue;
+      const aggregate = aggregates.get(city.id);
+      if (!aggregate) continue;
+      if (membership.programme?.audience === "BUSINESS") aggregate.foundingBusiness += 1;
+      else aggregate.foundingConsumer += 1;
+    }
+
+    // Distinct backers per city from completed contributions.
+    const campaignToCity = new Map<string, string>();
+    for (const aggregate of aggregates.values()) {
+      for (const id of aggregate.campaignIds) campaignToCity.set(id, aggregate.city.id);
+    }
+    if (campaignToCity.size > 0) {
+      const contributions = await this.prisma.contribution.findMany({
+        where: {
+          campaignId: { in: [...campaignToCity.keys()] },
+          status: ContributionStatus.COMPLETED,
+          backerId: { not: null },
+        },
+        select: { campaignId: true, backerId: true },
+      });
+      for (const contribution of contributions) {
+        const cityId = campaignToCity.get(contribution.campaignId);
+        if (!cityId || !contribution.backerId) continue;
+        aggregates.get(cityId)?.backers.add(contribution.backerId);
+      }
+    }
+
+    return [...aggregates.values()];
+  }
+
+  /**
    * Aggregates live nationwide metrics for the National Hub Overview page.
    */
   async getNationalSummary(): Promise<NationalHubSummaryDto> {
@@ -57,59 +289,43 @@ export class HubService {
       this.logger.warn(`Redis get failed for ${cacheKey}: ${err.message}`);
     }
 
-    const [cities, businessesCount, campaignsAgg] = await Promise.all([
-      this.prisma.hubLocation.findMany({
-        where: { type: HubLocationType.CITY, isActive: true },
-        select: {
-          id: true,
-          activationStatus: true,
-          targetAmount: true,
-          businesses: {
-            select: {
-              campaigns: {
-                where: { status: BusinessCampaignStatus.ACTIVE },
-                select: { raisedAmount: true, targetAmount: true },
-              },
-            },
-          },
-        },
-      }),
-      this.prisma.business.count({ where: { status: "ACTIVE" } }),
-      this.prisma.businessCampaign.aggregate({
-        where: { status: BusinessCampaignStatus.ACTIVE },
-        _sum: { raisedAmount: true, targetAmount: true },
-        _count: { id: true },
-      }),
-    ]);
+    const aggregates = await this.buildCityAggregates();
 
     let active = 0;
     let makingProgress = 0;
     let needsActivation = 0;
-    let totalTarget = 0;
-    let totalRaised = campaignsAgg._sum.raisedAmount ?? 0;
 
-    for (const city of cities) {
-      const statusUpper = (city.activationStatus || "PENDING").toUpperCase();
-      if (statusUpper === "ACTIVATED" || statusUpper === "ACTIVE") {
-        active++;
-      } else if (statusUpper === "IN_PROGRESS" || statusUpper === "MAKING_PROGRESS") {
-        makingProgress++;
-      } else {
-        needsActivation++;
-      }
-
-      totalTarget += Number(city.targetAmount) || 0;
+    for (const aggregate of aggregates) {
+      const status = this.resolvePublicStatus(
+        aggregate.city.activationStatus,
+        aggregate.city.statusOverride,
+      );
+      if (status === "active") active++;
+      else if (status === "making_progress") makingProgress++;
+      else needsActivation++;
     }
 
     const summary: NationalHubSummaryDto = {
-      totalCities: cities.length,
+      totalCities: aggregates.length,
       active,
       makingProgress,
       needsActivation,
-      totalFundingTarget: totalTarget,
-      totalFundingRaised: totalRaised,
-      totalBusinesses: businessesCount,
-      totalCampaigns: campaignsAgg._count.id,
+      totalFundingTarget: aggregates.reduce(
+        (sum, aggregate) => sum + (Number(aggregate.city.targetAmount) || 0),
+        0,
+      ),
+      totalFundingRaised: aggregates.reduce((sum, aggregate) => sum + aggregate.raised, 0),
+      totalBusinesses: aggregates.reduce((sum, aggregate) => sum + aggregate.businesses, 0),
+      totalCampaigns: aggregates.reduce((sum, aggregate) => sum + aggregate.campaigns, 0),
+      totalFoundingBusiness: aggregates.reduce(
+        (sum, aggregate) => sum + aggregate.foundingBusiness,
+        0,
+      ),
+      totalFoundingConsumer: aggregates.reduce(
+        (sum, aggregate) => sum + aggregate.foundingConsumer,
+        0,
+      ),
+      totalBackers: aggregates.reduce((sum, aggregate) => sum + aggregate.backers.size, 0),
     };
 
     try {
@@ -133,82 +349,38 @@ export class HubService {
       this.logger.warn(`Redis get failed for ${cacheKey}: ${err.message}`);
     }
 
-    const cities = await this.prisma.hubLocation.findMany({
-      where: { type: HubLocationType.CITY, isActive: true },
-      orderBy: { name: "asc" },
-      include: {
-        children: {
-          where: { isActive: true },
-          include: {
-            children: {
-              where: { isActive: true },
-            },
-          },
-        },
-        businesses: {
-          where: { status: "ACTIVE" },
-          include: {
-            campaigns: {
-              where: { status: BusinessCampaignStatus.ACTIVE },
-              select: { raisedAmount: true, targetAmount: true },
-            },
-          },
-        },
-      },
-    });
+    const aggregates = await this.buildCityAggregates();
 
-    const result = cities.map((c) => {
+    const result = aggregates.map(({ city: c, ...aggregate }) => {
       const meta = (c.metadata as Record<string, any>) || {};
-      const localAreasCount = c.children.length;
-      let highStreetsCount = 0;
-      for (const area of c.children) {
-        highStreetsCount += area.children.length;
-      }
-
-      let raised = 0;
-      let campaignsCount = 0;
-      for (const b of c.businesses) {
-        for (const camp of b.campaigns) {
-          raised += camp.raisedAmount;
-          campaignsCount++;
-        }
-      }
-
-      const target = Number(c.targetAmount) || 0;
-      const statusUpper = (c.activationStatus || "PENDING").toUpperCase();
-      let status: "active" | "making_progress" | "needs_activation" = "needs_activation";
-      let progress = 0;
-
-      if (statusUpper === "ACTIVATED" || statusUpper === "ACTIVE") {
-        status = "active";
-        progress = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 100;
-      } else if (statusUpper === "IN_PROGRESS" || statusUpper === "MAKING_PROGRESS") {
-        status = "making_progress";
-        progress = target > 0 ? Math.min(99, Math.round((raised / target) * 100)) : 50;
-      } else {
-        status = "needs_activation";
-        progress = target > 0 ? Math.min(49, Math.round((raised / target) * 100)) : 0;
-      }
-
-      if (meta.activationProgress) {
-        progress = Number(meta.activationProgress);
-      }
+      const target =
+        Number(c.targetAmount) || aggregate.targetFromCampaigns || 0;
+      const status = this.resolvePublicStatus(c.activationStatus, c.statusOverride);
+      const progress = this.progressFor(aggregate.raised, target);
 
       return {
         id: c.id,
         name: c.name,
         slug: c.slug,
+        fullPath: c.fullPath ?? c.slug,
         region: meta.region || "United Kingdom",
         status,
         activationProgress: progress,
         fundingTarget: target,
-        fundingRaised: raised,
-        localAreas: localAreasCount,
-        highStreets: highStreetsCount,
-        businesses: c.businesses.length,
-        campaigns: campaignsCount,
+        fundingRaised: aggregate.raised,
+        localAreas: aggregate.localAreas,
+        highStreets: aggregate.highStreets,
+        businesses: aggregate.businesses,
+        campaigns: aggregate.campaigns,
         mapX: meta.mapX ?? (c.longitude ? Math.round(((c.longitude + 5) / 7) * 100) : 50),
         mapY: meta.mapY ?? (c.latitude ? Math.round(((58 - c.latitude) / 8) * 100) : 50),
+        latitude: c.latitude,
+        longitude: c.longitude,
+        mapEnabled: c.mapEnabled,
+        mapZoomLevel: c.mapZoomLevel,
+        isPublic: c.isPublic,
+        imageOne: c.primaryImage,
+        imageTwo: c.secondaryImage,
         shortDescription:
           c.shortDescription ||
           `Local Hub for ${c.name} connecting High Streets, businesses and residents to the National Hub Community.`,
@@ -234,8 +406,13 @@ export class HubService {
    * Retrieves full city hub breakdown with its hierarchy tree.
    */
   async getCityBySlug(slug: string) {
-    const city = await this.prisma.hubLocation.findUnique({
-      where: { slug },
+    const city = await this.prisma.hubLocation.findFirst({
+      where: {
+        slug,
+        type: HubLocationType.CITY,
+        isActive: true,
+        isPublic: true,
+      },
       include: {
         children: {
           where: { isActive: true },
@@ -276,16 +453,16 @@ export class HubService {
     }
 
     const roots = await this.prisma.hubLocation.findMany({
-      where: { parentId: null, isActive: true },
+      where: { parentId: null, isActive: true, isPublic: true },
       include: {
         children: {
-          where: { isActive: true },
+          where: { isActive: true, isPublic: true },
           include: {
             children: {
-              where: { isActive: true },
+              where: { isActive: true, isPublic: true },
               include: {
                 children: {
-                  where: { isActive: true },
+                  where: { isActive: true, isPublic: true },
                 },
               },
             },
@@ -304,8 +481,205 @@ export class HubService {
     return roots;
   }
 
+  /**
+   * Resolves a canonical public hub path (e.g. `manchester/northern-quarter/oldham-street`)
+   * against `HubLocation.fullPath`. Supports paths with or without the
+   * `united-kingdom` prefix and returns the location, ancestors, children and
+   * live stats in one projection for the public hub page.
+   */
+  async resolveLocationPath(rawPath: string) {
+    const clean = decodeURIComponent(rawPath || "")
+      .replace(/^\/+|\/+$/g, "")
+      .split("/")
+      .filter(Boolean)
+      .join("/");
+    if (!clean) {
+      throw new NotFoundException("Location path is required");
+    }
+
+    const withoutRoutePrefix = clean.replace(/^uk-hub-activation\//, "");
+    const candidates = new Set<string>([withoutRoutePrefix]);
+    if (!withoutRoutePrefix.startsWith("united-kingdom/")) {
+      candidates.add(`united-kingdom/${withoutRoutePrefix}`);
+    }
+    if (withoutRoutePrefix !== clean) {
+      candidates.add(clean);
+    }
+
+    const locationSelect = {
+      id: true,
+      name: true,
+      slug: true,
+      type: true,
+      parentId: true,
+      fullPath: true,
+      shortDescription: true,
+      description: true,
+      heroHeadline: true,
+      heroSupportingText: true,
+      postcodePrefix: true,
+      latitude: true,
+      longitude: true,
+      isActive: true,
+      isPublic: true,
+      activationStatus: true,
+      statusOverride: true,
+      targetAmount: true,
+      metadata: true,
+      mapEnabled: true,
+      mapZoomLevel: true,
+      primaryImage: true,
+      secondaryImage: true,
+    } as const;
+
+    let location = await this.prisma.hubLocation.findFirst({
+      where: {
+        fullPath: { in: [...candidates] },
+        isActive: true,
+        isPublic: true,
+      },
+      select: locationSelect,
+    });
+
+    if (!location) {
+      const lastSegment = withoutRoutePrefix.split("/").filter(Boolean).pop();
+      if (lastSegment) {
+        location = await this.prisma.hubLocation.findFirst({
+          where: { slug: lastSegment, isActive: true, isPublic: true },
+          select: locationSelect,
+        });
+      }
+    }
+
+    if (!location) {
+      throw new NotFoundException(`Location path '${rawPath}' not found`);
+    }
+
+    // Ancestors, nearest first.
+    const ancestors: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      type: HubLocationType;
+      fullPath: string | null;
+    }> = [];
+    let parentId = location.parentId;
+    let guard = 0;
+    while (parentId && guard < 12) {
+      const parent = await this.prisma.hubLocation.findUnique({
+        where: { id: parentId },
+        select: { id: true, name: true, slug: true, type: true, fullPath: true, parentId: true },
+      });
+      if (!parent) break;
+      ancestors.unshift({
+        id: parent.id,
+        name: parent.name,
+        slug: parent.slug,
+        type: parent.type,
+        fullPath: parent.fullPath,
+      });
+      parentId = parent.parentId;
+      guard += 1;
+    }
+
+    const children = await this.prisma.hubLocation.findMany({
+      where: { parentId: location.id, isActive: true, isPublic: true },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        type: true,
+        fullPath: true,
+        shortDescription: true,
+        description: true,
+        activationStatus: true,
+        statusOverride: true,
+        targetAmount: true,
+        latitude: true,
+        longitude: true,
+        mapEnabled: true,
+        primaryImage: true,
+        secondaryImage: true,
+      },
+    });
+
+    const stats = await this.getLocationStats(location.id);
+
+    // Scope the business count to the location's whole subtree.
+    const allLocations = await this.prisma.hubLocation.findMany({
+      select: { id: true, parentId: true, type: true },
+    });
+    const childIds = new Map<string, string[]>();
+    for (const item of allLocations) {
+      if (!item.parentId) continue;
+      const list = childIds.get(item.parentId) ?? [];
+      list.push(item.id);
+      childIds.set(item.parentId, list);
+    }
+    const scopeIds: string[] = [];
+    const queue = [location.id];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (scopeIds.includes(id)) continue;
+      scopeIds.push(id);
+      queue.push(...(childIds.get(id) ?? []));
+    }
+    const businessCount = await this.prisma.business.count({
+      where: { locationId: { in: scopeIds }, status: "ACTIVE" },
+    });
+
+    const publicStatus = this.resolvePublicStatus(
+      location.activationStatus,
+      location.statusOverride,
+    );
+    const targetAmount = Number(location.targetAmount) || stats.fundingTarget || 0;
+    const activationProgress =
+      stats.activationProgress ||
+      (targetAmount > 0
+        ? Math.min(100, Math.round((stats.fundingRaised / targetAmount) * 100))
+        : 0);
+
+    return {
+      location: {
+        ...location,
+        targetAmount,
+        fundingTarget: targetAmount,
+        fundingRaised: stats.fundingRaised,
+        activationProgress,
+        publicStatus,
+        status: publicStatus,
+        businessCount,
+        campaignCount: stats.campaignCount,
+        totalBackers: stats.totalBackers,
+        foundingBusiness: stats.foundingBusiness,
+        foundingConsumer: stats.foundingConsumer,
+        childCounts: {
+          localAreas: scopeIds
+            .map((id) => allLocations.find((item) => item.id === id))
+            .filter(
+              (item) =>
+                item?.type === HubLocationType.BOROUGH ||
+                item?.type === HubLocationType.DISTRICT ||
+                item?.type === HubLocationType.LOCAL_AREA,
+            ).length,
+          highStreets: scopeIds
+            .map((id) => allLocations.find((item) => item.id === id))
+            .filter(
+              (item) =>
+                item?.type === HubLocationType.HIGH_STREET ||
+                item?.type === HubLocationType.COMMERCIAL_AREA,
+            ).length,
+        },
+      },
+      ancestors,
+      children,
+      stats,
+    };
+  }
+
   async getLocations(query?: { type?: string; parentId?: string; search?: string }) {
-    const where: Prisma.HubLocationWhereInput = { isActive: true };
+    const where: Prisma.HubLocationWhereInput = { isActive: true, isPublic: true };
     if (query?.type) where.type = query.type as HubLocationType;
     if (query?.parentId) where.parentId = query.parentId;
     if (query?.search) {
@@ -448,20 +822,36 @@ export class HubService {
       }
     }
 
-    const businesses = await this.prisma.business.findMany({
-      where: { locationId: { in: scopeIds }, status: "ACTIVE" },
+    const campaigns = await this.prisma.businessCampaign.findMany({
+      where: {
+        status: BusinessCampaignStatus.ACTIVE,
+        business: { status: "ACTIVE" },
+        OR: [
+          {
+            locations: {
+              some: {
+                locationId: { in: scopeIds },
+                scope: "PRIMARY",
+              },
+            },
+          },
+          {
+            locations: { none: {} },
+            business: { locationId: { in: scopeIds } },
+          },
+        ],
+      },
       select: {
         id: true,
-        locationId: true,
-        campaigns: {
-          where: { status: BusinessCampaignStatus.ACTIVE },
-          select: {
-            id: true,
-            raisedAmount: true,
-            targetAmount: true,
-            template: { select: { origin: true } },
-          },
+        raisedAmount: true,
+        targetAmount: true,
+        business: { select: { locationId: true } },
+        locations: {
+          where: { scope: "PRIMARY" },
+          select: { locationId: true },
+          take: 1,
         },
+        template: { select: { origin: true } },
       },
     });
 
@@ -483,18 +873,24 @@ export class HubService {
 
     let fundingRaised = 0;
     let targetFromCampaigns = 0;
-    for (const b of businesses) {
-      const locId = b.locationId ?? location.id;
+    for (const campaign of campaigns) {
+      const locId =
+        campaign.locations[0]?.locationId ??
+        campaign.business?.locationId ??
+        location.id;
       const childId = childOf.get(locId) ?? location.id;
-      for (const c of b.campaigns) {
-        const origin = c.template?.origin ?? "DIRECT";
-        campaignMeta.set(c.id, { origin, locationId: locId, raised: c.raisedAmount, childId });
-        fundingRaised += c.raisedAmount;
-        targetFromCampaigns += c.targetAmount;
-        const agg = ensureChild(childId);
-        agg.raised += c.raisedAmount;
-        agg.campaigns += 1;
-      }
+      const origin = campaign.template?.origin ?? "DIRECT";
+      campaignMeta.set(campaign.id, {
+        origin,
+        locationId: locId,
+        raised: campaign.raisedAmount,
+        childId,
+      });
+      fundingRaised += campaign.raisedAmount;
+      targetFromCampaigns += campaign.targetAmount;
+      const agg = ensureChild(childId);
+      agg.raised += campaign.raisedAmount;
+      agg.campaigns += 1;
     }
 
     const campaignIds = [...campaignMeta.keys()];
@@ -527,18 +923,31 @@ export class HubService {
       }
     }
 
-    const meta = (location.metadata as Record<string, unknown>) ?? {};
     const fundingTarget = Number(location.targetAmount) || targetFromCampaigns;
     const activationProgress =
-      Number(meta.activationProgress) ||
-      (fundingTarget > 0 ? Math.min(100, Math.round((fundingRaised / fundingTarget) * 100)) : 0);
+      fundingTarget > 0 ? Math.min(100, Math.round((fundingRaised / fundingTarget) * 100)) : 0;
 
-    const childType = (type: string) =>
-      type === HubLocationType.CITY
-        ? "city"
-        : type === HubLocationType.HIGH_STREET
-          ? "high_street"
-          : "local_area";
+    const programmes = await this.prisma.foundingProgramme.findMany({
+      where: { locationId: location.id, status: { not: "ARCHIVED" } },
+      select: { audience: true, totalAllocation: true, allocatedCount: true },
+    });
+    const businessProgrammes = programmes.filter((programme) => programme.audience === "BUSINESS");
+    const consumerProgrammes = programmes.filter((programme) => programme.audience === "CONSUMER");
+    const summariseProgrammes = (items: typeof programmes) => ({
+      total: items.reduce((sum, programme) => sum + programme.totalAllocation, 0),
+      allocated: items.reduce((sum, programme) => sum + programme.allocatedCount, 0),
+    });
+    const businessSummary = summariseProgrammes(businessProgrammes);
+    const consumerSummary = summariseProgrammes(consumerProgrammes);
+
+    const childType = (type: string) => {
+      if (type === HubLocationType.CITY) return "city";
+      if (type === HubLocationType.HIGH_STREET) return "high_street";
+      if (type === HubLocationType.COMMERCIAL_AREA) return "commercial_area";
+      if (type === HubLocationType.DISTRICT) return "district";
+      if (type === HubLocationType.BOROUGH) return "borough";
+      return "local_area";
+    };
 
     const childContributions = location.children.map((child) => {
       const agg = childAgg.get(child.id);
@@ -559,7 +968,13 @@ export class HubService {
           ? "city"
           : location.type === HubLocationType.HIGH_STREET
             ? "high_street"
-            : "borough";
+            : location.type === HubLocationType.COMMERCIAL_AREA
+              ? "commercial_area"
+              : location.type === HubLocationType.DISTRICT
+                ? "district"
+                : location.type === HubLocationType.LOCAL_AREA
+                  ? "local_area"
+                  : "borough";
 
     return {
       locationId: location.id,
@@ -574,17 +989,15 @@ export class HubService {
       totalPledges,
       totalBackers: backers.size,
       foundingBusiness: {
-        total: Number(meta.foundingBusinessTotal) || 0,
-        allocated: Number(meta.foundingBusinessAllocated) || 0,
-        remaining:
-          (Number(meta.foundingBusinessTotal) || 0) - (Number(meta.foundingBusinessAllocated) || 0),
+        total: businessSummary.total,
+        allocated: businessSummary.allocated,
+        remaining: Math.max(0, businessSummary.total - businessSummary.allocated),
         status: location.activationStatus || "PENDING",
       },
       foundingConsumer: {
-        total: Number(meta.foundingConsumerTotal) || 0,
-        allocated: Number(meta.foundingConsumerAllocated) || 0,
-        remaining:
-          (Number(meta.foundingConsumerTotal) || 0) - (Number(meta.foundingConsumerAllocated) || 0),
+        total: consumerSummary.total,
+        allocated: consumerSummary.allocated,
+        remaining: Math.max(0, consumerSummary.total - consumerSummary.allocated),
         status: location.activationStatus || "PENDING",
       },
       childContributions,

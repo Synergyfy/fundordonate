@@ -24,7 +24,17 @@ export class PublicCampaignQueryDto {
   @IsString()
   city?: string;
 
-  @ApiPropertyOptional({ description: "Filter by location ID (UUID)" })
+  @ApiPropertyOptional({
+    description:
+      "Filter by HubLocation slug (or ID). Includes activity in the location's descendants.",
+  })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({
+    description: "Filter by location ID (UUID). Includes descendant locations.",
+  })
   @IsOptional()
   @IsString()
   locationId?: string;

@@ -11,6 +11,7 @@ import {
   BarChart3, Target, Search,
 } from "lucide-react";
 import { adminApi, type AdminLocation } from "@/services/admin";
+import { hubProgressApi, type LocationStatsData } from "@/services/hub-progress";
 import { formatCurrency } from "@/utils/formatters";
 
 type CityTab = "overview" | "local-areas" | "high-streets" | "progress";
@@ -26,6 +27,7 @@ export function CityManagementPage() {
   const navigate = useNavigate();
   const [city, setCity] = useState<AdminLocation | null>(null);
   const [childLocations, setChildLocations] = useState<AdminLocation[]>([]);
+  const [stats, setStats] = useState<LocationStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<CityTab>("overview");
   const [search, setSearch] = useState("");
@@ -38,13 +40,18 @@ export function CityManagementPage() {
       try {
         loc = await adminApi.getLocation(id);
       } catch {
-        const res = await adminApi.getLocations({ search: id, limit: 1 });
-        loc = res.data?.[0];
+        const res = await adminApi.getLocations({ search: id, limit: 5 });
+        loc = (res.items || []).find((item) => item.slug === id) ?? res.items?.[0];
       }
       setCity(loc || null);
       if (loc?.id) {
         const childrenRes = await adminApi.getLocations({ parentId: loc.id, limit: 100 });
-        setChildLocations(childrenRes.data || []);
+        setChildLocations(childrenRes.items || []);
+        try {
+          setStats(await hubProgressApi.getCityStats(loc.id));
+        } catch {
+          setStats(null);
+        }
       }
     } catch {
       setCity(null);
@@ -77,7 +84,7 @@ export function CityManagementPage() {
   if (!city) {
     return (
       <div className="space-y-6">
-        <Link to="/admin/locations" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+        <Link to="/admin/hub-locations" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
           <ArrowLeft className="h-4 w-4" /> Back to UK Locations
         </Link>
         <div className="text-center py-12">
@@ -88,18 +95,23 @@ export function CityManagementPage() {
     );
   }
 
-  const statusKey = city.status === "ACTIVE" ? "ACTIVE" : "MAKING_PROGRESS";
+  const statusKey = (() => {
+    const value = (city.statusOverride || city.activationStatus || "").toUpperCase();
+    if (value === "ACTIVE" || value === "ACTIVATED") return "ACTIVE";
+    if (value === "IN_PROGRESS" || value === "MAKING_PROGRESS") return "MAKING_PROGRESS";
+    return "NEEDS_ACTIVATION";
+  })();
   const status = STATUS_META[statusKey] || STATUS_META.NEEDS_ACTIVATION;
-  const raised = (city as any).fundingRaised || 0;
-  const target = city.fundingTarget || 10000000;
-  const progress = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 0;
+  const raised = stats?.fundingRaised ?? city.fundingRaised ?? 0;
+  const target = stats?.fundingTarget ?? city.targetAmount ?? 0;
+  const progress = stats?.activationProgress ?? (target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 0);
 
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
       <div>
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-          <Link to="/admin/locations" className="hover:text-gray-700">Locations</Link>
+          <Link to="/admin/hub-locations" className="hover:text-gray-700">Locations</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="text-gray-900 font-medium">{city.name}</span>
         </div>
@@ -119,7 +131,7 @@ export function CityManagementPage() {
             </div>
           </div>
           <Link
-            to={`/admin/locations/${city.id}`}
+            to={`/admin/hub-locations/${city.id}`}
             className="rounded-lg bg-primary-600 px-4 py-2 text-xs font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             Edit City Record
@@ -200,7 +212,7 @@ export function CityManagementPage() {
                       </div>
                     </div>
                     <Link
-                      to={`/admin/locations/${area.id}`}
+                      to={`/admin/hub-locations/${area.id}`}
                       className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                     >
                       Manage →
@@ -231,7 +243,7 @@ export function CityManagementPage() {
                       </div>
                     </div>
                     <Link
-                      to={`/admin/locations/${street.id}`}
+                      to={`/admin/hub-locations/${street.id}`}
                       className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                     >
                       Manage →

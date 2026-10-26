@@ -11,9 +11,11 @@ interface Props {
   featuredImage?: string;
   images: Image[];
   title: string;
+  /** Stretch the gallery to fill its container height on desktop. */
+  fill?: boolean;
 }
 
-export function CampaignImageGallery({ featuredImage, images, title }: Props) {
+export function CampaignImageGallery({ featuredImage, images, title, fill = false }: Props) {
   const allImages = [
     ...(featuredImage ? [{ id: "featured", url: featuredImage, alt: title, order: -1 }] : []),
     ...images,
@@ -23,7 +25,7 @@ export function CampaignImageGallery({ featuredImage, images, title }: Props) {
 
   if (allImages.length === 0) {
     return (
-      <div className="flex aspect-video items-center justify-center rounded-xl bg-gray-100">
+      <div className={`flex aspect-video items-center justify-center rounded-xl bg-gray-100 ${fill ? "lg:h-full lg:aspect-auto" : ""}`}>
         <svg className="h-20 w-20 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
@@ -34,11 +36,11 @@ export function CampaignImageGallery({ featuredImage, images, title }: Props) {
   if (allImages.length === 1) {
     const img = allImages[0]!;
     return (
-      <div className="overflow-hidden rounded-xl">
+      <div className={`overflow-hidden rounded-xl ${fill ? "lg:h-full" : ""}`}>
         <img
           src={img.url}
           alt={img.alt || title}
-          className="aspect-video w-full object-cover"
+          className={`w-full object-cover ${fill ? "aspect-video lg:aspect-auto lg:h-full" : "aspect-video"}`}
         />
       </div>
     );
@@ -47,13 +49,13 @@ export function CampaignImageGallery({ featuredImage, images, title }: Props) {
   const currentImage = allImages[selectedIndex] || allImages[0]!;
 
   return (
-    <div className="space-y-3">
+    <div className={fill ? "flex h-full flex-col gap-3" : "space-y-3"}>
       {/* Main Image */}
-      <div className="relative overflow-hidden rounded-xl">
+      <div className={`relative overflow-hidden rounded-xl ${fill ? "lg:min-h-0 lg:flex-1" : ""}`}>
         <img
           src={currentImage.url}
           alt={currentImage.alt || title}
-          className="aspect-video w-full object-cover"
+          className={`w-full object-cover ${fill ? "aspect-video lg:aspect-auto lg:h-full" : "aspect-video"}`}
         />
         {allImages.length > 1 && (
           <>
@@ -82,7 +84,7 @@ export function CampaignImageGallery({ featuredImage, images, title }: Props) {
 
       {/* Thumbnails */}
       {allImages.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className={`flex gap-2 overflow-x-auto pb-1 scrollbar-hide ${fill ? "shrink-0" : ""}`}>
           {allImages.map((image, index) => (
             <button
               key={image.id}

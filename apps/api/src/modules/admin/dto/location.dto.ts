@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { HubLocationType } from "@prisma/client";
+import { HubLocationInternalState, HubLocationType } from "@prisma/client";
 import {
   IsBoolean,
   IsEnum,
@@ -67,6 +67,11 @@ export class CreateLocationDto {
   @IsEnum(HubLocationType)
   type!: HubLocationType;
 
+  @ApiPropertyOptional({ enum: HubLocationInternalState, default: HubLocationInternalState.DRAFT })
+  @IsOptional()
+  @IsEnum(HubLocationInternalState)
+  internalState?: HubLocationInternalState;
+
   @ApiPropertyOptional({ description: "Parent location ID in hierarchy" })
   @IsOptional()
   @IsString()
@@ -112,6 +117,33 @@ export class CreateLocationDto {
   @IsNumber()
   longitude?: number;
 
+  @ApiPropertyOptional({ description: "Whether the location appears on the UK map", default: true })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  mapEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: "Map zoom level when this location is selected", default: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  mapZoomLevel?: number;
+
+  @ApiPropertyOptional({ description: "Primary public image URL" })
+  @IsOptional()
+  @IsString()
+  primaryImage?: string;
+
+  @ApiPropertyOptional({ description: "Secondary public image URL" })
+  @IsOptional()
+  @IsString()
+  secondaryImage?: string;
+
+  @ApiPropertyOptional({ example: "ACTIVE", description: "Public activation status override" })
+  @IsOptional()
+  @IsString()
+  statusOverride?: string;
+
   @ApiPropertyOptional({ example: 5000000, description: "Target in pence" })
   @IsOptional()
   @Type(() => Number)
@@ -147,6 +179,11 @@ export class UpdateLocationDto {
   @IsOptional()
   @IsEnum(HubLocationType)
   type?: HubLocationType;
+
+  @ApiPropertyOptional({ enum: HubLocationInternalState })
+  @IsOptional()
+  @IsEnum(HubLocationInternalState)
+  internalState?: HubLocationInternalState;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -192,6 +229,39 @@ export class UpdateLocationDto {
   @Type(() => Number)
   @IsNumber()
   longitude?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  mapEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  mapZoomLevel?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  primaryImage?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  secondaryImage?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  statusOverride?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isPublic?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

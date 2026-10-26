@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContributionDestination } from "./ContributionDestination";
 import { McomCheckoutPanel } from "@/components/payment/McomCheckoutPanel";
@@ -22,9 +22,10 @@ interface Props {
   hierarchyLevel?: string | null;
   locationName?: string;
   contributionType?: "backer" | "founding_member";
+  preselectedRewardId?: string;
 }
 
-export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel, locationName, contributionType }: Props) {
+export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel, locationName, contributionType, preselectedRewardId }: Props) {
   const navigate = useNavigate();
   const [selectedRewardId, setSelectedRewardId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -56,6 +57,17 @@ export function PledgeForm({ campaignId, campaignTitle, rewards, hierarchyLevel,
       setAmount(String(reward.amount / 100));
     }
   };
+
+  useEffect(() => {
+    if (!preselectedRewardId) return;
+    const reward = rewards.find(
+      (r) => r.id === preselectedRewardId && r.status === "active",
+    );
+    if (!reward) return;
+    setSelectedRewardId(reward.id);
+    setAmount(String(reward.amount / 100));
+    setShowPayment(false);
+  }, [preselectedRewardId, rewards]);
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();

@@ -3,7 +3,7 @@
 // Explain → Membership Selection (Bronze/Silver/Gold/Platinum × Standard/Pro/Pro+)
 // =============================================================================
 
-import { useParams, Link, useLocation } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi, type Season } from "@/services/season";
@@ -35,6 +35,7 @@ export default function FoundingMemberPage() {
     highStreetSlug: string;
   }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const isConsumerContext = location.pathname.includes("/consumer/");
   const ctx = isConsumerContext ? "consumer" : "business";
 
@@ -64,7 +65,8 @@ export default function FoundingMemberPage() {
   };
 
   const handleConfirm = () => {
-    setStep("complete");
+    const audience = isConsumerContext ? "consumer" : "business";
+    navigate(`/founding/${citySlug || "manchester"}?audience=${audience}`);
   };
 
   return (

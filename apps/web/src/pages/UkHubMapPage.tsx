@@ -33,6 +33,7 @@ export default function UkHubMapPage() {
 
   const filteredLocations = useMemo(() => {
     return hubLocations.filter((l: HubLocation) => {
+      if (l.mapVisible === false) return false;
       if (filters.status !== "all" && l.status !== filters.status) return false;
       if (filters.type !== "all" && (l.type as any) !== filters.type) return false;
       if (filters.founding === "business" && (!l.opportunities || l.opportunities.length === 0)) return false;

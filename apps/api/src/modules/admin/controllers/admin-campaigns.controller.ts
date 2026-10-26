@@ -29,6 +29,7 @@ import {
   UpdateCampaignTemplateDto,
   UpdateCampaignTemplateStatusDto,
 } from "../dto/campaign-admin.dto";
+import { SetCampaignLocationsDto } from "../dto/campaign-locations.dto";
 
 @ApiTags("Admin Campaigns")
 @ApiBearerAuth()
@@ -152,6 +153,23 @@ export class AdminCampaignsController {
       businessCount: businessCount ? Number(businessCount) : undefined,
       baseTargetPerBusiness: baseTargetPerBusiness ? Number(baseTargetPerBusiness) : undefined,
     });
+  }
+
+  @Get(":id/locations")
+  @ApiOperation({ summary: "Get a campaign's primary and additional hub locations" })
+  @ApiResponse({ status: 200, description: "Successfully retrieved campaign locations" })
+  async getCampaignLocations(@Param("id") id: string) {
+    return this.campaignsService.getCampaignLocations(id);
+  }
+
+  @Put(":id/locations")
+  @ApiOperation({ summary: "Replace a campaign's primary and additional hub locations" })
+  @ApiResponse({ status: 200, description: "Campaign locations updated" })
+  async setCampaignLocations(
+    @Param("id") id: string,
+    @Body() dto: SetCampaignLocationsDto,
+  ) {
+    return this.campaignsService.setCampaignLocations(id, dto);
   }
 
   @Get(":id")

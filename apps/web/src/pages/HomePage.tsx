@@ -221,12 +221,19 @@ function HeroCarousel() {
   );
 }
 
-/* ───────────────────── funding discovery tabs ───────────────────── */
+/* ───────────────────── featured campaign tiers ───────────────────── */
 
-const FUNDING_TABS = [
+const AUDIENCE_FILTERS: { label: string; value?: "business" | "consumer" }[] = [
+  { label: "All campaigns" },
+  { label: "Business campaigns", value: "business" },
+  { label: "Consumer campaigns", value: "consumer" },
+];
+
+const FEATURED_TIERS = [
   {
+    id: "fund-campaigns",
     icon: Landmark,
-    label: "Fund",
+    title: "Fund campaigns",
     description:
       "Back a campaign and help it reach its goal. Every fund opportunity is a live campaign — follow it from the first pledge to the finish.",
     bullets: [
@@ -234,11 +241,14 @@ const FUNDING_TABS = [
       "Back the campaigns that matter to your community",
       "Follow each campaign's progress as it grows",
     ],
-    cta: { label: "Explore Fund Campaigns", to: "/campaigns?mode=fund" },
+    mode: "fund",
+    cta: { label: "View all fund campaigns", to: "/campaigns?mode=fund" },
+    emptyTitle: "No fund campaigns to show right now",
   },
   {
+    id: "donate-campaigns",
     icon: Heart,
-    label: "Donate",
+    title: "Donate campaigns",
     description:
       "Support causes across the UK directly. Every donation is tied to a real campaign, so you can see exactly what your contribution helps achieve.",
     bullets: [
@@ -246,15 +256,68 @@ const FUNDING_TABS = [
       "Give in a few simple, secure steps",
       "Follow the progress of the campaigns you support",
     ],
-    cta: { label: "Start Donating", to: "/donate" },
+    mode: "donation",
+    cta: { label: "View all donation campaigns", to: "/campaigns?mode=donation" },
+    emptyTitle: "No donation campaigns to show right now",
   },
-];
+] as const;
 
-const CAMPAIGN_FILTERS: { label: string; value?: string }[] = [
-  { label: "All campaigns" },
-  { label: "Fund", value: "fund" },
-  { label: "Donate", value: "donation" },
-];
+type FeaturedTier = (typeof FEATURED_TIERS)[number];
+
+function FeaturedTierSection({
+  tier,
+  audience,
+}: {
+  tier: FeaturedTier;
+  audience?: "business" | "consumer";
+}) {
+  const Icon = tier.icon;
+  const viewAllTo = audience
+    ? `/campaigns/${audience}?mode=${tier.mode}`
+    : tier.cta.to;
+  return (
+    <div id={tier.id} className="scroll-mt-24">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary-100 bg-primary-50">
+            <Icon className="h-5 w-5 text-primary-600" aria-hidden="true" />
+          </span>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900 tracking-tight">{tier.title}</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 leading-relaxed">{tier.description}</p>
+            <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+              {tier.bullets.map((bullet) => (
+                <li key={bullet} className="flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5 shrink-0 text-secondary-500" aria-hidden="true" />
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <Link
+          to={viewAllTo}
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 sm:mt-1"
+        >
+          {tier.cta.label}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="mt-5">
+        <CampaignCarousel
+          mode={tier.mode}
+          audience={audience}
+          limit={4}
+          rows={1}
+          label={tier.title}
+          emptyTitle={tier.emptyTitle}
+          emptyDescription="Try another audience filter, or browse everything that is currently live."
+          compact
+        />
+      </div>
+    </div>
+  );
+}
 
 /* ───────────────────── hub city visual ───────────────────── */
 
@@ -306,113 +369,23 @@ function HubCitiesVisual() {
 /* ───────────────────── page ───────────────────── */
 
 export default function HomePage() {
-  const [campaignFilter, setCampaignFilter] = useState<string | undefined>(undefined);
+  const [audienceFilter, setAudienceFilter] = useState<"business" | "consumer" | undefined>(undefined);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [fundingTab, setFundingTab] = useState(0);
-
-  const activeFunding = FUNDING_TABS[fundingTab] ?? FUNDING_TABS[0]!;
-  const ActiveFundingIcon = activeFunding.icon;
-
-  const handleFundingTabKey = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    e.preventDefault();
-    setFundingTab((i) =>
-      e.key === "ArrowRight"
-        ? (i + 1) % FUNDING_TABS.length
-        : (i - 1 + FUNDING_TABS.length) % FUNDING_TABS.length
-    );
-  };
 
   return (
     <>
       {/* ═══ 1 · HERO CAROUSEL ═══ */}
       <HeroCarousel />
 
-      {/* ═══ 2 · FUNDING DISCOVERY ═══ */}
-      <Section className="py-14 md:py-20 bg-white">
-        <div className="container-page">
-          <SectionHeader
-            title="Explore Campaign"
-            description="Two ways to take part — switch a tab to see what each one offers."
-          />
-
-          {/* Tabs */}
-          <div
-            role="tablist"
-            aria-label="Ways to take part"
-            className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 lg:max-w-xl"
-          >
-            {FUNDING_TABS.map((tab, i) => (
-              <button
-                key={tab.label}
-                type="button"
-                role="tab"
-                id={`funding-tab-${i}`}
-                aria-selected={fundingTab === i}
-                aria-controls={`funding-panel-${i}`}
-                tabIndex={fundingTab === i ? 0 : -1}
-                onClick={() => setFundingTab(i)}
-                onKeyDown={handleFundingTabKey}
-                className={`shrink-0 flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-                  fundingTab === i
-                    ? "border-primary-600 bg-primary-600 text-white shadow-sm"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-primary-200 hover:text-primary-600"
-                }`}
-              >
-                <tab.icon
-                  className={`w-4 h-4 shrink-0 ${fundingTab === i ? "text-white" : "text-primary-600"}`}
-                  aria-hidden="true"
-                />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Panel */}
-          <div
-            key={fundingTab}
-            role="tabpanel"
-            id={`funding-panel-${fundingTab}`}
-            aria-labelledby={`funding-tab-${fundingTab}`}
-            className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-6 sm:p-8 animate-fade-in"
-          >
-            <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-1.5 mb-4">
-                  <ActiveFundingIcon className="w-4 h-4 text-primary-600" aria-hidden="true" />
-                  <span className="text-sm font-semibold text-primary-700">{activeFunding.label}</span>
-                </div>
-                <p className="text-gray-600 leading-relaxed">{activeFunding.description}</p>
-                <ul className="mt-4 space-y-2">
-                  {activeFunding.bullets.map((bullet) => (
-                    <li key={bullet} className="flex items-start gap-2.5 text-sm text-gray-600">
-                      <Check className="w-4 h-4 mt-0.5 shrink-0 text-secondary-500" aria-hidden="true" />
-                      {bullet}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-white p-6 text-center shadow-sm">
-                <p className="text-sm text-gray-500 mb-4">Ready to get started?</p>
-                <Link to={activeFunding.cta.to} className="btn-primary inline-flex items-center gap-2">
-                  {activeFunding.cta.label}
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </Link>
-                <p className="mt-3 text-xs text-gray-400">Opens the {activeFunding.label} section</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      {/* ═══ 3 · FEATURED CAMPAIGNS ═══ */}
+      {/* ═══ 2 · FEATURED CAMPAIGNS (FUND + DONATE) ═══ */}
       <Section className="py-14 md:py-20 bg-gray-50">
         <div className="container-page">
           <div className="mb-8 md:mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div className="max-w-2xl">
               <h2 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">Featured Campaigns</h2>
               <p className="mt-2 text-gray-500 leading-relaxed">
-                Selected campaigns from across the UK — browse them, understand what they need and take part.
+                Selected Fund and Donate campaigns from across the UK — browse them, understand what
+                they need and take part.
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -428,13 +401,15 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setFilterOpen((o) => !o)}
                   className={`btn-secondary inline-flex items-center gap-2 ${
-                    campaignFilter ? "!border-primary-200 !text-primary-600" : ""
+                    audienceFilter ? "!border-primary-200 !text-primary-600" : ""
                   }`}
                   aria-haspopup="menu"
                   aria-expanded={filterOpen}
                 >
                   <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
-                  {campaignFilter ? (CAMPAIGN_FILTERS.find((f) => f.value === campaignFilter)?.label ?? "Filter") : "Filter"}
+                  {audienceFilter
+                    ? (AUDIENCE_FILTERS.find((f) => f.value === audienceFilter)?.label ?? "Filter")
+                    : "Filter"}
                   <ChevronDown
                     className={`w-4 h-4 transition-transform ${filterOpen ? "rotate-180" : ""}`}
                     aria-hidden="true"
@@ -448,22 +423,22 @@ export default function HomePage() {
                       onClick={() => setFilterOpen(false)}
                       className="fixed inset-0 z-10 cursor-default"
                     />
-                    <div role="menu" className="absolute right-0 z-20 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
-                      {CAMPAIGN_FILTERS.map((f) => (
+                    <div role="menu" className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                      {AUDIENCE_FILTERS.map((f) => (
                         <button
                           key={f.label}
                           type="button"
                           role="menuitem"
                           onClick={() => {
-                            setCampaignFilter(f.value);
+                            setAudienceFilter(f.value);
                             setFilterOpen(false);
                           }}
                           className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                            campaignFilter === f.value ? "bg-primary-50 text-primary-700" : "text-gray-700 hover:bg-gray-50"
+                            audienceFilter === f.value ? "bg-primary-50 text-primary-700" : "text-gray-700 hover:bg-gray-50"
                           }`}
                         >
                           {f.label}
-                          {campaignFilter === f.value && <Check className="w-4 h-4 text-primary-600" aria-hidden="true" />}
+                          {audienceFilter === f.value && <Check className="w-4 h-4 text-primary-600" aria-hidden="true" />}
                         </button>
                       ))}
                     </div>
@@ -472,7 +447,12 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-          <CampaignCarousel mode={campaignFilter} />
+
+          <div className="space-y-12 md:space-y-16">
+            {FEATURED_TIERS.map((tier) => (
+              <FeaturedTierSection key={tier.id} tier={tier} audience={audienceFilter} />
+            ))}
+          </div>
         </div>
       </Section>
 

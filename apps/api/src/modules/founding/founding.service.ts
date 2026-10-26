@@ -15,6 +15,10 @@ import {
   Prisma,
 } from "@prisma/client";
 import { JoinProgrammeDto } from "./dto/join-programme.dto";
+import {
+  CreateFoundingProgrammeDto,
+  UpdateFoundingProgrammeDto,
+} from "./dto/admin-programme.dto";
 
 const ORIGINAL_MEMBER_LIMIT = 150;
 
@@ -218,6 +222,199 @@ export class FoundingService {
     });
 
     return { isOriginal: earlierCount <= ORIGINAL_MEMBER_LIMIT };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin management
+  // ---------------------------------------------------------------------------
+
+  async adminListProgrammes(query: {
+    locationId?: string;
+    audience?: FoundingAudience;
+    status?: FoundingProgrammeStatus;
+  }) {
+    const programmes = await this.prisma.foundingProgramme.findMany({
+      where: {
+        ...(query.locationId ? { locationId: query.locationId } : {}),
+        ...(query.audience ? { audience: query.audience } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      include: {
+        location: { select: { id: true, name: true, slug: true, type: true } },
+        _count: { select: { memberships: true } },
+      },
+      orderBy: [{ location: { name: "asc" } }, { audience: "asc" }],
+    });
+
+    return programmes.map((programme) => ({
+      ...this.toProgrammeView(programme, programme.location.name),
+      location: programme.location,
+      memberCount: programme._count.memberships,
+    }));
+  }
+
+  async adminListMemberships(query: {
+    programmeId?: string;
+    locationId?: string;
+    audience?: FoundingAudience;
+    status?: FoundingMembershipStatus;
+  }) {
+    const memberships = await this.prisma.foundingMembership.findMany({
+      where: {
+        ...(query.programmeId ? { programmeId: query.programmeId } : {}),
+        ...(query.locationId ? { programme: { locationId: query.locationId } } : {}),
+        ...(query.audience ? { programme: { audience: query.audience } } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            username: true,
+            email: true,
+          },
+        },
+        programme: {
+          select: {
+            id: true,
+            title: true,
+            audience: true,
+            location: { select: { id: true, name: true, slug: true } },
+          },
+        },
+      },
+      orderBy: { startedAt: "desc" },
+      take: 500,
+    });
+
+    return memberships.map((membership) => ({
+      id: membership.id,
+      userId: membership.userId,
+      memberName:
+        [membership.user.firstName, membership.user.lastName].filter(Boolean).join(" ") ||
+        membership.user.username ||
+        membership.user.email,
+      email: membership.user.email,
+      programmeId: membership.programmeId,
+      programmeTitle: membership.programme.title,
+      audience: membership.programme.audience,
+      locationId: membership.programme.location.id,
+      locationName: membership.programme.location.name,
+      tier: membership.tier,
+      accessLevel: membership.accessLevel,
+      status: membership.status,
+      contributionAmount: Number(membership.contributionAmount),
+      isMonthly: membership.isMonthly,
+      grantedAt: membership.startedAt.toISOString(),
+    }));
+  }
+
+  async createProgramme(dto: CreateFoundingProgrammeDto) {
+    const location = await this.prisma.hubLocation.findUnique({
+      where: { id: dto.locationId },
+      select: { id: true, name: true },
+    });
+    if (!location) {
+      throw new NotFoundException(`Location ${dto.locationId} not found`);
+    }
+
+    const existing = await this.prisma.foundingProgramme.findUnique({
+      where: { locationId_audience: { locationId: dto.locationId, audience: dto.audience } },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `${location.name} already has a ${dto.audience.toLowerCase()} founding programme.`,
+      );
+    }
+
+    const created = await this.prisma.foundingProgramme.create({
+      data: {
+        locationId: dto.locationId,
+        audience: dto.audience,
+        title: dto.title,
+        description: dto.description,
+        status: dto.status ?? FoundingProgrammeStatus.OPEN,
+        totalAllocation: dto.totalAllocation ?? 0,
+        opensAt: dto.opensAt ? new Date(dto.opensAt) : undefined,
+        closesAt: dto.closesAt ? new Date(dto.closesAt) : undefined,
+        contributionConfig: (dto.contributionConfig ?? {}) as Prisma.InputJsonValue,
+        benefitConfig: dto.benefitConfig ?? [],
+        eligibilityConfig: (dto.eligibilityConfig ?? {}) as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      ...this.toProgrammeView(created, location.name),
+      location: { id: location.id, name: location.name },
+      memberCount: 0,
+    };
+  }
+
+  async updateProgramme(programmeId: string, dto: UpdateFoundingProgrammeDto) {
+    const programme = await this.prisma.foundingProgramme.findUnique({
+      where: { id: programmeId },
+      include: { location: { select: { id: true, name: true } } },
+    });
+    if (!programme) {
+      throw new NotFoundException(`Founding programme ${programmeId} not found`);
+    }
+
+    if (
+      dto.totalAllocation !== undefined &&
+      dto.totalAllocation < programme.allocatedCount
+    ) {
+      throw new BadRequestException(
+        `Allocation cannot be lower than the ${programme.allocatedCount} places already allocated.`,
+      );
+    }
+
+    const data: Prisma.FoundingProgrammeUpdateInput = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.status !== undefined) data.status = dto.status;
+    if (dto.totalAllocation !== undefined) data.totalAllocation = dto.totalAllocation;
+    if (dto.opensAt !== undefined) data.opensAt = new Date(dto.opensAt);
+    if (dto.closesAt !== undefined) data.closesAt = new Date(dto.closesAt);
+    if (dto.contributionConfig !== undefined) {
+      data.contributionConfig = dto.contributionConfig as Prisma.InputJsonValue;
+    }
+    if (dto.benefitConfig !== undefined) data.benefitConfig = dto.benefitConfig;
+    if (dto.eligibilityConfig !== undefined) {
+      data.eligibilityConfig = dto.eligibilityConfig as Prisma.InputJsonValue;
+    }
+
+    const updated = await this.prisma.foundingProgramme.update({
+      where: { id: programmeId },
+      data,
+      include: { _count: { select: { memberships: true } } },
+    });
+
+    return {
+      ...this.toProgrammeView(updated, programme.location.name),
+      location: programme.location,
+      memberCount: updated._count.memberships,
+    };
+  }
+
+  async archiveProgramme(programmeId: string) {
+    const programme = await this.prisma.foundingProgramme.findUnique({
+      where: { id: programmeId },
+      include: { _count: { select: { memberships: true } } },
+    });
+    if (!programme) {
+      throw new NotFoundException(`Founding programme ${programmeId} not found`);
+    }
+
+    if (programme._count.memberships > 0) {
+      throw new BadRequestException(
+        "This programme has members and cannot be deleted. Close it instead.",
+      );
+    }
+
+    await this.prisma.foundingProgramme.delete({ where: { id: programmeId } });
+    return { success: true, deletedId: programmeId };
   }
 
   // ---------------------------------------------------------------------------

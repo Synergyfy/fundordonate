@@ -30,7 +30,7 @@ export function CampaignCard({ campaign }: { campaign: PublicCampaign }) {
 
   return (
     <Link
-      to={`/campaigns/${campaign.slug || campaign.id}`}
+      to={`/campaigns/${campaign.id}`}
       className="group block h-full bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
     >
       <div className="aspect-video bg-gray-100 overflow-hidden relative">

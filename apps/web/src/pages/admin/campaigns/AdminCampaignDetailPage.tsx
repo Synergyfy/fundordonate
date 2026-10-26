@@ -187,6 +187,13 @@ export default function AdminCampaignDetailPage() {
   const [coverageSearch, setCoverageSearch] = useState("");
   const [postcodeInput, setPostcodeInput] = useState("");
   const [locationToast, setLocationToast] = useState(false);
+  const [campaignLocations, setCampaignLocations] = useState<any[]>([]);
+  const [hubLocations, setHubLocations] = useState<any[]>([]);
+  const [primaryLocationId, setPrimaryLocationId] = useState("");
+  const [secondaryLocationIds, setSecondaryLocationIds] = useState<string[]>([]);
+  const [additionalLocationIds, setAdditionalLocationIds] = useState<string[]>([]);
+  const [savingLocations, setSavingLocations] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
 
   const fetchCampaign = useCallback(async () => {
     if (!id) {
@@ -221,6 +228,31 @@ export default function AdminCampaignDetailPage() {
       setStatus(mappedStatus as CampaignStatus);
       if (data.coverage) {
         setCoverage(data.coverage);
+      }
+
+      // Real UK Hub location attribution.
+      try {
+        const [locationLinks, locationsRes] = await Promise.all([
+          adminApi.getCampaignLocations(id),
+          adminApi.getLocations({ limit: 200 }),
+        ]);
+        setCampaignLocations(locationLinks || []);
+        setHubLocations(locationsRes.items || []);
+        setPrimaryLocationId(
+          locationLinks?.find((link: any) => link.scope === "PRIMARY")?.locationId ?? "",
+        );
+        setAdditionalLocationIds(
+          (locationLinks || [])
+            .filter((link: any) => link.scope === "INCLUDED")
+            .map((link: any) => link.locationId),
+        );
+        setSecondaryLocationIds(
+          (locationLinks || [])
+            .filter((link: any) => link.scope === "SECONDARY")
+            .map((link: any) => link.locationId),
+        );
+      } catch {
+        // Non-fatal — the campaign remains usable without location links.
       }
 
       // Fetch live rewards
@@ -478,239 +510,267 @@ export default function AdminCampaignDetailPage() {
   );
 
   const renderLocations = () => {
-    const cov = coverage;
-    const tc = (s: string) => s.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-    const cityLabel = (slug: string) => tc(slug);
-    const areaLabel = (_citySlug: string, areaSlug: string) => tc(areaSlug);
-    const streetLabel = (_citySlug: string, _areaSlug: string, streetSlug: string) => tc(streetSlug);
-
-    if (!cov) {
+    const activeLocations = hubLocations.filter((location) => location.isActive !== false);
+    const filteredLocations = activeLocations.filter((location) => {
+      if (!locationSearch.trim()) return true;
+      const q = locationSearch.toLowerCase();
       return (
-        <div className="rounded-xl border bg-white p-8 text-center text-sm text-gray-500">
-          Location coverage is unavailable for this campaign.
-        </div>
+        location.name.toLowerCase().includes(q) ||
+        (location.fullPath || "").toLowerCase().includes(q) ||
+        location.type.toLowerCase().includes(q)
       );
-    }
+    });
+    const primaryLocation = activeLocations.find((location) => location.id === primaryLocationId);
+    const secondaryLocations = activeLocations.filter((location) =>
+      secondaryLocationIds.includes(location.id),
+    );
+    const additionalLocations = activeLocations.filter((location) =>
+      additionalLocationIds.includes(location.id),
+    );
 
-    const commitCoverage = (next: CampaignCoverage) => {
-      setCoverage(next);
-      if (campaignData) {
-        adminApi.updateCampaign(campaignData.id, { coverage: next }).catch(() => {});
+    const toggleAdditional = (locationId: string, checked: boolean) => {
+      setSecondaryLocationIds((current) => current.filter((id) => id !== locationId));
+      setAdditionalLocationIds((current) =>
+        checked
+          ? [...new Set([...current, locationId])]
+          : current.filter((id) => id !== locationId),
+      );
+    };
+
+    const setVisibilityScope = (locationId: string, scope: "SECONDARY" | "INCLUDED") => {
+      if (scope === "SECONDARY") {
+        setAdditionalLocationIds((current) => current.filter((id) => id !== locationId));
+        setSecondaryLocationIds((current) => [...new Set([...current, locationId])]);
+      } else {
+        setSecondaryLocationIds((current) => current.filter((id) => id !== locationId));
+        setAdditionalLocationIds((current) => [...new Set([...current, locationId])]);
       }
-      setLocationToast(true);
-      setTimeout(() => setLocationToast(false), 2000);
     };
 
-    const removeCity = (slug: string) =>
-      commitCoverage({
-        ...cov,
-        cities: cov.cities.filter((x) => x !== slug),
-        localAreas: cov.localAreas.filter((a) => a.citySlug !== slug),
-        highStreets: cov.highStreets.filter((s) => s.citySlug !== slug),
-      });
-    const removeArea = (citySlug: string, areaSlug: string) =>
-      commitCoverage({
-        ...cov,
-        localAreas: cov.localAreas.filter((a) => !(a.citySlug === citySlug && a.areaSlug === areaSlug)),
-        highStreets: cov.highStreets.filter((s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug)),
-      });
-    const removeStreet = (citySlug: string, areaSlug: string, streetSlug: string) =>
-      commitCoverage({
-        ...cov,
-        highStreets: cov.highStreets.filter(
-          (s) => !(s.citySlug === citySlug && s.areaSlug === areaSlug && s.streetSlug === streetSlug)
-        ),
-      });
-    const removePostcode = (pc: string) =>
-      commitCoverage({ ...cov, postcodes: cov.postcodes.filter((p) => p !== pc) });
-
-    const openEditor = () => {
-      setDraftCoverage({
-        mode: cov.mode || "custom",
-        national: cov.national,
-        cities: [...cov.cities],
-        localAreas: cov.localAreas.map((a) => ({ ...a })),
-        highStreets: cov.highStreets.map((s) => ({ ...s })),
-        postcodes: [...cov.postcodes],
-      });
-      setCoverageSearch("");
-      setPostcodeInput("");
-      setShowLocationModal(true);
+    const saveLocations = async () => {
+      if (!campaignData?.id) return;
+      setSavingLocations(true);
+      try {
+        const links = await adminApi.setCampaignLocations(campaignData.id, {
+          primaryLocationId: primaryLocationId || undefined,
+          secondaryLocationIds: secondaryLocationIds.filter(
+            (id) => id !== primaryLocationId,
+          ),
+          additionalLocationIds: additionalLocationIds.filter(
+            (id) => id !== primaryLocationId && !secondaryLocationIds.includes(id),
+          ),
+        });
+        setCampaignLocations(links || []);
+        setLocationToast(true);
+        setTimeout(() => setLocationToast(false), 2200);
+      } catch (err: any) {
+        alert(err?.message || "Failed to update campaign locations.");
+      } finally {
+        setSavingLocations(false);
+      }
     };
-
-    const chip = (
-      key: string,
-      label: string,
-      sub: string,
-      onRemove: (() => void) | undefined,
-      icon: React.ReactNode = <MapPin className="h-4 w-4 text-primary-600" />
-    ) => (
-      <div key={key} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100">{icon}</div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-gray-900">{label}</div>
-            <div className="truncate text-xs text-gray-500">{sub}</div>
-          </div>
-        </div>
-        {onRemove ? (
-          <button
-            onClick={onRemove}
-            title="Remove from coverage"
-            className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        ) : (
-          <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-            Primary
-          </span>
-        )}
-      </div>
-    );
-
-    const section = (title: string, count: number, rows: React.ReactNode) => (
-      <div className="rounded-xl border bg-white overflow-hidden">
-        <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500">{title}</h4>
-          <span className="text-xs text-gray-400">{count}</span>
-        </div>
-        <div className="divide-y">
-          {count === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-gray-400">Nothing covered at this level yet.</div>
-          ) : (
-            rows
-          )}
-        </div>
-      </div>
-    );
 
     return (
-      <div className="space-y-4">
-        {/* Coverage summary */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
-              <MapPin className="h-5 w-5 text-primary-600" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Location Coverage</h3>
-              <p className="text-xs text-gray-500">{summarizeCoverage(cov)}</p>
-            </div>
+      <div className="space-y-5">
+        {locationToast && (
+          <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+            Campaign locations updated
           </div>
-          <div className="flex items-center gap-3">
-            {cov.national && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                <Globe className="h-3.5 w-3.5" /> Nationwide
-              </span>
-            )}
-            <button
-              onClick={openEditor}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-700"
-            >
-              <MapPin className="h-3.5 w-3.5" /> Expand coverage
-            </button>
+        )}
+
+        <div className="rounded-xl border border-primary-100 bg-primary-50 p-4">
+          <div className="flex items-start gap-3">
+            <MapPin className="mt-0.5 h-5 w-5 text-primary-600" />
+            <div>
+              <h3 className="font-semibold text-primary-900">Location attribution</h3>
+              <p className="mt-1 text-sm text-primary-700">
+                The primary location owns this campaign&apos;s funding for city and national
+                aggregation. Additional locations make the campaign visible there without
+                counting its funding twice.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Cities */}
-        {section(
-          "Cities covered",
-          cov.cities.length,
-          <>
-            {cov.cities.map((slug) =>
-              chip(
-                `city-${slug}`,
-                cityLabel(slug),
-                "City hub",
-                slug === (campaignData?.citySlug || campaignData?.business?.location?.slug) ? undefined : () => removeCity(slug),
-                <Globe className="h-4 w-4 text-primary-600" />
-              )
-            )}
-          </>
-        )}
+        <div className="grid gap-5 lg:grid-cols-[360px,1fr]">
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-white p-5">
+              <label className="mb-1.5 block text-sm font-semibold text-gray-900">
+                Primary location
+              </label>
+              <p className="mb-3 text-xs text-gray-500">
+                Financial progress rolls up to this location.
+              </p>
+              <select
+                value={primaryLocationId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setPrimaryLocationId(next);
+                  setAdditionalLocationIds((current) =>
+                    current.filter((id) => id !== next),
+                  );
+                }}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm"
+              >
+                <option value="">No primary location</option>
+                {activeLocations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name} · {location.type}
+                  </option>
+                ))}
+              </select>
 
-        {/* Local areas */}
-        {section(
-          "Local areas",
-          cov.localAreas.length,
-          <>
-            {cov.localAreas.map((a) =>
-              chip(
-                `area-${a.citySlug}-${a.areaSlug}`,
-                areaLabel(a.citySlug, a.areaSlug),
-                `${cityLabel(a.citySlug)} · local area`,
-                a.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) && a.areaSlug === campaignData?.areaSlug
-                  ? undefined
-                  : () => removeArea(a.citySlug, a.areaSlug)
-              )
-            )}
-          </>
-        )}
+              {primaryLocation ? (
+                <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+                  <div className="font-semibold text-gray-900">{primaryLocation.name}</div>
+                  <div>{primaryLocation.type} · {primaryLocation.activationStatus}</div>
+                  {primaryLocation.fullPath && (
+                    <div className="mt-1 break-all text-gray-400">{primaryLocation.fullPath}</div>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-amber-600">
+                  No primary location. This campaign will not contribute to city totals.
+                </p>
+              )}
+            </div>
 
-        {/* High streets */}
-        {section(
-          "High streets",
-          cov.highStreets.length,
-          <>
-            {cov.highStreets.map((s) =>
-              chip(
-                `street-${s.citySlug}-${s.areaSlug}-${s.streetSlug}`,
-                streetLabel(s.citySlug, s.areaSlug, s.streetSlug),
-                `${areaLabel(s.citySlug, s.areaSlug)} · ${cityLabel(s.citySlug)}`,
-                s.citySlug === (campaignData?.citySlug || campaignData?.business?.location?.slug) &&
-                s.areaSlug === campaignData?.areaSlug &&
-                s.streetSlug === campaignData?.streetSlug
-                  ? undefined
-                  : () => removeStreet(s.citySlug, s.areaSlug, s.streetSlug)
-              )
-            )}
-          </>
-        )}
-
-        {/* Postcodes */}
-        {section(
-          "Postcodes",
-          cov.postcodes.length,
-          <>
-            {cov.postcodes.map((pc) =>
-              chip(
-                `pc-${pc}`,
-                pc,
-                "Postcode district",
-                () => removePostcode(pc),
-                <Hash className="h-4 w-4 text-primary-600" />
-              )
-            )}
-          </>
-        )}
-
-        {/* Location Toast */}
-        {locationToast && (
-          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
-            <CheckCircle2 className="h-4 w-4" />
-            Location coverage updated
+            <div className="rounded-xl border bg-white p-5">
+              <h3 className="text-sm font-semibold text-gray-900">Current attribution</h3>
+              <div className="mt-3 space-y-2">
+                {campaignLocations.length === 0 && (
+                  <p className="text-xs text-gray-500">No location links saved yet.</p>
+                )}
+                {campaignLocations.map((link) => (
+                  <div
+                    key={link.id}
+                    className="flex items-start justify-between gap-2 rounded-lg border px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        {link.location?.name}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {link.location?.type} · {link.location?.fullPath}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        link.scope === "PRIMARY"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {link.scope}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* Expand Coverage Modal */}
-        {showLocationModal && draftCoverage && (
-          <CoverageEditorModal
-            draft={draftCoverage}
-            search={coverageSearch}
-            postcodeInput={postcodeInput}
-            onSearch={setCoverageSearch}
-            onPostcodeInput={setPostcodeInput}
-            onSetDraft={(next) => setDraftCoverage(next)}
-            onClose={() => setShowLocationModal(false)}
-            onApply={() => {
-              commitCoverage(draftCoverage);
-              setShowLocationModal(false);
-            }}
-            cityLabel={cityLabel}
-            areaLabel={areaLabel}
-          />
-        )}
+          <div className="rounded-xl border bg-white p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Additional visibility
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Select locations where this campaign should also appear.
+                </p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                {secondaryLocations.length + additionalLocations.length} selected
+              </span>
+            </div>
+
+            <div className="relative mt-3">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={locationSearch}
+                onChange={(event) => setLocationSearch(event.target.value)}
+                placeholder="Search by name, type or path..."
+                className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"
+              />
+            </div>
+
+            <div className="mt-3 max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+              {filteredLocations.map((location) => {
+                const isPrimary = location.id === primaryLocationId;
+                const isSecondary = secondaryLocationIds.includes(location.id);
+                const checked = isSecondary || additionalLocationIds.includes(location.id);
+                return (
+                  <div
+                    key={location.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 ${
+                      isPrimary ? "opacity-50" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked || isPrimary}
+                      disabled={isPrimary}
+                      onChange={(event) => toggleAdditional(location.id, event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-gray-900">
+                          {location.name}
+                        </span>
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+                          {location.type}
+                        </span>
+                        {isPrimary && (
+                          <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                            PRIMARY
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-[11px] text-gray-400">
+                        {location.fullPath}
+                      </div>
+                    </div>
+                    {checked && !isPrimary && (
+                      <select
+                        value={isSecondary ? "SECONDARY" : "INCLUDED"}
+                        onChange={(event) =>
+                          setVisibilityScope(
+                            location.id,
+                            event.target.value as "SECONDARY" | "INCLUDED",
+                          )
+                        }
+                        className="rounded border bg-white px-2 py-1 text-[11px] font-medium"
+                      >
+                        <option value="SECONDARY">Secondary</option>
+                        <option value="INCLUDED">Included</option>
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredLocations.length === 0 && (
+                <p className="px-3 py-6 text-center text-xs text-gray-500">
+                  No matching locations.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                Additional locations are visibility-only. Funding stays with the primary.
+              </p>
+              <button
+                onClick={saveLocations}
+                disabled={savingLocations}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+              >
+                {savingLocations ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Save attribution
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1259,7 +1319,14 @@ export default function AdminCampaignDetailPage() {
           <div>
             <div className="text-sm font-medium text-gray-900">Locations</div>
             <div className="text-xs text-gray-500">
-              {coverage ? summarizeCoverage(coverage) : "—"}
+              {(() => {
+                const primary =
+                  campaignLocations.find((link) => link.scope === "PRIMARY")?.location?.name ||
+                  hubLocations.find((location) => location.id === primaryLocationId)?.name;
+                const extra = campaignLocations.filter((link) => link.scope !== "PRIMARY").length;
+                if (!primary) return "—";
+                return extra > 0 ? `${primary} + ${extra} more` : primary;
+              })()}
             </div>
           </div>
           <button

@@ -126,6 +126,11 @@ export function ConsumerCampaignDetailPage() {
         user={user}
         ctaLabel={isFounding ? "Become a Founding Member" : "Back This Campaign"}
         onCtaClick={handleParticipate}
+        onSelectReward={(rewardId) =>
+          navigate(
+            `/contribute/${campaign.slug}?reward=${encodeURIComponent(rewardId)}`,
+          )
+        }
       />
 
       <RelatedCampaigns

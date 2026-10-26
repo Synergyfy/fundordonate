@@ -8,12 +8,15 @@ import { PrismaService } from "@/prisma/prisma.service";
 import {
   BusinessCampaign,
   BusinessCampaignStatus,
+  CampaignLocationScope,
   CampaignTemplate,
+  Prisma,
   TemplateApprovalMode,
 } from "@prisma/client";
 import { AuditLinkStatus } from "@prisma/client";
 import { CampaignQueryDto } from "../dto/campaign-query.dto";
 import { SaveCampaignAnswersDto } from "../dto/save-campaign-answers.dto";
+import { UpdateCampaignSettingsDto } from "../dto/update-campaign-settings.dto";
 import { normalizeBusinessRewardsMode } from "@/modules/rewards/reward-config.util";
 import { AuditDataService } from "@/modules/audit/services/audit-data.service";
 import {
@@ -190,6 +193,18 @@ export class BusinessCampaignService {
         },
       });
 
+      // The business's registered HubLocation is the campaign's primary
+      // location until an admin explicitly assigns a different one.
+      if (business.locationId) {
+        await tx.campaignLocation.create({
+          data: {
+            campaignId: campaign.id,
+            locationId: business.locationId,
+            scope: CampaignLocationScope.PRIMARY,
+          },
+        });
+      }
+
       // Pre-populate fields based on template configuration and known business data
       const fieldsConfig = (template.fieldsConfig as any[]) || [];
       // 247GBS Audit never exposes raw answers — pre-fill audit-sourced fields
@@ -338,6 +353,7 @@ export class BusinessCampaignService {
       businessContribution: campaign.businessContribution,
       rewardTriggered: campaign.rewardTriggered,
       backers: campaign._count.contributions,
+      settings: campaign.settings ?? {},
       template: {
         id: campaign.template.id,
         name: campaign.template.name,
@@ -420,6 +436,30 @@ export class BusinessCampaignService {
         }),
       ),
     );
+  }
+
+  /**
+   * Updates campaign-level presentation settings (FAQs, terms, etc.).
+   */
+  async saveSettings(
+    businessId: string,
+    campaignId: string,
+    dto: UpdateCampaignSettingsDto,
+  ) {
+    const campaign = await this.prisma.businessCampaign.findFirst({
+      where: { id: campaignId, businessId },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException("Campaign not found");
+    }
+
+    return this.prisma.businessCampaign.update({
+      where: { id: campaignId },
+      data: { settings: dto.settings as Prisma.InputJsonValue },
+      select: { id: true, settings: true },
+    });
   }
 
   /**

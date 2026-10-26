@@ -20,6 +20,7 @@ import { CurrentBusiness } from "../decorators/current-business.decorator";
 import { BusinessCampaignService } from "../services/business-campaign.service";
 import { CampaignQueryDto } from "../dto/campaign-query.dto";
 import { SaveCampaignAnswersDto } from "../dto/save-campaign-answers.dto";
+import { UpdateCampaignSettingsDto } from "../dto/update-campaign-settings.dto";
 
 @ApiTags("Business Campaigns & Campaign Centre")
 @ApiBearerAuth()
@@ -90,6 +91,21 @@ export class BusinessCampaignController {
   ) {
     await this.campaignService.saveAnswers(businessId, campaignId, dto);
     return { success: true, message: "Field answers saved successfully" };
+  }
+
+  @Patch("campaigns/:id/settings")
+  @ApiOperation({
+    summary: "Update campaign presentation settings",
+    description:
+      "Stores campaign-level FAQ, terms and other presentation settings as JSON.",
+  })
+  @ApiResponse({ status: 200, description: "Settings updated" })
+  async saveSettings(
+    @CurrentBusiness("id") businessId: string,
+    @Param("id") campaignId: string,
+    @Body() dto: UpdateCampaignSettingsDto,
+  ) {
+    return this.campaignService.saveSettings(businessId, campaignId, dto);
   }
 
   @Post("campaigns/:id/submit")

@@ -81,6 +81,25 @@ export default function HubCampaignDetailPage() {
     return campaign?.rewards || [];
   }, [campaign]);
 
+  const campaignSettings = useMemo<Record<string, any>>(() => {
+    const raw = campaign?.settings;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw;
+    if (typeof raw === "string") {
+      try { return JSON.parse(raw); } catch { return {}; }
+    }
+    return {};
+  }, [campaign]);
+
+  const campaignFaqs = useMemo(() => {
+    if (!Array.isArray(campaignSettings.faqs)) return [];
+    return campaignSettings.faqs
+      .map((f: any) => ({
+        question: f?.question || f?.q || "",
+        answer: f?.answer || f?.a || "",
+      }))
+      .filter((f: { question: string; answer: string }) => f.question && f.answer);
+  }, [campaignSettings]);
+
   const campaignListPath = `/uk-hub-activation/${citySlug}/${localAreaSlug}/${highStreetSlug}/${audienceType}`;
 
   // ── Modal State ──
@@ -115,6 +134,17 @@ export default function HubCampaignDetailPage() {
     expiresAt: string;
     items: { title: string; physicalType: string }[];
   }[]>([]);
+
+  const handleSelectReward = (rewardId: string) => {
+    const reward = campaignRewards.find((r: any) => r.id === rewardId);
+    setContributionType("backer");
+    setBackerStep("amount");
+    if (reward?.amount) {
+      setBackerAmount(Number(reward.amount) / 100);
+      setBackerCustomAmount(true);
+    }
+    setShowJoinModal(true);
+  };
 
   const hasFoundingProgramme = true;
 
@@ -394,7 +424,9 @@ export default function HubCampaignDetailPage() {
             shortDescription={campaign.shortDescription || ""}
             campaignId={campaign.id}
             rewards={campaignRewards}
-            faqs={[]}
+            faqs={campaignFaqs}
+            terms={campaignSettings.terms}
+            onSelectReward={handleSelectReward}
           />
         </div>
 

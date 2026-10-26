@@ -15,11 +15,22 @@ interface Props {
   shortDescription?: string;
   rewards: RewardItem[];
   faqs: Faq[];
+  terms?: string | Record<string, unknown>;
   campaignId: string;
   isAuthor?: boolean;
   goalAmount?: number;
   raisedAmount?: number;
   deadline?: string;
+  canContribute?: boolean;
+  onSelectReward?: (rewardId: string) => void;
+}
+
+function humanizeTermKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 type Tab = "story" | "rewards" | "leaderboard" | "updates" | "terms";
@@ -46,8 +57,11 @@ export function CampaignTabs({
   shortDescription,
   rewards,
   faqs,
+  terms,
   campaignId,
   isAuthor,
+  canContribute = true,
+  onSelectReward,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("story");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -185,8 +199,12 @@ export function CampaignTabs({
                         )}
                       </div>
 
-                      {!isSoldOut && (
-                        <button className="btn-primary mt-4 w-full">
+                      {!isSoldOut && canContribute && onSelectReward && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectReward(reward.id)}
+                          className="btn-primary mt-4 w-full"
+                        >
                           Select This Reward
                         </button>
                       )}
@@ -222,49 +240,66 @@ export function CampaignTabs({
           <div className="prose prose-gray max-w-none">
             <h2>Terms & Conditions</h2>
 
-            <h3>1. Campaign Overview</h3>
-            <p>
-              This campaign is hosted on FundorDonate, a platform for community-driven fundraising.
-              By contributing to this campaign, you agree to the following terms and conditions.
-            </p>
+            {terms ? (
+              typeof terms === "string" ? (
+                <div dangerouslySetInnerHTML={{ __html: terms }} />
+              ) : (
+                Object.entries(terms)
+                  .filter(([, value]) => typeof value === "string" && value.trim().length > 0)
+                  .map(([key, value]) => (
+                    <div key={key} className="mt-4">
+                      <h3>{humanizeTermKey(key)}</h3>
+                      <p className="whitespace-pre-line">{value as string}</p>
+                    </div>
+                  ))
+              )
+            ) : (
+              <>
+                <h3>1. Campaign Overview</h3>
+                <p>
+                  This campaign is hosted on FundorDonate, a platform for community-driven fundraising.
+                  By contributing to this campaign, you agree to the following terms and conditions.
+                </p>
 
-            <h3>2. Contributions</h3>
-            <p>
-              All contributions are final and non-refundable once the campaign reaches its funding goal.
-              If the campaign does not reach its goal, contributors will receive a full refund of their
-              contribution amount.
-            </p>
+                <h3>2. Contributions</h3>
+                <p>
+                  All contributions are final and non-refundable once the campaign reaches its funding goal.
+                  If the campaign does not reach its goal, contributors will receive a full refund of their
+                  contribution amount.
+                </p>
 
-            <h3>3. Platform Fee</h3>
-            <p>
-              A 5% platform fee is applied to all contributions to cover payment processing and
-              platform maintenance costs. This fee is clearly displayed before you confirm your
-              contribution.
-            </p>
+                <h3>3. Platform Fee</h3>
+                <p>
+                  A 5% platform fee is applied to all contributions to cover payment processing and
+                  platform maintenance costs. This fee is clearly displayed before you confirm your
+                  contribution.
+                </p>
 
-            <h3>4. Rewards</h3>
-            <p>
-              Rewards are provided by the campaign creator and are subject to the delivery timelines
-              specified in the reward details. FundorDonate is not responsible for reward fulfillment.
-            </p>
+                <h3>4. Rewards</h3>
+                <p>
+                  Rewards are provided by the campaign creator and are subject to the delivery timelines
+                  specified in the reward details. FundorDonate is not responsible for reward fulfillment.
+                </p>
 
-            <h3>5. Campaign Updates</h3>
-            <p>
-              Campaign creators are encouraged to provide regular updates to their contributors.
-              FundorDonate does not guarantee the frequency or quality of campaign updates.
-            </p>
+                <h3>5. Campaign Updates</h3>
+                <p>
+                  Campaign creators are encouraged to provide regular updates to their contributors.
+                  FundorDonate does not guarantee the frequency or quality of campaign updates.
+                </p>
 
-            <h3>6. Privacy</h3>
-            <p>
-              Your contribution information is kept confidential and will only be shared with the
-              campaign creator for the purpose of reward fulfillment and campaign communication.
-            </p>
+                <h3>6. Privacy</h3>
+                <p>
+                  Your contribution information is kept confidential and will only be shared with the
+                  campaign creator for the purpose of reward fulfillment and campaign communication.
+                </p>
 
-            <h3>7. Contact</h3>
-            <p>
-              For any questions or concerns about a campaign, please contact the campaign creator
-              directly through the platform or reach out to FundorDonate support.
-            </p>
+                <h3>7. Contact</h3>
+                <p>
+                  For any questions or concerns about a campaign, please contact the campaign creator
+                  directly through the platform or reach out to FundorDonate support.
+                </p>
+              </>
+            )}
 
             {faqs.length > 0 && (
               <>
