@@ -17,6 +17,7 @@ import { AdminParticipantsService } from "./services/admin-participants.service"
 import { AdminFinanceService } from "./services/admin-finance.service";
 import { AdminSystemService } from "./services/admin-system.service";
 import { AdminRewardsService } from "./services/admin-rewards.service";
+import { AdminLeaderboardService } from "./services/admin-leaderboard.service";
 
 // Controllers
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
@@ -27,6 +28,7 @@ import { AdminParticipantsController } from "./controllers/admin-participants.co
 import { AdminFinanceController } from "./controllers/admin-finance.controller";
 import { AdminSystemController } from "./controllers/admin-system.controller";
 import { AdminRewardsController } from "./controllers/admin-rewards.controller";
+import { AdminLeaderboardController } from "./controllers/admin-leaderboard.controller";
 
 import { RewardsModule } from "../rewards/rewards.module";
 import { AuditModule } from "../audit/audit.module";
@@ -51,6 +53,7 @@ import { EligibilityModule } from "../eligibility/eligibility.module";
     AdminFinanceController,
     AdminSystemController,
     AdminRewardsController,
+    AdminLeaderboardController,
   ],
   providers: [
     AdminGuard,
@@ -64,6 +67,7 @@ import { EligibilityModule } from "../eligibility/eligibility.module";
     AdminFinanceService,
     AdminSystemService,
     AdminRewardsService,
+    AdminLeaderboardService,
   ],
   exports: [
     AdminGuard,
@@ -75,6 +79,7 @@ import { EligibilityModule } from "../eligibility/eligibility.module";
     AdminFinanceService,
     AdminSystemService,
     AdminRewardsService,
+    AdminLeaderboardService,
   ],
 })
 export class AdminModule {}

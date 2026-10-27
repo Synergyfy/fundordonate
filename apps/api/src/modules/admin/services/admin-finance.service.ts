@@ -26,7 +26,18 @@ export class AdminFinanceService {
    * Retrieves a paginated list of contributions/donations with eager relations.
    */
   async getDonations(query: DonationsQueryDto) {
-    const { page = 1, limit = 20, status, type, gateway, search, fromDate, toDate } = query;
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      type,
+      campaignId,
+      businessId,
+      gateway,
+      search,
+      fromDate,
+      toDate,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ContributionWhereInput = {};
@@ -37,6 +48,14 @@ export class AdminFinanceService {
 
     if (type) {
       where.type = type;
+    }
+
+    if (campaignId) {
+      where.campaignId = campaignId;
+    }
+
+    if (businessId) {
+      where.businessId = businessId;
     }
 
     if (gateway) {

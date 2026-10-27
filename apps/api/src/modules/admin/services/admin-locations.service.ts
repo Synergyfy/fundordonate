@@ -17,6 +17,69 @@ import {
 import { REDIS_CLIENT } from "@/redis/redis.constants";
 import Redis from "ioredis";
 
+export type RollUpAggregationLevel = "realtime" | "hourly" | "daily";
+
+export interface RollUpConfig {
+  enabled: boolean;
+  aggregationLevel: RollUpAggregationLevel;
+  autoPromoteStatus: boolean;
+  activationThreshold: number;
+  rollUpRules: {
+    campaignTypes: string[];
+    includeDonations: boolean;
+    includePledges: boolean;
+    includeFounding: boolean;
+  };
+  // Legacy weighting fields retained for existing stored configs.
+  nationalTargetMultiplier?: number;
+  cityDefaultWeight?: number;
+  localAreaWeight?: number;
+  highStreetWeight?: number;
+}
+
+/**
+ * Canonical roll-up configuration. The admin UI edits the behavioural fields
+ * (`enabled`, `aggregationLevel`, `rollUpRules`, …) while older rows only
+ * contain the weighting multipliers, so reads always merge over these defaults.
+ */
+const DEFAULT_ROLLUP_CONFIG: RollUpConfig = {
+  enabled: true,
+  aggregationLevel: "realtime",
+  autoPromoteStatus: false,
+  activationThreshold: 80,
+  rollUpRules: {
+    campaignTypes: ["donation", "fund", "founding"],
+    includeDonations: true,
+    includePledges: true,
+    includeFounding: true,
+  },
+  nationalTargetMultiplier: 1.0,
+  cityDefaultWeight: 0.5,
+  localAreaWeight: 0.3,
+  highStreetWeight: 0.2,
+};
+
+function normalizeRollupConfig(raw: unknown): RollUpConfig {
+  const stored =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const storedRules =
+    stored.rollUpRules && typeof stored.rollUpRules === "object"
+      ? (stored.rollUpRules as Record<string, unknown>)
+      : {};
+
+  return {
+    ...DEFAULT_ROLLUP_CONFIG,
+    ...stored,
+    rollUpRules: {
+      ...DEFAULT_ROLLUP_CONFIG.rollUpRules,
+      ...storedRules,
+      campaignTypes: Array.isArray(storedRules.campaignTypes)
+        ? (storedRules.campaignTypes as string[])
+        : DEFAULT_ROLLUP_CONFIG.rollUpRules.campaignTypes,
+    },
+  } as RollUpConfig;
+}
+
 @Injectable()
 export class AdminLocationsService {
   private readonly logger = new Logger(AdminLocationsService.name);
@@ -557,32 +620,31 @@ export class AdminLocationsService {
       where: { key: "locations_rollup_config" },
     });
 
-    return (
-      setting?.value ?? {
-        nationalTargetMultiplier: 1.0,
-        cityDefaultWeight: 0.5,
-        localAreaWeight: 0.3,
-        highStreetWeight: 0.2,
-      }
-    );
+    // Always return the canonical shape so the admin UI never receives a
+    // partial (legacy weights-only) object.
+    return normalizeRollupConfig(setting?.value);
   }
 
   /**
    * Updates roll-up configuration settings.
    */
   async updateRollupConfig(dto: UpdateRollupConfigDto) {
+    const config = normalizeRollupConfig(dto.config);
+
+    const jsonValue = config as unknown as Prisma.InputJsonValue;
+
     const updated = await this.prisma.platformSetting.upsert({
       where: { key: "locations_rollup_config" },
-      update: { value: dto.config },
+      update: { value: jsonValue },
       create: {
         key: "locations_rollup_config",
-        value: dto.config,
+        value: jsonValue,
         category: "general",
         description: "Target roll-up weights and configuration across tiers",
       },
     });
 
-    return updated.value;
+    return normalizeRollupConfig(updated.value);
   }
 
   /**

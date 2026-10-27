@@ -21,6 +21,7 @@ import {
   DuplicateCampaignTemplateDto,
   InstantiateCampaignTemplateDto,
   RequestCampaignChangesDto,
+  UpdateAdminCampaignDto,
   UpdateCampaignStatusDto,
   UpdateCampaignTemplateDto,
   UpdateCampaignTemplateStatusDto,
@@ -242,6 +243,80 @@ export class AdminCampaignsService {
         entityType: "campaign",
         entityId: id,
         details: { previousStatus: campaign.status, newStatus: dto.status, note: dto.note },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Updates the campaign-level fields admins can safely edit without going
+   * through the template/approval workflow.
+   */
+  async updateCampaign(
+    id: string,
+    dto: UpdateAdminCampaignDto,
+    adminUserId?: string,
+  ) {
+    const campaign = await this.prisma.businessCampaign.findUnique({
+      where: { id },
+    });
+    if (!campaign) {
+      throw new NotFoundException(`Campaign with ID ${id} not found`);
+    }
+
+    const data: Prisma.BusinessCampaignUpdateInput = {};
+
+    if (dto.title !== undefined) data.title = dto.title.trim();
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.targetAmount !== undefined) data.targetAmount = dto.targetAmount;
+    if (dto.businessContribution !== undefined) {
+      data.businessContribution = dto.businessContribution;
+    }
+
+    const startDate =
+      dto.startDate !== undefined
+        ? dto.startDate
+          ? new Date(dto.startDate)
+          : null
+        : campaign.startDate;
+    const endDate =
+      dto.endDate !== undefined
+        ? dto.endDate
+          ? new Date(dto.endDate)
+          : null
+        : campaign.endDate;
+
+    if (startDate && endDate && endDate < startDate) {
+      throw new BadRequestException(
+        "Campaign end date must be after the start date",
+      );
+    }
+
+    if (dto.startDate !== undefined) data.startDate = startDate;
+    if (dto.endDate !== undefined) data.endDate = endDate;
+
+    const updated = await this.prisma.businessCampaign.update({
+      where: { id },
+      data,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: "CAMPAIGN_UPDATED",
+        entityType: "campaign",
+        entityId: id,
+        details: {
+          changedFields: Object.keys(dto),
+          previous: {
+            title: campaign.title,
+            targetAmount: campaign.targetAmount,
+            businessContribution: campaign.businessContribution,
+            startDate: campaign.startDate,
+            endDate: campaign.endDate,
+          },
+        },
       },
     });
 

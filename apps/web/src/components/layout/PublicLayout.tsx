@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuthStore, type User } from "@/stores/auth.store";
+import { getDashboardRoute } from "@/lib/roles";
 import {
   Menu, X, Heart,
   Home, Info, Mail, MapPin, Target, ChevronDown,
@@ -49,9 +50,7 @@ function isChildActive(pathname: string, search: string, to: string): boolean {
 /** Resolves the authenticated home ("dashboard") route for a given user. */
 function resolveDashboardLink(user: User | null): string {
   if (!user) return "/";
-  if (user.userType === "admin" || user.role === "admin") return "/admin";
-  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") return "/dashboard";
-  return "/consumer";
+  return getDashboardRoute(user);
 }
 
 function getUserDisplayName(user: User | null): string {

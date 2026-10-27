@@ -13,6 +13,7 @@
     "build:api": "pnpm --filter @fundordonate/api build",
     "build": "pnpm build:web && pnpm build:api",
     "test": "pnpm --filter web test",
+    "test:admin-contracts": "pnpm --filter @fundordonate/api verify:admin",
     "db:migrate": "pnpm --filter @fundordonate/api prisma:migrate",
     "db:generate": "pnpm --filter @fundordonate/api prisma:generate",
     "db:seed": "pnpm --filter @fundordonate/api prisma:seed",

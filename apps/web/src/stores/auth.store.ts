@@ -6,6 +6,7 @@ import {
 } from "@/services/central-hub";
 import { SESSION_EXPIRED_EVENT } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/config";
+import { getDashboardRoute } from "@/lib/roles";
 
 // =============================================================================
 // Types
@@ -78,16 +79,10 @@ interface AuthState {
 
 /**
  * Determines the correct authenticated destination based on authoritative identity.
- * Uses userType (account type) for primary routing, role (capability) for refinement.
+ * Delegates to the shared role → dashboard mapping so every entry point agrees.
  */
 function resolvePostLoginRoute(user: User): string {
-  if (user.userType === "admin" || user.role === "admin") {
-    return "/admin";
-  }
-  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") {
-    return "/dashboard";
-  }
-  return "/consumer";
+  return getDashboardRoute(user);
 }
 
 // =============================================================================

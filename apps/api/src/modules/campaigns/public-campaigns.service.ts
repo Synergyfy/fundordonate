@@ -113,9 +113,10 @@ export interface PublicCampaignItem {
   hierarchyLevel?: "national" | "city" | "borough" | "district" | "local_area" | "high_street" | "commercial_area";
   author: {
     id: string;
-    firstName: string;
-    lastName: string;
-    username: string;
+    firstName: string | null;
+    lastName: string | null;
+    avatar?: string | null;
+    username: string | null;
   };
   /** Campaign-level presentation settings (FAQs, terms, …). */
   settings?: Record<string, unknown>;
@@ -132,7 +133,20 @@ export interface PublicCampaignItem {
 type PublicCampaignRecord = Prisma.BusinessCampaignGetPayload<{
   include: {
     template: true;
-    business: { include: { location: true } };
+    business: {
+      include: {
+        location: true;
+        owner: {
+          select: {
+            id: true;
+            firstName: true;
+            lastName: true;
+            avatar: true;
+            username: true;
+          };
+        };
+      };
+    };
     locations: { include: { location: true } };
     _count: { select: { contributions: true } };
   };
@@ -288,11 +302,14 @@ export class PublicCampaignsService {
         biz.city ||
         undefined,
       hierarchyLevel: this.toHierarchyLevel(campaignLocation?.type),
+      // The person running the campaign is the business owner; fall back to
+      // the business identity only when the owner record is incomplete.
       author: {
-        id: biz.ownerId,
-        firstName: biz.name,
-        lastName: "",
-        username: biz.slug,
+        id: biz.owner?.id ?? biz.ownerId,
+        firstName: biz.owner?.firstName ?? biz.name,
+        lastName: biz.owner?.lastName ?? null,
+        avatar: biz.owner?.avatar ?? null,
+        username: biz.owner?.username ?? biz.slug,
       },
       settings:
         c.settings && typeof c.settings === "object" && !Array.isArray(c.settings)
@@ -456,6 +473,15 @@ export class PublicCampaignsService {
           business: {
             include: {
               location: true,
+              owner: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                  username: true,
+                },
+              },
             },
           },
           locations: { include: { location: true } },
@@ -531,7 +557,20 @@ export class PublicCampaignsService {
         orderBy: [{ raisedAmount: "desc" }, { createdAt: "desc" }],
         include: {
           template: true,
-          business: { include: { location: true } },
+          business: {
+          include: {
+            location: true,
+            owner: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+                username: true,
+              },
+            },
+          },
+        },
           locations: { include: { location: true } },
           _count: { select: { contributions: true } },
         },
@@ -554,7 +593,20 @@ export class PublicCampaignsService {
       where: { id },
       include: {
         template: true,
-        business: { include: { location: true } },
+        business: {
+          include: {
+            location: true,
+            owner: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+                username: true,
+              },
+            },
+          },
+        },
         locations: { include: { location: true } },
         rewardAttachments: { orderBy: { createdAt: "asc" } },
         _count: { select: { contributions: true } },

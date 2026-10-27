@@ -146,7 +146,9 @@ export class RewardReconciliationService implements OnModuleInit {
       result.mirrored = await this.mirrorIssuances(campaignId);
     } catch (err) {
       result.error = (err as Error).message;
-      this.logger.error(
+      // Per-campaign failures are expected when the provider is offline; the
+      // run summary logs the aggregate failure count at warn level.
+      this.logger.debug(
         `Failed to mirror issuances for campaign ${campaignId}: ${result.error}`,
       );
       return result;

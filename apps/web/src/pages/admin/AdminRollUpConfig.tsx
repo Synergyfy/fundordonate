@@ -85,7 +85,7 @@ export function AdminRollUpConfig() {
   const toggleCampaignType = (type: string) => {
     setConfig((prev) => {
       if (!prev) return null;
-      const types = prev.rollUpRules.campaignTypes;
+      const types = prev.rollUpRules?.campaignTypes ?? [];
       const newTypes = types.includes(type)
         ? types.filter((t) => t !== type)
         : [...types, type];
@@ -230,14 +230,14 @@ export function AdminRollUpConfig() {
               <label
                 key={opt.value}
                 className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-all ${
-                  config.rollUpRules.campaignTypes.includes(opt.value)
+                  (config.rollUpRules?.campaignTypes ?? []).includes(opt.value)
                     ? "border-primary-300 bg-primary-50"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={config.rollUpRules.campaignTypes.includes(opt.value)}
+                  checked={(config.rollUpRules?.campaignTypes ?? []).includes(opt.value)}
                   onChange={() => toggleCampaignType(opt.value)}
                   className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />

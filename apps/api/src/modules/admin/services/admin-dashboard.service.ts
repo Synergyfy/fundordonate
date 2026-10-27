@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
-import { BusinessCampaignStatus, ContributionStatus } from "@prisma/client";
+import {
+  BusinessCampaignStatus,
+  ContributionStatus,
+  ContributionType,
+} from "@prisma/client";
 import { REDIS_CLIENT } from "@/redis/redis.constants";
 import Redis from "ioredis";
 import { RevenueChartPeriod } from "../dto/dashboard-query.dto";
@@ -21,6 +25,7 @@ export class AdminDashboardService {
     try {
       const keys = [
         "admin:stats:summary",
+        "admin:stats:summary:v2",
         "admin:stats:revenue:daily",
         "admin:stats:revenue:weekly",
         "admin:stats:revenue:monthly",
@@ -37,7 +42,10 @@ export class AdminDashboardService {
    * Cached in Redis for 60 seconds to ensure high performance.
    */
   async getDashboardStats() {
-    const cacheKey = "admin:stats:summary";
+    // v2 adds the legacy overview fields (totalRaised, totalCampaigns, …)
+    // alongside the canonical platform metrics, so stale v1 cache entries are
+    // never served with the wrong shape.
+    const cacheKey = "admin:stats:summary:v2";
     try {
       const cached = await this.redis.get(cacheKey);
       if (cached) {
@@ -50,10 +58,13 @@ export class AdminDashboardService {
     const [
       revenueAgg,
       activeCampaignsCount,
+      totalCampaignsCount,
       totalBusinessesCount,
       totalConsumersCount,
       distinctBackers,
       totalUsersCount,
+      donationAgg,
+      pledgeAgg,
     ] = await Promise.all([
       // Total platform revenue & average donation
       this.prisma.contribution.aggregate({
@@ -63,10 +74,13 @@ export class AdminDashboardService {
         _count: { id: true },
       }),
 
-      // Active campaigns
+      // Active (live) campaigns
       this.prisma.businessCampaign.count({
         where: { status: BusinessCampaignStatus.ACTIVE },
       }),
+
+      // All campaigns regardless of status
+      this.prisma.businessCampaign.count(),
 
       // Verified active businesses
       this.prisma.business.count(),
@@ -87,6 +101,34 @@ export class AdminDashboardService {
 
       // Total registered users
       this.prisma.user.count(),
+
+      // Donations: completed, non-self-funding contributions. Legacy rows have
+      // no chargePurpose, so type is the reliable discriminator; pledges are
+      // subtracted below because they share the same contribution types.
+      this.prisma.contribution.aggregate({
+        where: {
+          status: ContributionStatus.COMPLETED,
+          type: {
+            in: [
+              ContributionType.ONLINE,
+              ContributionType.IN_STORE,
+              ContributionType.FUNDING_SPLIT,
+            ],
+          },
+        },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+
+      // Pledges: completed contributions explicitly tagged as pledges.
+      this.prisma.contribution.aggregate({
+        where: {
+          status: ContributionStatus.COMPLETED,
+          metadata: { path: ["chargePurpose"], equals: "PLEDGE" },
+        },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
     ]);
 
     const totalRevenue = revenueAgg._sum.amount ?? 0;
@@ -95,7 +137,30 @@ export class AdminDashboardService {
     const totalBackers = distinctBackers.length;
     const conversionRate = totalUsersCount > 0 ? Number(((totalBackers / totalUsersCount) * 100).toFixed(1)) : 0;
 
+    const totalPledges = pledgeAgg._count.id ?? 0;
+    const totalPledgesAmount = pledgeAgg._sum.amount ?? 0;
+    // Pledges share the same contribution types as donations, so remove them
+    // from the donation aggregate rather than relying on a JSON path filter
+    // (legacy rows have no `chargePurpose` and must still count as donations).
+    const totalDonations = Math.max(0, (donationAgg._count.id ?? 0) - totalPledges);
+    const totalDonationsAmount = Math.max(
+      0,
+      (donationAgg._sum.amount ?? 0) - totalPledgesAmount,
+    );
+
     const stats = {
+      // Legacy overview fields still consumed by the admin dashboard, funding
+      // and report screens. Kept additive so all consumers share one payload.
+      totalRaised: totalRevenue,
+      totalCampaigns: totalCampaignsCount,
+      publishedCampaigns: activeCampaignsCount,
+      totalUsers: totalUsersCount,
+      totalDonations,
+      totalDonationsAmount,
+      totalPledges,
+      totalPledgesAmount,
+
+      // Canonical platform metrics.
       totalRevenue,
       totalTransactions,
       activeCampaigns: activeCampaignsCount,

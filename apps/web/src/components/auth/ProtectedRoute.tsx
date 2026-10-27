@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuthStore, type User } from "@/stores/auth.store";
-import { hasPermission, hasAnyPermission } from "@/lib/roles";
+import { useAuthStore } from "@/stores/auth.store";
+import { hasPermission, hasAnyPermission, getDashboardRoute } from "@/lib/roles";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { AccessDeniedPage } from "@/components/ui/AccessDeniedPage";
 import type { Permission, Role } from "@fundordonate/types";
@@ -19,16 +19,6 @@ interface ProtectedRouteProps {
   requiredPermission?: Permission;
   /** Required at least one of these permissions */
   requiredAnyPermission?: Permission[];
-}
-
-// =============================================================================
-// Post-Login Redirect Helper
-// =============================================================================
-
-function getDashboardRoute(user: User): string {
-  if (user.userType === "admin" || user.role === "admin") return "/admin";
-  if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") return "/dashboard";
-  return "/consumer";
 }
 
 // =============================================================================
@@ -51,11 +41,15 @@ export function ProtectedRoute({
     return <LoadingScreen message="Checking your session..." />;
   }
 
-  // State B — User is unauthenticated → redirect to login with return path
+  // State B — User is unauthenticated → redirect to the matching login with
+  // a return path. The admin area has its own local-password sign-in page.
   if (authStatus === "unauthenticated" || !user) {
+    const loginPath = location.pathname.startsWith("/admin")
+      ? "/admin/login"
+      : "/auth/login";
     return (
       <Navigate
-        to="/auth/login"
+        to={loginPath}
         state={{ from: location }}
         replace
       />

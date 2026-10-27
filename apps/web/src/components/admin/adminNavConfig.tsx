@@ -57,7 +57,7 @@ export function getAdminNavGroups(): AdminNavGroup[] {
         { label: "Consumer Campaigns", path: "/admin/campaigns/consumer", icon: <span className="text-xs">👥</span>, implemented: true },
         { label: "Pending Review", path: "/admin/campaigns/pending-review", icon: <span className="text-xs">⏳</span>, implemented: true },
         { label: "Campaign Templates", path: "/admin/campaigns/templates", icon: <span className="text-xs">📋</span>, implemented: true },
-        { label: "Categories", path: "/admin/categories", icon: <span className="text-xs">📂</span>, implemented: true },
+        // Categories hidden until the taxonomy backend exists (ADM-07).
       ],
     },
 

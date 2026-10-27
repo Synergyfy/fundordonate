@@ -65,6 +65,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       originalRequest._retry = true;
 
+      // Distinguish a genuinely expired session from a first visit with no
+      // credentials. Only the former should surface "session expired".
+      const hadAccessToken = Boolean(
+        originalRequest.headers?.Authorization ||
+          localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN),
+      );
+
       const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
 
       // Deduplicate: if a refresh is already in progress, wait for it
@@ -94,7 +101,18 @@ api.interceptors.response.use(
             localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
             dispatchSessionExpired();
             if (!isPublicPath(window.location.pathname)) {
-              window.location.href = "/auth/login?reason=session-expired";
+              const current = `${window.location.pathname}${window.location.search}`;
+              const isAdminPath = current.startsWith("/admin");
+              const loginPath = isAdminPath ? "/admin/login" : "/auth/login";
+              const params = new URLSearchParams();
+
+              if (hadAccessToken) params.set("reason", "session-expired");
+              if (isAdminPath && current !== "/admin/login") {
+                params.set("from", current);
+              }
+
+              const query = params.toString();
+              window.location.href = `${loginPath}${query ? `?${query}` : ""}`;
             }
             throw refreshError;
           })

@@ -2,7 +2,15 @@
 // ADMIN DASHBOARD & STATISTICS
 // =============================================================================
 
+/**
+ * Shape returned by `GET /admin/stats`.
+ *
+ * Amounts are in minor units (pence). The legacy overview fields
+ * (`totalRaised`, `totalCampaigns`, …) are returned alongside the canonical
+ * platform metrics so every admin screen consumes one contract.
+ */
 export interface AdminDashboardStats {
+  // Overview fields
   totalCampaigns: number;
   publishedCampaigns: number;
   totalDonations: number;
@@ -11,17 +19,17 @@ export interface AdminDashboardStats {
   totalRaised: number;
   totalDonationsAmount: number;
   totalPledgesAmount: number;
-  totalRevenue?: number;
-  totalTransactions?: number;
-  activeCampaigns?: number;
-  totalBusinesses?: number;
-  totalConsumers?: number;
-  totalBackers?: number;
-  averageDonation?: number;
-  conversionRate?: number;
-  pendingWithdrawals?: number;
-  generatedAt?: string;
-  [key: string]: any;
+
+  // Canonical platform metrics
+  totalRevenue: number;
+  totalTransactions: number;
+  activeCampaigns: number;
+  totalBusinesses: number;
+  totalConsumers: number;
+  totalBackers: number;
+  averageDonation: number;
+  conversionRate: number;
+  generatedAt: string;
 }
 
 export interface RevenueChartItem {
@@ -572,8 +580,10 @@ export interface AdminBusiness {
   campaignsCount?: number;
   contributionCount: number;
   verificationStatus?: string;
-  totalContributed?: number;
-  totalRaised?: number;
+  /** Completed contribution total in pence. */
+  totalContributed: number;
+  /** Completed contribution total in pence. */
+  totalRaised: number;
   campaigns?: any[];
   owner?: {
     id: string;

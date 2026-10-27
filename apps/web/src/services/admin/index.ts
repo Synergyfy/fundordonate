@@ -190,7 +190,7 @@ export const adminService = {
   },
 
   async updateCampaign(id: string, data: Record<string, any>): Promise<any> {
-    return api.put(`/campaigns/${id}`, data);
+    return api.put(`/admin/campaigns/${id}`, data);
   },
 
   async getCampaignLocations(campaignId: string): Promise<any[]> {

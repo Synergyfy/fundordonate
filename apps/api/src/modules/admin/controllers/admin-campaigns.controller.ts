@@ -25,6 +25,7 @@ import {
   DuplicateCampaignTemplateDto,
   InstantiateCampaignTemplateDto,
   RequestCampaignChangesDto,
+  UpdateAdminCampaignDto,
   UpdateCampaignStatusDto,
   UpdateCampaignTemplateDto,
   UpdateCampaignTemplateStatusDto,
@@ -192,6 +193,19 @@ export class AdminCampaignsController {
     @CurrentUser("id") adminUserId: string,
   ) {
     return this.campaignsService.updateCampaignStatus(id, dto, adminUserId);
+  }
+
+  @Put(":id")
+  @ApiOperation({
+    summary: "Update editable campaign fields (title, description, target, dates)",
+  })
+  @ApiResponse({ status: 200, description: "Campaign updated successfully" })
+  async updateCampaign(
+    @Param("id") id: string,
+    @Body() dto: UpdateAdminCampaignDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.updateCampaign(id, dto, adminUserId);
   }
 
   @Post(":id/changes")
