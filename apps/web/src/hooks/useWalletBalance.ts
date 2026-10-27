@@ -31,7 +31,10 @@ export function useWalletBalance() {
     queryFn: () => walletApi.getBalance(),
     // `authStatus` is the source of truth — never keep a derived copy in the
     // store (zustand flattens getters into stale values on every `set`).
-    enabled: isAuthenticated && Boolean(user?.id),
+    // Admins authenticate locally and are not linked to an MCOM wallet, so
+    // skip the request entirely instead of logging a 400 on every page.
+    enabled:
+      isAuthenticated && Boolean(user?.id) && user?.userType !== "admin",
     staleTime: 30_000, // 30 seconds
     refetchOnWindowFocus: true,
   });

@@ -18,6 +18,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
     "verify:hub": "tsx scripts/verify-hub.ts",
+    "verify:admin": "tsx scripts/verify-admin-contracts.ts",
     "db:push": "prisma db push"
   },
   "prisma": {

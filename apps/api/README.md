@@ -38,6 +38,25 @@ npm run db:seed
 npm run dev:api
 ```
 
+## Local development dependencies
+
+The API can boot with only PostgreSQL and Redis, but several features depend on
+peer services. Missing peers degrade those features rather than blocking the
+core admin/browse flows.
+
+| Service | Default URL | Required? | Behaviour when unavailable |
+| --- | --- | --- | --- |
+| PostgreSQL | `localhost:5432` | Yes | API cannot boot |
+| Redis | `localhost:6379` | Yes | Cache/queues degrade; background jobs are skipped |
+| MCOM Central Hub | `localhost:3010` | For SSO | Admin local login still works; SSO and service-token exchange fail |
+| MCOM Rewards | `localhost:4000` | No | Reward mirroring/issuance retries and logs warnings |
+| 247GBS Audit | `localhost:9008` | No | Audit reconciliation logs a peer-unavailable warning |
+| Stripe | `api.stripe.com` | For payments | Checkout fails; admin screens remain usable |
+
+If you see repeated `AuditClient` / `RewardsClient` errors in development, start
+the corresponding peer or ignore them — they are expected when those optional
+services are not running.
+
 ## Endpoints
 
 | URL                                | Description                          |

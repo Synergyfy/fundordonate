@@ -199,11 +199,30 @@ export class AdminParticipantsService {
       }),
     ]);
 
+    // Aggregate completed contribution totals for the current page in one
+    // query so list/report views can display real raised amounts.
+    const businessIds = items.map((b) => b.id);
+    const contributionTotals = businessIds.length
+      ? await this.prisma.contribution.groupBy({
+          by: ["businessId"],
+          where: {
+            businessId: { in: businessIds },
+            status: ContributionStatus.COMPLETED,
+          },
+          _sum: { amount: true },
+        })
+      : [];
+    const raisedByBusiness = new Map(
+      contributionTotals.map((row) => [row.businessId, row._sum.amount ?? 0]),
+    );
+
     return {
       items: items.map((b) => ({
         ...b,
         campaignCount: b._count.campaigns,
         contributionCount: b._count.contributions,
+        totalRaised: raisedByBusiness.get(b.id) ?? 0,
+        totalContributed: raisedByBusiness.get(b.id) ?? 0,
       })),
       total,
       page,
@@ -259,10 +278,18 @@ export class AdminParticipantsService {
         })
       : 0;
 
+    const contributionAgg = await this.prisma.contribution.aggregate({
+      where: { businessId: id, status: ContributionStatus.COMPLETED },
+      _sum: { amount: true },
+    });
+    const totalRaised = contributionAgg._sum.amount ?? 0;
+
     return {
       ...business,
       campaignCount: business._count.campaigns,
       contributionCount: business._count.contributions,
+      totalRaised,
+      totalContributed: totalRaised,
       rewardsCount,
     };
   }

@@ -229,6 +229,34 @@ export function SystemHealthPage() {
 
 // ─── Integrations (no backend yet) ──────────────────────────────────────────
 
+const INTEGRATIONS = [
+  {
+    name: "MCOM Central Hub",
+    detail: "SSO, entitlement sync, and delegated service tokens.",
+    required: "Required for SSO",
+  },
+  {
+    name: "MCOM Pay",
+    detail: "Wallet balance and MCOM payment checkout.",
+    required: "Payments",
+  },
+  {
+    name: "MCOM Rewards",
+    detail: "Reward issuance, mirroring, and lifecycle webhooks.",
+    required: "Optional",
+  },
+  {
+    name: "247GBS Audit",
+    detail: "Pre-audit exchange and audit-session mirroring.",
+    required: "Optional",
+  },
+  {
+    name: "Stripe",
+    detail: "Card payments and refunds.",
+    required: "Card checkout",
+  },
+];
+
 export function IntegrationsPage() {
   return (
     <div className="space-y-6">
@@ -241,11 +269,24 @@ export function IntegrationsPage() {
           <div>
             <h2 className="font-bold text-gray-900">Connected services</h2>
             <p className="text-sm text-gray-500">
-              Integration management is not available yet. Payment (MCOM Pay), rewards (MCOM Rewards) and
-              247GBS Audit are wired through the API; configuration UI is coming.
+              Credentials are configured through environment variables. This page is a
+              status reference; editing is coming.
             </p>
           </div>
         </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {INTEGRATIONS.map((integration) => (
+          <div key={integration.name} className="rounded-xl border bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-gray-900">{integration.name}</span>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                {integration.required}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">{integration.detail}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

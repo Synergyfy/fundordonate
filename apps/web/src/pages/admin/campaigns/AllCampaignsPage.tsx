@@ -3,12 +3,12 @@
 // Campaign directory with live backend API queries, status filtering, and actions.
 // =============================================================================
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Search, ChevronRight, Target, Plus, Calendar, MapPin } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Search, ChevronRight, Plus } from "lucide-react";
 import { CampaignStatusBadge } from "@/components/ui/CampaignStatusBadge";
 import { adminApi, type AdminCampaign } from "@/services/admin";
-import { formatCurrency, formatDate } from "@/utils/formatters";
+import { formatCurrency } from "@/utils/formatters";
 
 type StatusTab =
   | "all"
@@ -41,7 +41,6 @@ interface AllCampaignsPageProps {
 
 export function AllCampaignsPage({ audience, forceStatus }: AllCampaignsPageProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const initialStatus: StatusTab =
     forceStatus ?? ((searchParams.get("status")?.toLowerCase() as StatusTab) || "all");
 
@@ -118,11 +117,11 @@ export function AllCampaignsPage({ audience, forceStatus }: AllCampaignsPageProp
           </p>
         </div>
         <Link
-          to="/admin/campaigns/new"
+          to="/admin/campaigns/templates/new"
           className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Create Campaign
+          Create Campaign Template
         </Link>
       </div>
 

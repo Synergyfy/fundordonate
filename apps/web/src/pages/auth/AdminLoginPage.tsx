@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
@@ -16,6 +16,8 @@ export default function AdminLoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const adminLogin = useAuthStore((s) => s.adminLogin);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +25,25 @@ export default function AdminLoginPage() {
     setIsSubmitting(true);
     try {
       await adminLogin(email, password);
-      navigate("/admin", { replace: true });
+
+      // Return to the admin URL that triggered the redirect, if there was one.
+      // The query param covers hard redirects from the API interceptor; the
+      // router state covers client-side ProtectedRoute redirects.
+      const fromQuery = searchParams.get("from");
+      const fromState = (
+        location.state as
+          | { from?: { pathname?: string; search?: string } }
+          | null
+      )?.from;
+      const statePath = fromState?.pathname
+        ? `${fromState.pathname}${fromState.search ?? ""}`
+        : null;
+
+      const candidate = fromQuery ?? statePath;
+      const redirectTo =
+        candidate && candidate.startsWith("/admin") ? candidate : "/admin";
+
+      navigate(redirectTo, { replace: true });
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string | string[] } } })?.response?.data

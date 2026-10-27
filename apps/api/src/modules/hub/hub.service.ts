@@ -473,7 +473,12 @@ export class HubService {
     });
 
     try {
-      await this.redis.set(cacheKey, JSON.stringify(roots), "EX", 600);
+      // HubLocation.targetAmount is a Prisma BigInt, which JSON.stringify
+      // cannot serialise without a replacer.
+      const payload = JSON.stringify(roots, (_key, value) =>
+        typeof value === "bigint" ? Number(value) : value,
+      );
+      await this.redis.set(cacheKey, payload, "EX", 600);
     } catch (err: any) {
       this.logger.warn(`Redis set failed for ${cacheKey}: ${err.message}`);
     }

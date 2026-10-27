@@ -59,6 +59,15 @@ export class AdminSeasonsController {
     return this.seasonsService.getSeason(id);
   }
 
+  @Get(":id/cities")
+  @ApiOperation({
+    summary: "Get per-city activation activity for a season",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved season city activity" })
+  async getSeasonCities(@Param("id") id: string) {
+    return this.seasonsService.getSeasonCities(id);
+  }
+
   @Get(":id/review")
   @ApiOperation({
     summary: "Get season performance review and surplus metrics",

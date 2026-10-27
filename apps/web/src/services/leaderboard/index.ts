@@ -29,6 +29,13 @@ export const leaderboardService = {
   },
 
   /**
+   * Platform-wide business leaderboard for the admin area.
+   */
+  async getAdminBusinessLeaderboard(query?: LeaderboardQueryDto): Promise<LeaderboardResponse> {
+    return api.get("/admin/leaderboards/business", { params: query });
+  },
+
+  /**
    * Fetch leaderboard. Supports both string level ("campaign" | "city" | ...)
    * and business LeaderboardQueryDto object.
    */

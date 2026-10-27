@@ -41,7 +41,7 @@ export function BusinessLeaderboardsPage() {
     async function loadLeaderboard() {
       setLoading(true);
       try {
-        const res = await leaderboardService.getBusinessLeaderboard({ limit: 50 });
+        const res = await leaderboardService.getAdminBusinessLeaderboard({ limit: 50 });
         if (!mounted) return;
         const entries: LeaderboardEntry[] = res?.entries || [];
         const mapped: FormattedRow[] = entries.map((e: any, idx: number) => {

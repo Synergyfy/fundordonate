@@ -102,6 +102,7 @@ export function GlobalSeasonSelector({ onSeasonChange }: { onSeasonChange?: (sea
                   </span>
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5">
+                  {season.referenceCode ? `${season.referenceCode} · ` : ""}
                   {new Date(season.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                   {" — "}
                   {new Date(season.endDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}

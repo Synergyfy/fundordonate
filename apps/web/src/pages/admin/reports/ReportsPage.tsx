@@ -90,7 +90,7 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
               <p className="mt-1 text-2xl font-bold text-gray-900">{businesses.length}</p>
             </div>
             <div className="rounded-xl border bg-white p-5 shadow-xs">
-              <span className="text-xs font-medium text-gray-500">Total Business Pledges</span>
+              <span className="text-xs font-medium text-gray-500">Total Business Contributions</span>
               <p className="mt-1 text-2xl font-bold text-blue-700">{formatCurrency(totalBusinessContributed)}</p>
             </div>
             <div className="rounded-xl border bg-white p-5 shadow-xs">
