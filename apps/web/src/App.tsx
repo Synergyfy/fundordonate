@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { ProtectedRoute, GuestRoute } from "@/components/auth/ProtectedRoute";
+import { DashboardEntry } from "@/components/auth/DashboardEntry";
 import { AuthInitializer } from "@/components/auth/AuthInitializer";
 import ScrollToTop from "@/components/ScrollToTop";
 import { PublicLayout } from "@/components/layout/PublicLayout";
@@ -42,7 +43,6 @@ import {
   PaymentFailurePage,
   DonationCheckoutPage,
   PledgeCheckoutPage,
-  TaxonomyPage,
   TerminalDonationPage,
   MembershipPurchasePage,
   ContributorProfilePage,
@@ -71,7 +71,6 @@ import {
   AdminCityManagementPage,
   AdminRollUpConfig,
   AdminHubContentPage,
-  AdminTargetCalculationPage,
   // Reward Library
   RewardLibraryPage,
   AssetManagementPage,
@@ -104,8 +103,8 @@ import {
   SeasonWizardPage,
   // Campaigns
   AllCampaignsPage,
-  NewAdminCampaignWizard,
   AdminCampaignDetailPage,
+  AdminCampaignEditPage,
   AdminCampaignTemplatesPage,
   AdminTemplateWizardPage,
   // UK Activation
@@ -142,8 +141,6 @@ import {
   BusinessCampaignCentrePage,
   BusinessCampaignSetupPage,
   BusinessMyCampaignDetailPage,
-  // Campaigns & Funding
-  SpilloverPage,
   // Businesses & Community
   BusinessCampaignsPage,
   InStoreContributionsPage,
@@ -434,16 +431,18 @@ function App() {
           <Route path="/admin/campaigns/business" element={<AllCampaignsPage audience="business" key="business" />} />
           <Route path="/admin/campaigns/consumer" element={<AllCampaignsPage audience="consumer" key="consumer" />} />
           <Route path="/admin/campaigns/pending-review" element={<AllCampaignsPage forceStatus="pending_review" key="pending" />} />
-          <Route path="/admin/campaigns/new" element={<NewAdminCampaignWizard />} />
+          {/* Direct campaign creation is not implemented; the wizard builds templates. */}
+          <Route path="/admin/campaigns/new" element={<Navigate to="/admin/campaigns/templates/new" replace />} />
           <Route path="/admin/campaigns/templates" element={<AdminCampaignTemplatesPage />} />
           <Route path="/admin/campaigns/templates/new" element={<AdminTemplateWizardPage />} />
           <Route path="/admin/campaigns/templates/:id/edit" element={<AdminTemplateWizardPage />} />
           <Route path="/admin/campaigns/:id" element={<AdminCampaignDetailPage />} />
-          <Route path="/admin/campaigns/:id/edit" element={<NewAdminCampaignWizard />} />
+          <Route path="/admin/campaigns/:id/edit" element={<AdminCampaignEditPage />} />
           <Route path="/admin/campaigns/incentives" element={<CampaignIncentivesPage />} />
-          <Route path="/admin/campaigns/targets" element={<AdminTargetCalculationPage />} />
+          {/* Target calculation and spillover are hidden until their backends exist (ADM-08/09). */}
+          <Route path="/admin/campaigns/targets" element={<Navigate to="/admin/campaigns" replace />} />
+          <Route path="/admin/campaigns/spillover" element={<Navigate to="/admin/campaigns" replace />} />
           <Route path="/admin/campaigns/contributions" element={<DonationsManagement />} />
-          <Route path="/admin/campaigns/spillover" element={<SpilloverPage />} />
 
           {/* Reward Library */}
           <Route path="/admin/rewards" element={<RewardLibraryPage />} />
@@ -497,12 +496,14 @@ function App() {
           <Route path="/admin/finance/payouts" element={<PayoutsPage />} />
           <Route path="/admin/finance/refunds" element={<RefundsPage />} />
           <Route path="/admin/finance/transactions" element={<DonationsManagement />} />
-          <Route path="/admin/finance/rules" element={<SettingsPage />} />
+          {/* Finance rules live in the payment settings tab. */}
+          <Route path="/admin/finance/rules" element={<Navigate to="/admin/settings/payments" replace />} />
 
           {/* Content & Communication */}
           <Route path="/admin/content" element={<ContentCMSPage />} />
           <Route path="/admin/hub-content" element={<AdminHubContentPage />} />
-          <Route path="/admin/categories" element={<TaxonomyPage />} />
+          {/* Categories hidden until the taxonomy backend exists (ADM-07). */}
+          <Route path="/admin/categories" element={<Navigate to="/admin/campaigns" replace />} />
           <Route path="/admin/events" element={<EventsManagementPage />} />
           <Route path="/admin/notifications" element={<NotificationsPage />} />
           <Route path="/admin/support" element={<SupportPage />} />
@@ -526,7 +527,8 @@ function App() {
           <Route path="/admin/system/integrations" element={<IntegrationsPage />} />
           <Route path="/admin/settings" element={<SettingsPage />} />
           <Route path="/admin/settings/payments" element={<SettingsPage initialTab="payment" />} />
-          <Route path="/admin/system/taxonomy" element={<TaxonomyPage />} />
+          {/* Taxonomy hidden until the taxonomy backend exists (ADM-07). */}
+          <Route path="/admin/system/taxonomy" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/system/audit-logs" element={<AuditLogsPage />} />
           <Route path="/admin/system/security" element={<SecurityPage />} />
           <Route path="/admin/system/health" element={<SystemHealthPage />} />
@@ -539,11 +541,19 @@ function App() {
         </Route>
 
         {/* ═══════════════════════════════════════════════════════════════════
-            BUSINESS OWNER DASHBOARD — /dashboard
+            ROLE-AWARE DASHBOARD ENTRY — /dashboard
+            Business owners get the business portal; any other signed-in role
+            is redirected to the dashboard that matches their role.
+            ═══════════════════════════════════════════════════════════════════ */}
+        <Route element={<ProtectedRoute><DashboardEntry /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<BusinessOwnerOverviewPage />} />
+        </Route>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            BUSINESS OWNER DASHBOARD — /dashboard/*
             Mobile-first layout with bottom navigation
             ═══════════════════════════════════════════════════════════════════ */}
         <Route element={<ProtectedRoute requiredUserTypes={["business"]}><BusinessOwnerLayout /></ProtectedRoute>}>
-          <Route path="/dashboard" element={<BusinessOwnerOverviewPage />} />
           <Route path="/dashboard/campaign-centre" element={<BusinessCampaignCentrePage />} />
           <Route path="/dashboard/campaign-setup/:templateId" element={<BusinessCampaignSetupPage />} />
           <Route path="/dashboard/my-campaigns/:campaignId" element={<BusinessMyCampaignDetailPage />} />

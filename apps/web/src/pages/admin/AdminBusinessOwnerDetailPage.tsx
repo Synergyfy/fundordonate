@@ -6,12 +6,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
-  ArrowLeft, Edit3, Target, AlertCircle, Loader2,
+  ArrowLeft, AlertCircle, Loader2,
 } from "lucide-react";
 import { adminApi } from "@/services/admin";
-
-const fmt = (p: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
 
 export default function AdminBusinessOwnerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,17 +18,38 @@ export default function AdminBusinessOwnerDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
-    adminApi.getUser(id)
-      .then((data) => {
-        setOwner(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message || "Failed to load business owner");
-        setLoading(false);
-      });
+    let active = true;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // The canonical link uses the owner (user) id. Older links and
+        // bookmarks may still carry a business id, so fall back to resolving
+        // the business first and then loading its owner.
+        let data = await adminApi.getUser(id).catch(() => null);
+        if (!data) {
+          const business = await adminApi.getBusiness(id);
+          data = await adminApi.getUser(business.ownerId);
+        }
+
+        if (active) setOwner(data);
+      } catch (err: unknown) {
+        const message =
+          (err as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message ||
+          (err as Error)?.message ||
+          "Failed to load business owner";
+        if (active) setError(message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   if (loading) {

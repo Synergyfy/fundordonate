@@ -62,6 +62,35 @@ export function hasAnyPermission(role: Role, permissions: Permission[]): boolean
 }
 
 // =============================================================================
+// Dashboard Routing
+// =============================================================================
+
+/** Minimal identity shape needed to decide which dashboard a user belongs to. */
+export interface DashboardUser {
+  userType: string;
+  role: string;
+}
+
+/**
+ * Resolves the dashboard a user should land on.
+ * Uses userType (account type) for primary routing, role (capability) for
+ * refinement. This is the single source of truth for role-based redirects.
+ */
+export function getDashboardRoute(user: DashboardUser): string {
+  if (user.userType === "admin" || user.role === "admin") {
+    return "/admin";
+  }
+  if (
+    user.userType === "business" ||
+    user.role === "business" ||
+    user.role === "fundraiser"
+  ) {
+    return "/dashboard";
+  }
+  return "/consumer";
+}
+
+// =============================================================================
 // UI Helpers
 // =============================================================================
 

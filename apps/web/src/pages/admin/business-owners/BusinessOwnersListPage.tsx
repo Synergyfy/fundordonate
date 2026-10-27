@@ -115,7 +115,7 @@ export function BusinessOwnersListPage() {
               return (
                 <Link
                   key={bo.id}
-                  to={`/admin/business-owners/${bo.id}`}
+                  to={`/admin/business-owners/${bo.ownerId}/detail`}
                   className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700 flex-shrink-0">

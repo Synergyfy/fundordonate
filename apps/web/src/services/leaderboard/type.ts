@@ -57,7 +57,8 @@ export interface Leaderboard {
 }
 
 export interface LeaderboardResponse {
-  currentRank: LeaderboardRankResult;
+  /** Present for the business-dashboard view; omitted for admin listings. */
+  currentRank?: LeaderboardRankResult;
   entries: LeaderboardEntry[];
   total: number;
 }

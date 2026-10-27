@@ -8,7 +8,7 @@ import { CampaignAuthorCard } from "@/components/campaign/CampaignAuthorCard";
 import { TargetReachedBanner } from "@/components/campaign/TargetReachedBanner";
 import { WhatHappensNext } from "@/components/campaign/WhatHappensNext";
 import { Link } from "react-router-dom";
-import { Clock } from "lucide-react";
+import { Clock, Store, Users } from "lucide-react";
 
 export interface DetailCampaign {
   id: string;
@@ -21,6 +21,8 @@ export interface DetailCampaign {
   deadline: string;
   status: string;
   mode: string;
+  /** Who the campaign is aimed at. */
+  targetAudience?: "business" | "consumer" | "both";
   featuredImage?: string;
   videoUrl?: string;
   platformFee?: number;
@@ -28,7 +30,17 @@ export interface DetailCampaign {
   createdAt: string;
   ownerContribution?: number;
   campaignTarget?: number;
-  author?: { id: string; firstName?: string; lastName?: string; avatar?: string; username: string };
+  author?: { id: string; firstName?: string | null; lastName?: string | null; avatar?: string | null; username: string | null };
+  business?: {
+    id: string;
+    name: string;
+    slug: string;
+    city?: string;
+    localArea?: string;
+    highStreet?: string;
+    logoUrl?: string | null;
+    coverImageUrl?: string | null;
+  };
   category?: { id: string; name: string; slug: string };
   images?: { id: string; url: string; alt?: string; order: number }[];
   rewards?: any[];
@@ -106,6 +118,25 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick, onSel
     : "bg-secondary-500 hover:bg-secondary-600";
   const contributorLabel = campaign.mode === "fund" ? "Backers" : "Donors";
 
+  const audienceMeta =
+    campaign.targetAudience === "business"
+      ? {
+          label: "For Businesses",
+          Icon: Store,
+          className: "bg-blue-100 text-blue-700",
+        }
+      : campaign.targetAudience === "consumer"
+        ? {
+            label: "For Customers",
+            Icon: Users,
+            className: "bg-pink-100 text-pink-700",
+          }
+        : {
+            label: "For Everyone",
+            Icon: Users,
+            className: "bg-indigo-100 text-indigo-700",
+          };
+
   let settings: Record<string, any> = {};
   try {
     settings =
@@ -145,6 +176,12 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick, onSel
             {campaign.category && (
               <span className="text-sm text-gray-500">{campaign.category.name}</span>
             )}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${audienceMeta.className}`}
+            >
+              <audienceMeta.Icon className="h-3.5 w-3.5" />
+              {audienceMeta.label}
+            </span>
           </div>
           <h1 className="mt-2 text-3xl font-bold text-gray-900">{campaign.title}</h1>
 
@@ -244,7 +281,11 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick, onSel
             </div>
             {campaign.author && (
               <div className="hidden shrink-0 lg:block">
-                <CampaignAuthorCard author={campaign.author} />
+                <CampaignAuthorCard
+                  author={campaign.author}
+                  businessName={campaign.business?.name}
+                  businessCity={campaign.business?.city}
+                />
               </div>
             )}
           </div>
@@ -432,7 +473,11 @@ export function CampaignDetailBody({ campaign, user, ctaLabel, onCtaClick, onSel
             {/* Author card stays after the timeline on mobile */}
             {campaign.author && (
               <div className="lg:hidden">
-                <CampaignAuthorCard author={campaign.author} />
+                <CampaignAuthorCard
+                  author={campaign.author}
+                  businessName={campaign.business?.name}
+                  businessCity={campaign.business?.city}
+                />
               </div>
             )}
           </div>

@@ -144,7 +144,7 @@ export function WizardShell({
                 }
               }
               return grouped.map((group) => (
-                <div key={group.category}>
+                <div key={`${group.category}-${group.steps[0].id}`}>
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                     {group.category}
                   </div>

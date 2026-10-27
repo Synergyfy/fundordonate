@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -34,6 +35,16 @@ export class DonationsQueryDto {
   @IsOptional()
   @IsEnum(ContributionType)
   type?: ContributionType;
+
+  @ApiPropertyOptional({ description: "Filter by campaign UUID" })
+  @IsOptional()
+  @IsUUID()
+  campaignId?: string;
+
+  @ApiPropertyOptional({ description: "Filter by business UUID" })
+  @IsOptional()
+  @IsUUID()
+  businessId?: string;
 
   @ApiPropertyOptional({ description: "Filter by gateway (e.g. stripe, mcom_wallet)" })
   @IsOptional()

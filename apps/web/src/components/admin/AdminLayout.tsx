@@ -8,7 +8,6 @@ const NAV_ITEMS = [
   { label: "Donations", path: "/admin/donations", icon: "💰" },
   { label: "Pledges", path: "/admin/pledges", icon: "🤝" },
   { label: "Users", path: "/admin/users", icon: "👥" },
-  { label: "Categories", path: "/admin/categories", icon: "📂" },
   { label: "Settings", path: "/admin/settings", icon: "⚙️" },
 ];
 

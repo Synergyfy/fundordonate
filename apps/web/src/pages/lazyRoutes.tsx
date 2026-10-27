@@ -41,7 +41,6 @@ export const ThankYouPage = lazy(() => import("@/pages/ThankYouPage").then(m => 
 export const PaymentFailurePage = lazy(() => import("@/pages/PaymentFailurePage").then(m => ({ default: m.PaymentFailurePage })));
 export const DonationCheckoutPage = lazy(() => import("@/pages/DonationCheckoutPage").then(m => ({ default: m.DonationCheckoutPage })));
 export const PledgeCheckoutPage = lazy(() => import("@/pages/PledgeCheckoutPage").then(m => ({ default: m.PledgeCheckoutPage })));
-export const TaxonomyPage = lazy(() => import("@/pages/TaxonomyPage").then(m => ({ default: m.TaxonomyPage })));
 
 // =============================================================================
 // Terminal & Physical Pages
@@ -99,11 +98,10 @@ export const AdminHubContentPage = lazy(() => import("@/pages/admin/AdminHubCont
 // =============================================================================
 
 export const AllCampaignsPage = lazy(() => import("@/pages/admin/campaigns/AllCampaignsPage").then(m => ({ default: m.AllCampaignsPage })));
-export const NewAdminCampaignWizard = lazy(() => import("@/components/admin/wizard/AdminCampaignWizard").then(m => ({ default: m.AdminCampaignWizard })));
 export const AdminCampaignDetailPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignDetailPage"));
+export const AdminCampaignEditPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignEditPage").then(m => ({ default: m.AdminCampaignEditPage })));
 export const AdminCampaignTemplatesPage = lazy(() => import("@/pages/admin/campaigns/CampaignTemplatesPage").then(m => ({ default: m.CampaignTemplatesPage })));
 export const AdminTemplateWizardPage = lazy(() => import("@/pages/admin/campaigns/TemplateWizardPage").then(m => ({ default: m.TemplateWizardPage })));
-export const AdminTargetCalculationPage = lazy(() => import("@/pages/admin/AdminTargetCalculationPage"));
 
 // =============================================================================
 // Admin Reward Library Pages
@@ -177,7 +175,6 @@ export const BusinessCampaignCentrePage = lazy(() => import("@/pages/business-ow
 export const BusinessCampaignSetupPage = lazy(() => import("@/pages/business-owner/CampaignSetupPage"));
 export const BusinessMyCampaignDetailPage = lazy(() => import("@/pages/business-owner/MyCampaignDetailPage"));
 
-export const SpilloverPage = lazy(() => import("@/pages/admin/sections/SpilloverPage").then(m => ({ default: m.SpilloverPage })));
 export const FoundingMembersPage = lazy(() => import("@/pages/admin/AdminFoundingMembersPage"));
 export const MembershipPage = lazy(() => import("@/pages/admin/AdminMembershipPage"));
 export const BusinessCampaignsPage = lazy(() => import("@/pages/admin/business-owners/BusinessCampaignsPage").then(m => ({ default: m.BusinessCampaignsPage })));

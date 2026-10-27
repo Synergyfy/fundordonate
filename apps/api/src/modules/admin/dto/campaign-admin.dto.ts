@@ -10,6 +10,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -82,6 +83,45 @@ export class UpdateCampaignStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class UpdateAdminCampaignDto {
+  @ApiPropertyOptional({ description: "Campaign title" })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  title?: string;
+
+  @ApiPropertyOptional({ description: "Campaign description" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
+
+  @ApiPropertyOptional({ description: "Funding target in pence" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  targetAmount?: number;
+
+  @ApiPropertyOptional({ description: "Business self-funding amount in pence" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  businessContribution?: number;
+
+  @ApiPropertyOptional({ description: "Campaign start date (ISO string)" })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string | null;
+
+  @ApiPropertyOptional({ description: "Campaign end date (ISO string)" })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
 }
 
 export class RequestCampaignChangesDto {

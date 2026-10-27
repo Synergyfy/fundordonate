@@ -5,7 +5,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
-import { Prisma, ContributionStatus, BusinessCampaignStatus } from "@prisma/client";
+import {
+  Prisma,
+  ContributionStatus,
+  BusinessCampaignStatus,
+  CampaignLocationScope,
+} from "@prisma/client";
 import {
   CreateSeasonDto,
   SeasonActionDto,
@@ -141,6 +146,99 @@ export class AdminSeasonsService {
       businessCampaignTargetDefault: Number(season.businessCampaignTargetDefault),
       totalRaised: Number(season.totalRaised),
     };
+  }
+
+  /**
+   * Returns per-city activity for a season, aggregating completed
+   * contributions from campaigns whose PRIMARY location is that city.
+   */
+  async getSeasonCities(id: string) {
+    const season = await this.prisma.season.findUnique({ where: { id } });
+    if (!season) {
+      throw new NotFoundException(`Season with ID ${id} not found`);
+    }
+
+    const scope = (season.activationScope ?? {}) as {
+      cities?: Array<{ cityId?: string; cityName?: string; enabled?: boolean }>;
+    };
+    const cities = Array.isArray(scope.cities) ? scope.cities : [];
+    if (cities.length === 0) return [];
+
+    const cityIds = cities
+      .map((city) => city.cityId)
+      .filter((cityId): cityId is string => Boolean(cityId));
+
+    const campaigns = cityIds.length
+      ? await this.prisma.businessCampaign.findMany({
+          where: {
+            template: { seasonId: id },
+            locations: {
+              some: {
+                scope: CampaignLocationScope.PRIMARY,
+                locationId: { in: cityIds },
+              },
+            },
+          },
+          select: {
+            id: true,
+            locations: {
+              where: { scope: CampaignLocationScope.PRIMARY },
+              select: { locationId: true },
+              take: 1,
+            },
+          },
+        })
+      : [];
+
+    const campaignCity = new Map<string, string>();
+    for (const campaign of campaigns) {
+      const location = campaign.locations[0];
+      if (location && cityIds.includes(location.locationId)) {
+        campaignCity.set(campaign.id, location.locationId);
+      }
+    }
+
+    const campaignIds = [...campaignCity.keys()];
+    const contributionRows = campaignIds.length
+      ? await this.prisma.contribution.groupBy({
+          by: ["campaignId"],
+          where: {
+            campaignId: { in: campaignIds },
+            status: ContributionStatus.COMPLETED,
+          },
+          _sum: { amount: true },
+          _count: { id: true },
+        })
+      : [];
+
+    const totalsByCity = new Map<
+      string,
+      { raised: number; contributions: number }
+    >();
+    for (const row of contributionRows) {
+      const cityId = campaignCity.get(row.campaignId);
+      if (!cityId) continue;
+      const current = totalsByCity.get(cityId) ?? {
+        raised: 0,
+        contributions: 0,
+      };
+      current.raised += row._sum.amount ?? 0;
+      current.contributions += row._count.id ?? 0;
+      totalsByCity.set(cityId, current);
+    }
+
+    return cities.map((city, index) => ({
+      id: `ca-${city.cityId || index}`,
+      seasonId: id,
+      cityId: city.cityId ?? "",
+      cityName: city.cityName ?? "Unknown city",
+      target: Number(season.cityTargetDefault ?? 0),
+      raised: totalsByCity.get(city.cityId ?? "")?.raised ?? 0,
+      contributions:
+        totalsByCity.get(city.cityId ?? "")?.contributions ?? 0,
+      participants: 0,
+      status: city.enabled ? "ACTIVE" : "INACTIVE",
+    }));
   }
 
   /**
@@ -296,7 +394,7 @@ export class AdminSeasonsService {
 
     updateData.status = newStatus;
 
-    const updated = await this.prisma.season.update({
+    await this.prisma.season.update({
       where: { id },
       data: updateData,
     });
