@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Store, Users } from "lucide-react";
 
 export interface PublicCampaign {
   id: string;
@@ -7,11 +7,30 @@ export interface PublicCampaign {
   title: string;
   shortDescription?: string | null;
   mode?: string | null;
+  targetAudience?: "business" | "consumer" | "both" | null;
   goalAmount?: number | null;
   raisedAmount?: number | null;
   deadline?: string | null;
   featuredImage?: string | null;
 }
+
+const AUDIENCE_META = {
+  business: {
+    label: "For Businesses",
+    Icon: Store,
+    className: "bg-blue-600 text-white",
+  },
+  consumer: {
+    label: "For Customers",
+    Icon: Users,
+    className: "bg-pink-600 text-white",
+  },
+  both: {
+    label: "For Everyone",
+    Icon: Users,
+    className: "bg-indigo-600 text-white",
+  },
+} as const;
 
 export const formatCurrency = (pence: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
@@ -27,6 +46,7 @@ export function CampaignCard({ campaign }: { campaign: PublicCampaign }) {
   const progress = goal > 0 ? Math.min(Math.round((raised / goal) * 100), 100) : 0;
   const deadline = campaign.deadline ? new Date(campaign.deadline) : null;
   const daysLeft = deadline ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000)) : null;
+  const audience = campaign.targetAudience ? AUDIENCE_META[campaign.targetAudience] : null;
 
   return (
     <Link
@@ -49,6 +69,14 @@ export function CampaignCard({ campaign }: { campaign: PublicCampaign }) {
         <span className="absolute top-3 left-3 px-2.5 py-1 text-xs font-semibold rounded-full bg-white/90 backdrop-blur-sm text-gray-700 shadow-sm">
           {modeLabel(campaign.mode)}
         </span>
+        {audience && (
+          <span
+            className={`absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm backdrop-blur-sm ${audience.className}`}
+          >
+            <audience.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            {audience.label}
+          </span>
+        )}
       </div>
       <div className="p-5">
         <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-primary-600 transition-colors mb-2">
