@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Bell, CheckCheck } from "lucide-react";
 import {
   listNotifications,
@@ -19,6 +19,7 @@ const formatDate = (iso: string) =>
   });
 
 export function ConsumerNotificationsPage() {
+  const navigate = useNavigate();
   const { unread } = useUnreadNotifications();
   const [items, setItems] = useState<ConsumerNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,11 +43,13 @@ export function ConsumerNotificationsPage() {
   }, []);
 
   const handleOpen = (notification: ConsumerNotification) => {
-    if (notification.read) return;
-    setItems((prev) =>
-      prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)),
-    );
-    markNotificationRead(notification.id);
+    if (!notification.read) {
+      setItems((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)),
+      );
+      void markNotificationRead(notification.id);
+    }
+    if (notification.link) navigate(notification.link);
   };
 
   const handleMarkAll = () => {

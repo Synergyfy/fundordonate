@@ -117,11 +117,11 @@ export function AllCampaignsPage({ audience, forceStatus }: AllCampaignsPageProp
           </p>
         </div>
         <Link
-          to="/admin/campaigns/templates/new"
+          to="/admin/campaigns/new"
           className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Create Campaign Template
+          Create Campaign
         </Link>
       </div>
 
@@ -194,9 +194,13 @@ export function AllCampaignsPage({ audience, forceStatus }: AllCampaignsPageProp
                         <span className="text-xs text-gray-400">{c.slug || c.id}</span>
                       </td>
                       <td className="px-5 py-4 text-xs text-gray-600">
-                        <div>{c.category?.name || "General"}</div>
+                        <div>{c.category || "General"}</div>
                         <div className="text-gray-400">
-                          {c.author ? `${c.author.firstName} ${c.author.lastName}` : "System"}
+                          {c.business?.name ||
+                            [c.createdBy?.firstName, c.createdBy?.lastName]
+                              .filter(Boolean)
+                              .join(" ") ||
+                            "FundorDonate"}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-center">

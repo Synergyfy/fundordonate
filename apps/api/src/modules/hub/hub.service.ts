@@ -93,7 +93,7 @@ export class HubService {
   private async buildCityAggregates() {
     const [locations, businesses, campaigns, memberships] = await Promise.all([
       this.prisma.hubLocation.findMany({
-        where: { isActive: true },
+        where: { isActive: true, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -412,13 +412,14 @@ export class HubService {
         type: HubLocationType.CITY,
         isActive: true,
         isPublic: true,
+        deletedAt: null,
       },
       include: {
         children: {
-          where: { isActive: true },
+          where: { isActive: true, deletedAt: null },
           include: {
             children: {
-              where: { isActive: true },
+              where: { isActive: true, deletedAt: null },
             },
           },
         },
@@ -453,16 +454,16 @@ export class HubService {
     }
 
     const roots = await this.prisma.hubLocation.findMany({
-      where: { parentId: null, isActive: true, isPublic: true },
+      where: { parentId: null, isActive: true, isPublic: true, deletedAt: null },
       include: {
         children: {
-          where: { isActive: true, isPublic: true },
+          where: { isActive: true, isPublic: true, deletedAt: null },
           include: {
             children: {
-              where: { isActive: true, isPublic: true },
+              where: { isActive: true, isPublic: true, deletedAt: null },
               include: {
                 children: {
-                  where: { isActive: true, isPublic: true },
+                  where: { isActive: true, isPublic: true, deletedAt: null },
                 },
               },
             },
@@ -542,6 +543,7 @@ export class HubService {
         fullPath: { in: [...candidates] },
         isActive: true,
         isPublic: true,
+        deletedAt: null,
       },
       select: locationSelect,
     });
@@ -550,7 +552,7 @@ export class HubService {
       const lastSegment = withoutRoutePrefix.split("/").filter(Boolean).pop();
       if (lastSegment) {
         location = await this.prisma.hubLocation.findFirst({
-          where: { slug: lastSegment, isActive: true, isPublic: true },
+          where: { slug: lastSegment, isActive: true, isPublic: true, deletedAt: null },
           select: locationSelect,
         });
       }
@@ -588,7 +590,7 @@ export class HubService {
     }
 
     const children = await this.prisma.hubLocation.findMany({
-      where: { parentId: location.id, isActive: true, isPublic: true },
+      where: { parentId: location.id, isActive: true, isPublic: true, deletedAt: null },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -684,7 +686,7 @@ export class HubService {
   }
 
   async getLocations(query?: { type?: string; parentId?: string; search?: string }) {
-    const where: Prisma.HubLocationWhereInput = { isActive: true, isPublic: true };
+    const where: Prisma.HubLocationWhereInput = { isActive: true, isPublic: true, deletedAt: null };
     if (query?.type) where.type = query.type as HubLocationType;
     if (query?.parentId) where.parentId = query.parentId;
     if (query?.search) {
@@ -695,6 +697,39 @@ export class HubService {
       orderBy: { name: "asc" },
     });
     return { locations };
+  }
+
+  /**
+   * Public single-location read. Accepts an id, slug or canonical full path and
+   * only ever returns live, publicly visible locations.
+   */
+  async getPublicLocation(ref: string) {
+    const location = await this.prisma.hubLocation.findFirst({
+      where: {
+        OR: [{ id: ref }, { slug: ref }, { fullPath: ref }],
+        isActive: true,
+        isPublic: true,
+        deletedAt: null,
+      },
+      include: {
+        parent: {
+          select: { id: true, name: true, slug: true, type: true, fullPath: true },
+        },
+        children: {
+          where: { isActive: true, isPublic: true, deletedAt: null },
+          orderBy: { name: "asc" },
+        },
+      },
+    });
+
+    if (!location) {
+      throw new NotFoundException(`Location '${ref}' not found`);
+    }
+
+    return {
+      ...location,
+      targetAmount: Number(location.targetAmount),
+    };
   }
 
   async getSeasons(status?: string) {
@@ -805,11 +840,14 @@ export class HubService {
       where: { id: locationId },
       include: {
         parent: true,
-        children: { include: { children: true } },
+        children: {
+          where: { deletedAt: null },
+          include: { children: { where: { deletedAt: null } } },
+        },
       },
     });
 
-    if (!location) {
+    if (!location || location.deletedAt) {
       throw new NotFoundException(`Location ${locationId} not found`);
     }
 
@@ -830,7 +868,6 @@ export class HubService {
     const campaigns = await this.prisma.businessCampaign.findMany({
       where: {
         status: BusinessCampaignStatus.ACTIVE,
-        business: { status: "ACTIVE" },
         OR: [
           {
             locations: {
@@ -842,7 +879,7 @@ export class HubService {
           },
           {
             locations: { none: {} },
-            business: { locationId: { in: scopeIds } },
+            business: { status: "ACTIVE", locationId: { in: scopeIds } },
           },
         ],
       },
@@ -857,6 +894,7 @@ export class HubService {
           take: 1,
         },
         template: { select: { origin: true } },
+        mode: true,
       },
     });
 
@@ -884,7 +922,9 @@ export class HubService {
         campaign.business?.locationId ??
         location.id;
       const childId = childOf.get(locId) ?? location.id;
-      const origin = campaign.template?.origin ?? "DIRECT";
+      const origin =
+        campaign.template?.origin ??
+        (campaign.mode === "fund" ? "AUDIT" : "DIRECT");
       campaignMeta.set(campaign.id, {
         origin,
         locationId: locId,

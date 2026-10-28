@@ -203,18 +203,19 @@ export function ConsumerMembershipPage() {
             <Crown className="h-6 w-6 text-primary-500" />
           </div>
           <h2 className="mt-3 text-base font-semibold text-gray-900">
-            No membership yet
+            No membership plan
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Membership plans with Bronze, Silver, Gold and Platinum tiers are
-            coming soon.
+            You do not have an active membership subscription. Founding
+            membership is available now and is managed separately from
+            membership plans.
           </p>
           <Link
-            to="/consumer/you"
+            to="/consumer/you/founding-member"
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
           >
             <RefreshCw className="h-4 w-4" />
-            Back to You
+            View Founding Membership
           </Link>
         </div>
       )}

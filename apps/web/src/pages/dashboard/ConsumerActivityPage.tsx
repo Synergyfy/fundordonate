@@ -20,19 +20,41 @@ export interface ConsumerContribution {
   campaignSlug: string;
   campaignTitle: string;
   campaignLocation: string;
+  campaignCity: string;
+  campaignHighStreet: string;
   campaignImage?: string;
   campaignGoal?: number;
   campaignRaised?: number;
+  campaignStatus?: string;
+  campaignEndDate?: string;
   mode: string;
   paymentMethod: string;
+  contributionType: string;
   reference?: string;
 }
 
+function isCampaignEnded(item: ConsumerContribution): boolean {
+  const status = (item.campaignStatus ?? "").toLowerCase();
+  if (["completed", "expired", "cancelled", "ended", "archived"].includes(status)) {
+    return true;
+  }
+  return item.campaignEndDate
+    ? new Date(item.campaignEndDate).getTime() <= Date.now()
+    : false;
+}
+
 function computeImpact(items: ConsumerContribution[]) {
-  const campaignsSupported = new Set(items.map((i) => i.campaignSlug)).size;
-  const totalContributions = items.reduce((sum, i) => sum + i.amount, 0);
-  const communitiesSupported = new Set(items.map((i) => i.campaignLocation).filter(Boolean)).size || (items.length > 0 ? 1 : 0);
-  const highStreetsSupported = new Set(items.map((i) => i.campaignLocation).filter(Boolean)).size || (items.length > 0 ? 1 : 0);
+  const completed = items.filter((item) => item.status === "completed");
+  const campaignsSupported = new Set(
+    completed.map((i) => i.campaignSlug).filter(Boolean),
+  ).size;
+  const totalContributions = completed.reduce((sum, i) => sum + i.amount, 0);
+  const communitiesSupported = new Set(
+    completed.map((i) => i.campaignCity).filter(Boolean),
+  ).size;
+  const highStreetsSupported = new Set(
+    completed.map((i) => i.campaignHighStreet).filter(Boolean),
+  ).size;
   return {
     campaignsSupported,
     totalContributions,
@@ -59,12 +81,14 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-green-50 text-green-700",
   pending: "bg-amber-50 text-amber-700",
   failed: "bg-red-50 text-red-700",
+  refunded: "bg-blue-50 text-blue-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
   pending: "Pending",
   failed: "Failed",
+  refunded: "Refunded",
 };
 
 function StatusChip({ status }: { status: string }) {
@@ -136,14 +160,19 @@ function buildCampaignGroups(items: ConsumerContribution[]): {
   const map = new Map<string, MyCampaignCardData>();
   const ascending = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   for (const c of ascending) {
-    const existing = map.get(c.campaignSlug);
+    const key = c.campaignSlug || c.campaignId;
+    const existing = map.get(key);
     if (existing) {
       existing.contributed += c.amount;
       existing.latestStatus = c.status;
+      if (c.campaignGoal) existing.goal = c.campaignGoal;
+      if (c.campaignRaised) existing.raised = c.campaignRaised;
+      if (c.campaignEndDate) existing.deadline = c.campaignEndDate;
+      existing.ended = existing.ended || isCampaignEnded(c);
       continue;
     }
-    map.set(c.campaignSlug, {
-      slug: c.campaignSlug,
+    map.set(key, {
+      slug: key,
       title: c.campaignTitle,
       location: c.campaignLocation,
       image: c.campaignImage,
@@ -151,7 +180,8 @@ function buildCampaignGroups(items: ConsumerContribution[]): {
       latestStatus: c.status,
       goal: c.campaignGoal ?? 0,
       raised: c.campaignRaised ?? 0,
-      ended: false,
+      deadline: c.campaignEndDate,
+      ended: isCampaignEnded(c),
     });
   }
   const all = [...map.values()];
@@ -362,25 +392,31 @@ export function ConsumerActivityPage() {
 
   useEffect(() => {
     let cancelled = false;
-    userDashboardApi.getDonations()
-      .then((res: any) => {
+    userDashboardApi.getDonations({ limit: 100 })
+      .then((res) => {
         if (cancelled) return;
-        const raw = res?.items || (Array.isArray(res) ? res : []);
-        const list = raw.map((d: any) => ({
+        const raw = res?.items || [];
+        const list: ConsumerContribution[] = raw.map((d) => ({
           id: d.id,
-          reference: d.id?.slice(0, 8)?.toUpperCase(),
+          reference: d.reference || d.id?.slice(0, 8)?.toUpperCase(),
           amount: d.amount || 0,
-          status: (d.status || "completed").toLowerCase(),
+          status: String(d.status || "COMPLETED").toLowerCase(),
           createdAt: d.createdAt || new Date().toISOString(),
           campaignId: d.campaign?.id || d.campaignId || "",
           campaignSlug: d.campaign?.id || d.campaignId || "",
           campaignTitle: d.campaign?.title || "Untitled campaign",
-          campaignLocation: d.business?.city || "",
-          campaignImage: d.campaign?.imageUrl,
+          campaignLocation:
+            d.business?.highStreet || d.business?.localArea || d.business?.city || "",
+          campaignCity: d.business?.city || "",
+          campaignHighStreet: d.business?.highStreet || "",
+          campaignImage: d.campaign?.imageUrl || undefined,
           campaignGoal: Number(d.campaign?.targetAmount) || 0,
           campaignRaised: Number(d.campaign?.raisedAmount) || 0,
-          mode: "donation",
-          paymentMethod: d.paymentMethod || "card",
+          campaignStatus: String(d.campaign?.status || "").toLowerCase(),
+          campaignEndDate: d.campaign?.endDate || undefined,
+          mode: String(d.campaign?.mode || "donation").toLowerCase(),
+          paymentMethod: d.gateway || "—",
+          contributionType: String(d.type || "").toLowerCase(),
         }));
         setItems(list);
         setLoading(false);

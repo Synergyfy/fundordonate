@@ -314,9 +314,9 @@ export class FoundingService {
   async createProgramme(dto: CreateFoundingProgrammeDto) {
     const location = await this.prisma.hubLocation.findUnique({
       where: { id: dto.locationId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, deletedAt: true },
     });
-    if (!location) {
+    if (!location || location.deletedAt) {
       throw new NotFoundException(`Location ${dto.locationId} not found`);
     }
 
@@ -424,7 +424,7 @@ export class FoundingService {
   private async resolveLocation(ref: string): Promise<HubLocation | null> {
     if (!ref) return null;
     return this.prisma.hubLocation.findFirst({
-      where: { OR: [{ id: ref }, { slug: ref }] },
+      where: { OR: [{ id: ref }, { slug: ref }], isActive: true, deletedAt: null },
     });
   }
 

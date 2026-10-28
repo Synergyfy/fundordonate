@@ -13,7 +13,6 @@ export type StepId =
   | "details"
   | "objective"
   | "target"
-  | "activation"
   | "dates"
   | "audience"
   | "participation"
@@ -42,7 +41,6 @@ export const WIZARD_STEPS: StepDef[] = [
   { id: "details", label: "Campaign Details", shortLabel: "Details", icon: "FileText", category: "Content" },
   { id: "objective", label: "Campaign Objective", shortLabel: "Objective", icon: "Target", category: "Content" },
   { id: "target", label: "Funding Target", shortLabel: "Target", icon: "Pound", category: "Funding" },
-  { id: "activation", label: "Activation Rules", shortLabel: "Activation", icon: "Zap", category: "Funding" },
   { id: "dates", label: "Campaign Schedule", shortLabel: "Dates", icon: "Clock", category: "Schedule" },
   { id: "audience", label: "Audience", shortLabel: "Audience", icon: "Users", category: "Participation" },
   { id: "participation", label: "Participation Methods", shortLabel: "Participation", icon: "HandHeart", category: "Participation" },
@@ -676,7 +674,10 @@ export function validateStep(step: StepId, data: CampaignWizardData): StepValida
     }
 
     case "season":
-      if (data.seasonIds.length === 0 && !data.isEvergreen) warnings.push("No season selected");
+      if (data.periodMode === "season" && data.seasonIds.length === 0) {
+        errors.push("Select at least one season for a season-based campaign");
+        fieldErrors.seasonIds = "Select at least one season";
+      }
       break;
 
     case "details":
@@ -707,13 +708,6 @@ export function validateStep(step: StepId, data: CampaignWizardData): StepValida
       }
       break;
 
-    case "activation":
-      if (data.activationRules.stages.length < 2) {
-        errors.push("At least two activation stages are required");
-        fieldErrors.activationStages = "At least two activation stages are required";
-      }
-      break;
-
     case "dates":
       if (data.periodMode === "custom") {
         if (!data.startDate) {
@@ -725,8 +719,16 @@ export function validateStep(step: StepId, data: CampaignWizardData): StepValida
           fieldErrors.endDate = "End date is required";
         }
         if (data.startDate && data.endDate) {
-          const start = new Date(`${data.startDate}T${data.startTime || "00:00"}`);
-          const end = new Date(`${data.endDate}T${data.endTime || "23:59"}`);
+          const start = new Date(
+            data.startDate.includes("T")
+              ? data.startDate
+              : `${data.startDate}T${data.startTime || "00:00"}`,
+          );
+          const end = new Date(
+            data.endDate.includes("T")
+              ? data.endDate
+              : `${data.endDate}T${data.endTime || "23:59"}`,
+          );
           if (end <= start) {
             errors.push("End date must be after start date");
             fieldErrors.endDate = "End date must be after start date";
@@ -809,7 +811,8 @@ export function validateStep(step: StepId, data: CampaignWizardData): StepValida
 
     case "leaderboard":
       if (data.leaderboard.enabled && !data.leaderboard.numberOfWinners) {
-        warnings.push("Consider setting the number of leaderboard winners");
+        errors.push("Set the number of leaderboard winners");
+        fieldErrors.numberOfWinners = "Number of winners is required";
       }
       break;
 

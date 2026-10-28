@@ -4,12 +4,12 @@
   "private": true,
   "description": "FundorDonate NestJS API (Swagger + PostgreSQL/Prisma + Redis + BullMQ)",
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "build": "node init && nest build",
+    "dev": "node init && nest start --watch",
+    "start": "node init && nest start",
+    "start:dev": "node init && nest start --watch",
+    "start:debug": "node init && nest start --debug --watch",
+    "start:prod": "node init && node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "prisma:generate": "prisma generate",
@@ -19,6 +19,7 @@
     "prisma:seed": "prisma db seed",
     "verify:hub": "tsx scripts/verify-hub.ts",
     "verify:admin": "tsx scripts/verify-admin-contracts.ts",
+    "verify:campaign-centre": "tsx scripts/verify-campaign-centre-queries.ts",
     "db:push": "prisma db push"
   },
   "prisma": {
@@ -44,12 +45,14 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.7",
+    "form-data": "^4.0.6",
     "helmet": "^8.0.0",
     "ioredis": "^6.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

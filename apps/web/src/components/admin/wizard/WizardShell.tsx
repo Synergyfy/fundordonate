@@ -98,12 +98,6 @@ export function WizardShell({
 }: Props) {
   const currentIdx = steps.findIndex((s) => s.id === currentStep);
 
-  function canNavigateToStep(stepId: StepId): boolean {
-    const targetIdx = steps.findIndex((s) => s.id === stepId);
-    if (targetIdx > currentIdx) return false;
-    return completedSteps.has(stepId) || targetIdx === currentIdx;
-  }
-
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       {/* ── Header ── */}
@@ -153,21 +147,18 @@ export function WizardShell({
                       const idx = steps.findIndex((s) => s.id === step.id);
                       const isActive = step.id === currentStep;
                       const isCompleted = completedSteps.has(step.id);
-                      const isAccessible = canNavigateToStep(step.id);
                       const hasError = (stepErrors[step.id]?.length ?? 0) > 0;
 
                       return (
                         <button
                           key={step.id}
                           type="button"
-                          onClick={() => isAccessible && onStepClick(step.id)}
-                          disabled={!isAccessible}
+                          onClick={() => onStepClick(step.id)}
+                          aria-current={isActive ? "step" : undefined}
                           className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
                             isActive
                               ? "bg-primary-50 font-semibold text-primary-700"
-                              : isAccessible
-                                ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                                : "cursor-default text-gray-400"
+                              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                           }`}
                         >
                           <span
@@ -211,14 +202,14 @@ export function WizardShell({
               <button
                 key={step.id}
                 type="button"
-                onClick={() => canNavigateToStep(step.id) && onStepClick(step.id)}
-                disabled={!canNavigateToStep(step.id)}
+                onClick={() => onStepClick(step.id)}
+                aria-current={step.id === currentStep ? "step" : undefined}
                 className={`flex h-8 min-w-[2rem] flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                   step.id === currentStep
                     ? "bg-primary-600 text-white"
                     : completedSteps.has(step.id)
                       ? "bg-green-100 text-green-700"
-                      : "bg-gray-200 text-gray-500"
+                      : "bg-gray-200 text-gray-500 hover:bg-gray-300"
                 }`}
               >
                 {completedSteps.has(step.id) ? (

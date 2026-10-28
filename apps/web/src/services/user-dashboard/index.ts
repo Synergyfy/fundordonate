@@ -1,5 +1,10 @@
 import api from "../api";
-import type { UserDashboardProfile, UserDashboardStats } from "./type";
+import type {
+  MyContributionItem,
+  MyContributionsPage,
+  UserDashboardProfile,
+  UserDashboardStats,
+} from "./type";
 
 export const userDashboardService = {
   // -------------------------------------------------------------------------
@@ -10,10 +15,14 @@ export const userDashboardService = {
   },
 
   // -------------------------------------------------------------------------
-  // Donations
+  // Donations (outgoing contributions)
   // -------------------------------------------------------------------------
-  async getDonations(params: { page?: number; limit?: number } = {}) {
+  async getDonations(params: { page?: number; limit?: number } = {}): Promise<MyContributionsPage> {
     return api.get("/user/donations", { params });
+  },
+
+  async getDonation(id: string): Promise<MyContributionItem> {
+    return api.get(`/user/donations/${id}`);
   },
 
   // -------------------------------------------------------------------------
@@ -24,31 +33,19 @@ export const userDashboardService = {
   },
 
   // -------------------------------------------------------------------------
-  // Bookmarks
-  // -------------------------------------------------------------------------
-  async getBookmarks(params: { page?: number; limit?: number } = {}) {
-    return api.get("/user/bookmarks", { params });
-  },
-
-  async toggleBookmark(campaignId: string) {
-    return api.post(`/user/bookmarks/${campaignId}`);
-  },
-
-  // -------------------------------------------------------------------------
-  // Receipts
-  // -------------------------------------------------------------------------
-  async getReceipts(year?: number) {
-    return api.get("/user/receipts", { params: { year } });
-  },
-
-  // -------------------------------------------------------------------------
   // Profile
   // -------------------------------------------------------------------------
   async getProfile(): Promise<UserDashboardProfile> {
     return api.get("/user/profile");
   },
 
-  async updateProfile(data: { firstName?: string; lastName?: string; username?: string; bio?: string; avatar?: string }) {
+  async updateProfile(data: {
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    bio?: string;
+    avatar?: string;
+  }) {
     return api.put("/user/profile", data);
   },
 
@@ -57,17 +54,6 @@ export const userDashboardService = {
   // -------------------------------------------------------------------------
   async deleteAccount() {
     return api.delete("/user/account");
-  },
-
-  // -------------------------------------------------------------------------
-  // Notifications
-  // -------------------------------------------------------------------------
-  async getNotificationPrefs() {
-    return api.get("/user/notifications");
-  },
-
-  async updateNotificationPrefs(data: Record<string, boolean>) {
-    return api.put("/user/notifications", data);
   },
 };
 

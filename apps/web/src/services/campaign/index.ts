@@ -44,6 +44,25 @@ export const campaignService = {
     return api.post(`/business/campaigns/${campaignId}/submit`);
   },
 
+  /** Upload campaign media (server validates MIME, magic bytes and size). */
+  async uploadCampaignMedia(
+    campaignId: string,
+    file: File,
+  ): Promise<{ url: string; mimeType: string; size: number }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    // Let the browser/axios set the multipart boundary.
+    return api.post(`/business/campaigns/${campaignId}/media`, formData);
+  },
+
+  /** Verify a remote image/video link before using it (SSRF + content checks). */
+  async verifyCampaignMediaLink(
+    campaignId: string,
+    url: string,
+  ): Promise<{ url: string; contentType: string; size: number | null }> {
+    return api.post(`/business/campaigns/${campaignId}/media/link`, { url });
+  },
+
   // ── Business-owned MCOM Rewards (attach to a campaign) ──
 
   /** Live list of rewards this business created in MCOM Rewards. */
@@ -101,6 +120,10 @@ export const campaignService = {
     campaignTypeId?: string;
     seasonId?: string;
     locationId?: string;
+    /** HubLocation slug or ID; includes activity in descendant locations. */
+    location?: string;
+    /** City slug or name. */
+    city?: string;
     sortBy?: string;
     sortOrder?: string;
   }): Promise<PaginatedResponse<Campaign>> {

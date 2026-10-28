@@ -67,7 +67,7 @@ export function ConsumerHomePage() {
       const [seasonResult, statsResult, campaignsResult] = await Promise.allSettled([
         seasonApi.getCurrent(),
         userDashboardApi.getStats(),
-        campaignService.list({ status: "ACTIVE", limit: 3 }),
+        campaignService.list({ status: "ACTIVE", audience: "consumer", limit: 3 }),
       ]);
       if (cancelled) return;
       setSeason(seasonResult.status === "fulfilled" ? seasonResult.value : null);

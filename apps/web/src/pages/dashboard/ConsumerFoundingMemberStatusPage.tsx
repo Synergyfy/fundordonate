@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Award, MapPin, Star } from "lucide-react";
-import { userDashboardApi } from "@/services/user-dashboard";
+import { foundingService } from "@/services/founding";
+import type { FoundingMembership } from "@/services/founding/type";
 import { getConsumerCommunity } from "@/services/community";
+import { formatCurrency } from "@/utils/formatters";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", {
@@ -11,19 +13,19 @@ const formatDate = (iso: string) =>
     year: "numeric",
   });
 
-const PARTICIPATION_LABELS: Record<string, string> = {
-  founding_member: "Founding Member",
-  founding_monthly: "Founding Member Monthly",
+const STATUS_STYLES: Record<string, string> = {
+  ACTIVE: "bg-green-50 text-green-700",
+  PENDING: "bg-amber-50 text-amber-700",
+  EXPIRED: "bg-gray-100 text-gray-600",
+  CANCELLED: "bg-red-50 text-red-700",
 };
 
-interface FoundingRecord {
-  id: string;
-  participationType: string;
-  campaignTitle: string;
-  campaignLocation?: string;
-  campaignSlug: string;
-  createdAt: string;
-}
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Active",
+  PENDING: "Pending",
+  EXPIRED: "Expired",
+  CANCELLED: "Cancelled",
+};
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -36,39 +38,104 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+function MembershipCard({ membership }: { membership: FoundingMembership }) {
+  const status = String(membership.status || "").toUpperCase();
+  const title = membership.isMonthly
+    ? "Founding Member Monthly"
+    : "Founding Member";
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50">
+            <Star className="h-5 w-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-lg font-bold text-gray-900">{title}</p>
+            <p className="text-xs text-gray-500">
+              Founding member since {formatDate(membership.grantedAt)}
+            </p>
+          </div>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            STATUS_STYLES[status] ?? "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {STATUS_LABELS[status] ?? status}
+        </span>
+      </div>
+
+      <div className="mt-3 border-t border-gray-100">
+        <DetailRow label="Type">
+          <p className="font-medium text-gray-900">{title}</p>
+        </DetailRow>
+
+        <DetailRow label="Location">
+          <p className="flex items-center gap-1 font-medium text-gray-900">
+            <MapPin className="h-3.5 w-3.5 text-gray-400" />
+            {membership.locationName ?? "Community Hub"}
+          </p>
+        </DetailRow>
+
+        <DetailRow label="Contribution">
+          <p className="font-medium text-gray-900">
+            {formatCurrency(membership.contributionAmount)}
+            {membership.isMonthly ? " / month" : " one-off"}
+          </p>
+        </DetailRow>
+
+        <DetailRow label="Start Date">
+          <p className="font-medium text-gray-900">{formatDate(membership.grantedAt)}</p>
+        </DetailRow>
+
+        {membership.expiresAt ? (
+          <DetailRow label={membership.isMonthly ? "Renews" : "Expires"}>
+            <p className="font-medium text-gray-900">
+              {formatDate(membership.expiresAt)}
+            </p>
+          </DetailRow>
+        ) : null}
+
+        {membership.benefits.length > 0 ? (
+          <DetailRow label="Benefits">
+            <ul className="space-y-1">
+              {membership.benefits.map((benefit) => (
+                <li
+                  key={benefit}
+                  className="flex items-start gap-1.5 text-sm text-gray-600"
+                >
+                  <Award className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  {benefit}
+                </li>
+              ))}
+            </ul>
+          </DetailRow>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function ConsumerFoundingMemberStatusPage() {
-  const [record, setRecord] = useState<FoundingRecord | null>(null);
+  const [memberships, setMemberships] = useState<FoundingMembership[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    userDashboardApi.getDonations()
-      .then((res: any) => {
+    foundingService
+      .getMyMemberships()
+      .then((all) => {
         if (cancelled) return;
-        const items = res?.items || (Array.isArray(res) ? res : []);
-        const fm = items.find((c: any) =>
-          c.campaign?.title?.toLowerCase().includes("founding") ||
-          c.campaign?.category?.toLowerCase().includes("founding")
+        setMemberships(
+          all.filter(
+            (membership) => String(membership.audience).toUpperCase() === "CONSUMER",
+          ),
         );
-        if (fm) {
-          setRecord({
-            id: fm.id,
-            participationType: "founding_member",
-            campaignTitle: fm.campaign?.title || "Founding Member Campaign",
-            campaignLocation: fm.business?.city || "Community Hub",
-            campaignSlug: fm.campaign?.slug || fm.campaign?.id || "",
-            createdAt: fm.createdAt || new Date().toISOString(),
-          });
-        } else {
-          setRecord(null);
-        }
-        setLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) {
-          setRecord(null);
-          setLoading(false);
-        }
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -101,60 +168,11 @@ export function ConsumerFoundingMemberStatusPage() {
 
       <h1 className="text-2xl font-bold text-gray-900">Founding Member</h1>
 
-      {record ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50">
-                <Star className="h-5 w-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900">
-                  {PARTICIPATION_LABELS[record.participationType] ?? "Founding Member"}
-                </p>
-                <p className="text-xs text-gray-500">Founding member since{" "}
-                  {formatDate(record.createdAt)}</p>
-              </div>
-            </div>
-            <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-              Active
-            </span>
-          </div>
-
-          <div className="mt-3 border-t border-gray-100">
-            <DetailRow label="Type">
-              <p className="font-medium text-gray-900">
-                {PARTICIPATION_LABELS[record.participationType] ?? "Founding Member"}
-              </p>
-            </DetailRow>
-
-            <DetailRow label="Associated Campaign">
-              <p className="font-medium text-gray-900">{record.campaignTitle}</p>
-              {record.campaignLocation ? (
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {record.campaignLocation}
-                </p>
-              ) : null}
-              <Link
-                to={`/consumer/explore/campaign/${record.campaignSlug}`}
-                className="mt-1.5 inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700"
-              >
-                View Campaign
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </DetailRow>
-
-            <DetailRow label="Start Date">
-              <p className="font-medium text-gray-900">{formatDate(record.createdAt)}</p>
-            </DetailRow>
-
-            <DetailRow label="Status">
-              <span className="inline-flex rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                Active
-              </span>
-            </DetailRow>
-          </div>
+      {memberships.length > 0 ? (
+        <div className="space-y-4">
+          {memberships.map((membership) => (
+            <MembershipCard key={membership.id} membership={membership} />
+          ))}
         </div>
       ) : (
         <div className="rounded-xl border border-gray-100 bg-white p-8 text-center">

@@ -20,7 +20,9 @@ const ELIGIBILITY_LABELS: Record<string, string> = {
   pre_audit: "247GBS Audit pre-audit completed",
   membership_active: "Active membership",
   package_tier: "Purchased package tier",
-  min_contribution: "Minimum platform contribution",
+  min_contribution: "Minimum funds raised",
+  required_campaign_donation: "Donation during setup to attached campaign",
+  admin_assigned: "Assigned by an Admin",
   admin_approval: "Admin review after claiming",
 };
 
@@ -28,16 +30,32 @@ function accessConfigOf(t: AdminCampaignTemplate): {
   eligibility: string[];
   allowAssignmentOverride: boolean;
   minContribution?: string;
+  requiredCampaignTitle?: string | null;
+  requiredCampaignMinPence?: number;
+  assignedBusinessIds: string[];
+  assignedBusinesses: { id: string; name: string; email: string }[];
 } {
   const access = (t?.config?.access ?? {}) as {
     eligibility?: string[];
     allowAssignmentOverride?: boolean;
     minContribution?: string;
+    requiredCampaignTitle?: string | null;
+    requiredCampaignMinPence?: number;
+    assignedBusinessIds?: string[];
+    assignedBusinesses?: { id: string; name: string; email: string }[];
   };
   return {
     eligibility: Array.isArray(access.eligibility) ? access.eligibility : [],
     allowAssignmentOverride: access.allowAssignmentOverride === true,
     minContribution: access.minContribution,
+    requiredCampaignTitle: access.requiredCampaignTitle ?? null,
+    requiredCampaignMinPence: Number(access.requiredCampaignMinPence ?? 0),
+    assignedBusinessIds: Array.isArray(access.assignedBusinessIds)
+      ? access.assignedBusinessIds
+      : [],
+    assignedBusinesses: Array.isArray(access.assignedBusinesses)
+      ? access.assignedBusinesses
+      : [],
   };
 }
 
@@ -149,9 +167,11 @@ export function CampaignTemplatesPage() {
   };
 
   const openInstantiate = (template: AdminCampaignTemplate) => {
+    const access = accessConfigOf(template);
     setInstantiateTarget(template);
     setInstLocationId("");
-    setInstBusinessIds("");
+    // Admin-assigned templates already know their audience — prefill it.
+    setInstBusinessIds(access.assignedBusinessIds.join(", "));
     setInstAmountGbp("50000");
     setInstDeadline("60");
     setInstForce(false);
@@ -417,6 +437,22 @@ export function CampaignTemplatesPage() {
                           · {ELIGIBILITY_LABELS[rule] ?? rule}
                           {rule === "min_contribution" && access.minContribution
                             ? ` (£${access.minContribution})`
+                            : ""}
+                          {rule === "admin_assigned" && access.assignedBusinesses.length > 0
+                            ? ` (${access.assignedBusinesses.length} assigned)`
+                            : ""}
+                          {rule === "required_campaign_donation" &&
+                          access.requiredCampaignTitle
+                            ? ` (${access.requiredCampaignTitle}${
+                                access.requiredCampaignMinPence &&
+                                access.requiredCampaignMinPence > 0
+                                  ? ` · min £${(
+                                      access.requiredCampaignMinPence / 100
+                                    ).toFixed(
+                                      access.requiredCampaignMinPence % 100 === 0 ? 0 : 2,
+                                    )}`
+                                  : ""
+                              })`
                             : ""}
                         </li>
                       ))}

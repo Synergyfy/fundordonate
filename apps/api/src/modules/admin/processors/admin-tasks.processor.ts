@@ -1,9 +1,11 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Logger } from "@nestjs/common";
-import { Job } from "bullmq";
+import { Job, Queue } from "bullmq";
 import { PrismaService } from "@/prisma/prisma.service";
-import { BusinessCampaignStatus, ContributionStatus } from "@prisma/client";
+import { BusinessCampaignStatus, ContributionStatus, HubLocationType } from "@prisma/client";
 import { AdminCampaignsService } from "../services/admin-campaigns.service";
+import { ActivationService } from "@/modules/activation/activation.service";
 import { ADMIN_TASKS_QUEUE } from "./admin-tasks.constants";
 
 export { ADMIN_TASKS_QUEUE };
@@ -49,6 +51,8 @@ export class AdminTasksProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly campaignsService: AdminCampaignsService,
+    private readonly activationService: ActivationService,
+    @InjectQueue(ADMIN_TASKS_QUEUE) private readonly queue: Queue,
   ) {
     super();
   }
@@ -68,6 +72,12 @@ export class AdminTasksProcessor extends WorkerHost {
 
       case "campaign-lifecycle-sweep":
         return this.handleCampaignLifecycleSweep();
+
+      case "city-activation-sweep":
+        return this.handleCityActivationSweep();
+
+      case "city-activation-evaluate":
+        return this.activationService.evaluateCity(job.data.cityId, { apply: true });
 
       case "season-rollup-sweep":
         return this.handleSeasonRollupSweep();
@@ -115,6 +125,49 @@ export class AdminTasksProcessor extends WorkerHost {
     );
 
     return { activated: activated.count, completed: completed.count };
+  }
+
+  /**
+   * Enqueues one activation-evaluation job per city. Fanning out keeps each
+   * worker job small and lets BullMQ retry a single city without re-running the
+   * whole country.
+   */
+  private async handleCityActivationSweep() {
+    const cities = await this.prisma.hubLocation.findMany({
+      where: {
+        type: HubLocationType.CITY,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: { id: true },
+      orderBy: { name: "asc" },
+    });
+
+    if (cities.length === 0) {
+      return { enqueued: 0 };
+    }
+
+    try {
+      await this.queue.addBulk(
+        cities.map((city) => ({
+          name: "city-activation-evaluate",
+          data: { cityId: city.id },
+          opts: {
+            jobId: `city-activation-${city.id}`,
+            removeOnComplete: true,
+            removeOnFail: 100,
+            attempts: 1,
+          },
+        })),
+      );
+    } catch (err: any) {
+      // Duplicate job ids (a previous sweep still running) are harmless.
+      this.logger.warn(`City activation sweep enqueue skipped: ${err.message}`);
+      return { enqueued: 0, skipped: true };
+    }
+
+    this.logger.log(`City activation sweep enqueued ${cities.length} cities`);
+    return { enqueued: cities.length };
   }
 
   /**

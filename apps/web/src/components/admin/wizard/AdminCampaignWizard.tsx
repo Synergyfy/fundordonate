@@ -18,7 +18,6 @@ import {
   type CampaignRewardItem,
   type ContributionType,
   type StepId,
-  type ActivationStage,
   type StretchTarget,
   type LeaderboardPrize,
 } from "@/types/campaign-wizard";
@@ -201,7 +200,12 @@ function StepScope({ formData, onUpdate, fieldErrors }: StepProps) {
                 scope: opt.value,
                 // Independent campaigns have no location dependency — reset coverage
                 ...(opt.value === "independent"
-                  ? { locationCoverage: createDefaultWizardData().locationCoverage }
+                  ? {
+                      locationCoverage: createDefaultWizardData().locationCoverage,
+                      cityId: "",
+                      citySlug: "",
+                      cityName: "",
+                    }
                   : {}),
               })}
               className={`flex flex-col items-start gap-3 rounded-xl border-2 p-5 text-left transition-all ${
@@ -576,11 +580,15 @@ function StepLocations({ formData, onUpdate, fieldErrors }: StepProps) {
                       : "border-gray-200 hover:bg-gray-50"
                   }`}
                 >
-                  <div className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                    onClick={() => loc.toggleCity(city)}
+                  >
                     <input
                       type="checkbox"
                       checked={citySelected}
                       onChange={() => loc.toggleCity(city)}
+                      onClick={(e) => e.stopPropagation()}
                       className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
                     <Building2 className="h-4 w-4 text-gray-400" />
@@ -645,11 +653,15 @@ function StepLocations({ formData, onUpdate, fieldErrors }: StepProps) {
                                   : "border-gray-100"
                               }`}
                             >
-                              <div className="flex items-center gap-3 px-3 py-2">
+                              <div
+                                className="flex cursor-pointer items-center gap-3 px-3 py-2"
+                                onClick={() => loc.toggleLocalArea(area)}
+                              >
                                 <input
                                   type="checkbox"
                                   checked={areaSelected}
                                   onChange={() => loc.toggleLocalArea(area)}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                                 />
                                 <span className="flex-1 text-sm text-gray-700">{area.name}</span>
@@ -1343,9 +1355,9 @@ function StepDetails({ formData, onUpdate, fieldErrors }: StepProps) {
           Add an image or video for the campaign banner.
         </p>
         <FileUpload
-          value={formData.videoUrl || ""}
+          value={formData.featuredImage || ""}
           onChange={(url) => {
-            onUpdate({ videoUrl: url });
+            onUpdate({ featuredImage: url });
           }}
           label="Campaign Image / Video"
           placeholder="https://example.com/image.jpg"
@@ -1623,218 +1635,6 @@ function StepTarget({ formData, onUpdate, fieldErrors }: StepProps) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STEP 8 — Activation Rules
-// ═══════════════════════════════════════════════════════════════════════════
-
-function StepActivation({ formData, onUpdate, fieldErrors }: StepProps) {
-  const stages: ActivationStage[] = formData.activationRules?.stages || [];
-  const targetAmount = Number(formData.targetAmount) || 0;
-
-  const handleActivationAmountChange = (value: string) => {
-    const raw = parseAmountInput(value);
-    const num = Number(raw);
-    if (targetAmount > 0 && num >= targetAmount) return;
-    const percentage = targetAmount > 0 ? Math.round((num / targetAmount) * 100) : 0;
-    onUpdate({
-      activationRules: {
-        ...formData.activationRules,
-        activationAmount: raw,
-        activationPercentage: String(percentage),
-      },
-    });
-  };
-
-  const handleActivationPercentageChange = (value: string) => {
-    const num = Number(value);
-    if (num > 100) return;
-    const amount = targetAmount > 0 ? Math.round((num / 100) * targetAmount) : 0;
-    onUpdate({
-      activationRules: {
-        ...formData.activationRules,
-        activationPercentage: value,
-        activationAmount: String(amount),
-      },
-    });
-  };
-
-  const updateStage = (index: number, field: keyof ActivationStage, value: string) => {
-    const updated = stages.map((s, i) =>
-      i === index ? { ...s, [field]: value } : s,
-    );
-    onUpdate({ activationRules: { ...formData.activationRules, stages: updated } });
-  };
-
-  const addStage = () => {
-    onUpdate({
-      activationRules: {
-        ...formData.activationRules,
-        stages: [
-          ...stages,
-          {
-            id: `as-${Date.now()}`,
-            name: "",
-            thresholdType: "amount",
-            thresholdValue: "",
-          },
-        ],
-      },
-    });
-  };
-
-  const removeStage = (index: number) => {
-    onUpdate({
-      activationRules: {
-        ...formData.activationRules,
-        stages: stages.filter((_, i) => i !== index),
-      },
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Activation Rules</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Define how and when this campaign becomes active, including progress stages.
-        </p>
-      </div>
-
-      <FieldError name="activationStages" fieldErrors={fieldErrors} />
-
-      {/* Activation Amount */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Activation Threshold</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Activation Amount (£)</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">£</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formData.activationRules?.activationAmount ? formatAmount(formData.activationRules.activationAmount) : ""}
-                onChange={(e) => handleActivationAmountChange(e.target.value)}
-                placeholder="0"
-                className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-7 pr-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              Minimum amount raised before campaign activates. Must be less than target (£{formatAmount(String(targetAmount))}).
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Activation Percentage (%)</label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formData.activationRules?.activationPercentage || ""}
-                onChange={(e) => handleActivationPercentageChange(e.target.value)}
-                placeholder="0"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 pr-8 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              Auto-calculated from amount and target. Campaign activates at this percentage.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Stages */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Progress Stages</h3>
-            <p className="mt-0.5 text-xs text-gray-500">
-              Configure progress milestones that unlock during the campaign.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={addStage}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <Plus className="h-4 w-4" />
-            Add Stage
-          </button>
-        </div>
-
-        {stages.length === 0 ? (
-          <div className="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500">
-            No progress stages configured. Click "Add Stage" to create one.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {stages.map((stage, index) => (
-              <div
-                key={stage.id}
-                className="rounded-lg border border-gray-200 bg-gray-50 p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="mt-2.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
-                    {index + 1}
-                  </span>
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Stage Name</label>
-                      <input
-                        type="text"
-                        value={stage.name}
-                        onChange={(e) => updateStage(index, "name", e.target.value)}
-                        placeholder="e.g. Stage 1, 25% Complete"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Threshold Type</label>
-                        <select
-                          value={stage.thresholdType}
-                          onChange={(e) => updateStage(index, "thresholdType", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        >
-                          <option value="amount">Amount (£)</option>
-                          <option value="percentage">Percentage (%)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Threshold Value</label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                            {stage.thresholdType === "amount" ? "£" : "%"}
-                          </span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={stage.thresholdType === "amount" && stage.thresholdValue ? formatAmount(stage.thresholdValue) : (stage.thresholdValue || "")}
-                            onChange={(e) => updateStage(index, "thresholdValue", parseAmountInput(e.target.value))}
-                            placeholder="0"
-                            className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-7 pr-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeStage(index)}
-                    className="mt-2 rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -4016,7 +3816,6 @@ export function AdminCampaignWizard() {
     details: StepDetails,
     objective: StepObjective,
     target: StepTarget,
-    activation: StepActivation,
     dates: StepDates,
     audience: StepAudience,
     participation: StepParticipation,
@@ -4083,61 +3882,185 @@ export function AdminCampaignWizard() {
     setCurrentStep(stepId);
   }, []);
 
+  /**
+   * Maps the wizard state onto the platform-campaign API payload. Wizard
+   * campaign data is richer than the persisted campaign row; the remaining
+   * configuration is stored in `settings` so it is not lost.
+   */
+  const buildCampaignPayload = useCallback(
+    (status: "DRAFT" | "ACTIVE") => {
+      const rawTarget = String(formData.targetAmount ?? "").replace(/[^0-9.]/g, "");
+      const targetInPence =
+        formData.hasTarget === false ? 0 : Math.round(Number(rawTarget) * 100);
+      const startingAmountInPence = Math.round(
+        Number(String(formData.startingAmount ?? "").replace(/[^0-9.]/g, "")) * 100,
+      );
+
+      const coverage = formData.locationCoverage;
+      const primaryLocationId =
+        formData.cityId || coverage.selectedCities[0] || undefined;
+      const additionalLocationIds = Array.from(
+        new Set([
+          ...coverage.selectedCities,
+          ...coverage.selectedLocalAreas,
+          ...coverage.selectedHighStreets,
+        ]),
+      ).filter((id) => id && id !== primaryLocationId);
+
+      const combineDate = (date: string, time: string, endOfDay: boolean) => {
+        if (!date) return null;
+        // The date picker already emits a `YYYY-MM-DDTHH:mm` value; older
+        // callers pass a plain date plus a separate time.
+        const raw = date.includes("T")
+          ? date
+          : `${date}T${time || (endOfDay ? "23:59:59" : "00:00:00")}`;
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+      };
+
+      const audience =
+        formData.audience === "business"
+          ? "BUSINESS"
+          : formData.audience === "consumer"
+            ? "CONSUMER"
+            : "BOTH";
+
+      // A campaign that only accepts backing/pledges runs in fund mode;
+      // anything that accepts donations runs in donation mode.
+      const mode =
+        formData.participation?.backCampaign &&
+        formData.participation?.donateContribute === false
+          ? "fund"
+          : "donation";
+
+      const category = formData.categoryId
+        ? formData.categoryId
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (char) => char.toUpperCase())
+        : undefined;
+
+      // Everything the admin configures in the wizard is persisted on the
+      // campaign's `settings` JSON so the backend can validate and enforce it.
+      const settings = JSON.parse(
+        JSON.stringify({
+          campaignCode: formData.campaignCode || undefined,
+          campaignType: formData.campaignType,
+          scope: formData.scope,
+          cityId: formData.cityId || undefined,
+          citySlug: formData.citySlug || undefined,
+          cityName: formData.cityName || undefined,
+          locationCoverage: coverage,
+          seasonIds: formData.seasonIds,
+          programmeName: formData.programmeName || undefined,
+          objective: formData.objective || undefined,
+          objectiveDetails: formData.objectiveDetails || undefined,
+          hasTarget: formData.hasTarget !== false,
+          startingAmount: formData.startingAmount || "0",
+          startingAmountPence: startingAmountInPence,
+          stretchTargets: formData.stretchTargets,
+          periodMode: formData.periodMode,
+          isEvergreen: formData.isEvergreen,
+          additionalImages: formData.additionalImages,
+          videoUrl: formData.videoUrl || undefined,
+          participation: formData.participation,
+          contributionRules: formData.contributionRules,
+          allocationRules: formData.allocationRules,
+          backerRules: formData.backerRules,
+          foundingMemberRules: formData.foundingMemberRules,
+          groupRules: formData.groupRules,
+          rewards: formData.rewards,
+          hasRewards: formData.hasRewards,
+          qualificationMode: formData.qualificationMode,
+          leaderboard: formData.leaderboard,
+          terms: formData.terms,
+          approval: formData.approval,
+        }),
+      );
+
+      return {
+        title:
+          formData.title.trim() ||
+          (status === "DRAFT" ? "Untitled Campaign Draft" : "Untitled Campaign"),
+        shortDescription: formData.shortDescription.trim() || undefined,
+        description: formData.description.trim() || undefined,
+        targetAmount: targetInPence,
+        mode,
+        audience,
+        category,
+        imageUrl: formData.featuredImage || formData.videoUrl || undefined,
+        primaryLocationId,
+        additionalLocationIds,
+        startDate: combineDate(formData.startDate, formData.startTime, false),
+        endDate: combineDate(formData.endDate, formData.endTime, true),
+        status,
+        isFeatured: status === "ACTIVE",
+        settings,
+      };
+    },
+    [formData],
+  );
+
+  /** Validates every visible step and jumps to the first invalid one. */
+  const validateAllSteps = useCallback((): boolean => {
+    const nextErrors: Partial<Record<StepId, string[]>> = {};
+    let firstInvalid: StepId | null = null;
+
+    for (const step of activeSteps) {
+      const result = validateStep(step.id, formData);
+      if (!result.valid) {
+        nextErrors[step.id] = result.errors;
+        if (!firstInvalid) firstInvalid = step.id;
+      }
+    }
+
+    setStepErrors(nextErrors);
+    if (firstInvalid) {
+      setCurrentStep(firstInvalid);
+      return false;
+    }
+    return true;
+  }, [activeSteps, formData]);
+
   const handleSaveDraft = useCallback(async () => {
     setSaving(true);
     try {
-      const primarySeasonId = formData.seasonIds?.[0] || undefined;
-      const targetInPence = formData.targetAmount ? Math.round(Number(formData.targetAmount) * 100) : 0;
-      await adminApi.createTemplate({
-        name: formData.title?.trim() || "Untitled Campaign Draft",
-        tagline: formData.shortDescription?.trim() || formData.title?.trim() || "Draft Template",
-        seasonId: primarySeasonId,
-        status: "DRAFT",
-        audience: (formData.audience || "both").toUpperCase(),
-        category: formData.categoryId || "fund",
-        config: {
-          ...formData,
-          targetAmountInPence: targetInPence,
-        },
-      });
+      const payload = buildCampaignPayload("DRAFT");
+      await adminApi.createCampaign(payload as any);
       navigate("/admin/campaigns");
     } catch (err: any) {
       console.error("Failed to save draft:", err);
-      alert(err?.response?.data?.message || err?.message || "Failed to save campaign draft to database");
+      alert(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to save campaign draft to database",
+      );
     } finally {
       setSaving(false);
     }
-  }, [formData, navigate]);
+  }, [buildCampaignPayload, navigate]);
 
   const handleSubmitPublish = useCallback(async () => {
-    if (!validateCurrentStep()) return;
+    if (!validateAllSteps()) return;
     setPublishing(true);
     try {
-      const primarySeasonId = formData.seasonIds?.[0] || undefined;
-      const targetInPence = formData.targetAmount ? Math.round(Number(formData.targetAmount) * 100) : 0;
-      await adminApi.createTemplate({
-        name: formData.title?.trim() || "Untitled Campaign",
-        tagline: formData.shortDescription?.trim() || formData.title?.trim() || "New Campaign",
-        seasonId: primarySeasonId,
-        status: "ACTIVE",
-        audience: (formData.audience || "both").toUpperCase(),
-        category: formData.categoryId || "fund",
-        config: {
-          ...formData,
-          targetAmountInPence: targetInPence,
-        },
-      });
+      const payload = buildCampaignPayload("ACTIVE");
+      await adminApi.createCampaign(payload as any);
+      setCompletedSteps(new Set(activeSteps.map((step) => step.id)));
       setPublished(true);
       setTimeout(() => {
         navigate("/admin/campaigns");
       }, 1500);
     } catch (err: any) {
       console.error("Failed to publish campaign:", err);
-      alert(err?.response?.data?.message || err?.message || "Failed to publish campaign to database");
+      alert(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to publish campaign to database",
+      );
     } finally {
       setPublishing(false);
     }
-  }, [validateCurrentStep, formData, navigate]);
+  }, [validateAllSteps, buildCampaignPayload, activeSteps, navigate]);
 
   const StepComponent = stepComponents[currentStep];
 

@@ -72,6 +72,34 @@ export interface DashboardUser {
 }
 
 /**
+ * Whether the user belongs on the business dashboard. Central Hub uses this to
+ * decide between the business wallet (`/dashboard/wallet`) and the customer
+ * wallet (`/customer/wallet`).
+ */
+export function isBusinessDashboardUser(user: DashboardUser): boolean {
+  return (
+    user.userType === "business" ||
+    user.role === "business" ||
+    user.role === "fundraiser"
+  );
+}
+
+/**
+ * Central Hub wallet page for a user. Business users (and admins, who can
+ * access the business dashboard) use the business wallet; everyone else uses
+ * the customer wallet.
+ */
+export function getCentralWalletPath(
+  user: DashboardUser | null | undefined,
+): "/dashboard/wallet" | "/customer/wallet" {
+  if (!user) return "/customer/wallet";
+  if (user.userType === "admin" || user.role === "admin") {
+    return "/dashboard/wallet";
+  }
+  return isBusinessDashboardUser(user) ? "/dashboard/wallet" : "/customer/wallet";
+}
+
+/**
  * Resolves the dashboard a user should land on.
  * Uses userType (account type) for primary routing, role (capability) for
  * refinement. This is the single source of truth for role-based redirects.
@@ -80,11 +108,7 @@ export function getDashboardRoute(user: DashboardUser): string {
   if (user.userType === "admin" || user.role === "admin") {
     return "/admin";
   }
-  if (
-    user.userType === "business" ||
-    user.role === "business" ||
-    user.role === "fundraiser"
-  ) {
+  if (isBusinessDashboardUser(user)) {
     return "/dashboard";
   }
   return "/consumer";

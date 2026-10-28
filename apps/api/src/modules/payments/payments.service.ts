@@ -23,6 +23,11 @@ import { ConfirmChargeDto } from "./dto/confirm-charge.dto";
 import { ContributionStatus, ContributionType } from "@prisma/client";
 import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
 import { RewardRevokeQueueService } from "@/modules/rewards/services/reward-revoke-queue.service";
+import {
+  enforceCampaignChargeRules,
+  getCampaignWizardSettings,
+} from "@/modules/campaigns/campaign-wizard-settings";
+import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
 
 /**
  * Placeholder MCOM ids written by an older auto-link routine (`mcom_<localId>`)
@@ -45,6 +50,7 @@ export class PaymentsService {
     private readonly rewardIssuanceQueue: RewardIssueQueueService,
     private readonly rewardRevokeQueue: RewardRevokeQueueService,
     private readonly config: ConfigService,
+    private readonly eligibility: TemplateEligibilityService,
   ) {}
 
   /**
@@ -122,7 +128,6 @@ export class PaymentsService {
     }
 
     let campaign = null;
-    let businessId: string | undefined = undefined;
 
     if (dto.type === ChargePurposeType.SELF_FUNDING) {
       if (!userId) {
@@ -139,13 +144,28 @@ export class PaymentsService {
             ownerId: userId,
           },
         },
-        include: { business: true },
+        include: {
+          business: true,
+          // Full template so the shared eligibility helpers can read the
+          // self-funding config (single join — no N+1).
+          template: true,
+        },
       });
       if (!campaign) {
         // Return 404 rather than 403 to prevent ID enumeration
         throw new NotFoundException("Campaign not found");
       }
-      businessId = campaign.businessId;
+
+      // Template Step 14 — "Not allowed" is enforced on the charge, not just
+      // hidden in the business UI.
+      if (
+        campaign.template &&
+        this.eligibility.selfFundingMode(campaign.template) === "not_allowed"
+      ) {
+        throw new BadRequestException(
+          "This template does not allow self-funding.",
+        );
+      }
     } else if (dto.campaignId) {
       campaign = await this.prisma.businessCampaign.findUnique({
         where: { id: dto.campaignId },
@@ -154,8 +174,6 @@ export class PaymentsService {
       if (!campaign) {
         throw new NotFoundException("Campaign not found");
       }
-      // Never trust client-supplied businessId; strictly bind to campaign's parent business
-      businessId = campaign.businessId;
     } else if (dto.businessId) {
       const biz = await this.prisma.business.findUnique({
         where: { id: dto.businessId },
@@ -163,7 +181,118 @@ export class PaymentsService {
       if (!biz) {
         throw new NotFoundException("Business not found");
       }
-      businessId = biz.id;
+    }
+
+    // Enforce the admin-authored campaign rules before creating a charge.
+    const metadata = (dto.metadata ?? {}) as {
+      participationType?: unknown;
+      contributionType?: unknown;
+      acceptedTerms?: unknown;
+      allocations?: unknown;
+      bonusSupportPence?: unknown;
+    };
+    const acceptedTerms =
+      typeof dto.acceptedTerms === "boolean"
+        ? dto.acceptedTerms
+        : metadata.acceptedTerms === true;
+
+    if (campaign && dto.type !== ChargePurposeType.SELF_FUNDING) {
+      const settings = getCampaignWizardSettings(campaign.settings);
+      const rawParticipation =
+        typeof metadata.participationType === "string"
+          ? metadata.participationType
+          : typeof metadata.contributionType === "string"
+            ? metadata.contributionType
+            : undefined;
+      const participationType =
+        rawParticipation === "backer"
+          ? "back_campaign"
+          : rawParticipation === "founding"
+            ? "founding_member"
+            : rawParticipation;
+
+      let isNewBacker = true;
+      let currentBackerCount = 0;
+
+      if (settings.backerRules?.enabled) {
+        const [backers, existingForUser] = await Promise.all([
+          this.prisma.contribution.groupBy({
+            by: ["backerId"],
+            where: {
+              campaignId: campaign.id,
+              status: ContributionStatus.COMPLETED,
+              backerId: { not: null },
+            },
+          }),
+          userId
+            ? this.prisma.contribution.count({
+                where: {
+                  campaignId: campaign.id,
+                  backerId: userId,
+                  status: ContributionStatus.COMPLETED,
+                },
+              })
+            : Promise.resolve(0),
+        ]);
+        currentBackerCount = backers.length;
+        isNewBacker = existingForUser === 0;
+      }
+
+      let isNewFoundingMember = true;
+      let currentFoundingMemberCount = 0;
+      if (
+        participationType === "founding_member" &&
+        settings.foundingMemberRules?.enabled &&
+        settings.foundingMemberRules.maxFoundingMembers
+      ) {
+        const foundingBackers = await this.prisma.contribution.findMany({
+          where: {
+            campaignId: campaign.id,
+            status: ContributionStatus.COMPLETED,
+            backerId: { not: null },
+            metadata: {
+              path: ["customMetadata", "participationType"],
+              equals: "founding_member",
+            },
+          },
+          select: { backerId: true },
+        });
+        const uniqueBackers = new Set(
+          foundingBackers
+            .map((entry) => entry.backerId)
+            .filter((id): id is string => Boolean(id)),
+        );
+        currentFoundingMemberCount = uniqueBackers.size;
+        isNewFoundingMember = !userId || !uniqueBackers.has(userId);
+      }
+
+      const metadataAllocations = Array.isArray(metadata.allocations)
+        ? (metadata.allocations as {
+            destinationId: string;
+            percentage?: number;
+            amountMinor?: number;
+          }[])
+        : undefined;
+
+      enforceCampaignChargeRules(
+        { ...campaign, platform: campaign.businessId === null },
+        {
+          amountMinor: dto.amountMinor,
+          purpose: dto.type,
+          isNewBacker,
+          currentBackerCount,
+          isNewFoundingMember,
+          currentFoundingMemberCount,
+          allocations: dto.allocations ?? metadataAllocations,
+          participationType,
+          rewardId: dto.rewardId,
+          acceptedTerms,
+          bonusAmountMinor:
+            typeof metadata.bonusSupportPence === "number"
+              ? metadata.bonusSupportPence
+              : undefined,
+        },
+      );
     }
 
     // Generate deterministic business reference
@@ -174,9 +303,10 @@ export class PaymentsService {
 
     const amountMinorStr = String(Math.round(dto.amountMinor));
 
-    // If tied to a business/campaign, create an initial PENDING contribution record
+    // If tied to a campaign, create an initial PENDING contribution record.
+    // Platform campaigns have no owning business, so businessId may be null.
     let contribution = null;
-    if (businessId && campaign) {
+    if (campaign) {
       const contribType =
         dto.type === ChargePurposeType.SELF_FUNDING
           ? ContributionType.SELF_FUNDING
@@ -184,7 +314,7 @@ export class PaymentsService {
 
       contribution = await this.prisma.contribution.create({
         data: {
-          businessId,
+          businessId: campaign.businessId,
           campaignId: campaign.id,
           backerId: userId ?? null,
           type: contribType,
@@ -197,6 +327,8 @@ export class PaymentsService {
             notes: dto.notes ?? null,
             isAnonymous: dto.isAnonymous ?? false,
             rewardId: dto.rewardId ?? null,
+            allocations: dto.allocations ?? null,
+            acceptedTerms: acceptedTerms === true,
             customMetadata: dto.metadata ?? {},
           } as any,
         },

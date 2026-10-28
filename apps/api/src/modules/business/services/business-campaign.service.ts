@@ -19,6 +19,7 @@ import { SaveCampaignAnswersDto } from "../dto/save-campaign-answers.dto";
 import { UpdateCampaignSettingsDto } from "../dto/update-campaign-settings.dto";
 import { normalizeBusinessRewardsMode } from "@/modules/rewards/reward-config.util";
 import { AuditDataService } from "@/modules/audit/services/audit-data.service";
+import { BusinessMediaService } from "./business-media.service";
 import {
   TemplateEligibilityService,
   type TemplateRequirementCheck,
@@ -36,8 +37,17 @@ export interface BusinessTemplateView {
   status: "available" | "locked";
   /** Human label for the configured access model (e.g. "Automatic"). */
   accessType: string;
-  /** The platform contribution (pence) required to unlock, if configured. */
+  /** Minimum amount the business must have raised through FundOrDonate to unlock, if configured. */
   contributionRequirement: { required: boolean; amount: number };
+  /**
+   * Campaign the business must donate to **during setup** (before submission).
+   * Informational only for the Campaign Centre — it never locks the template.
+   */
+  requiredCampaign: {
+    campaignId: string;
+    title: string;
+    minPence: number;
+  } | null;
   requirements: TemplateRequirementCheck[];
   selfFunding: {
     enabled: boolean;
@@ -57,7 +67,174 @@ export class BusinessCampaignService {
     private readonly prisma: PrismaService,
     private readonly auditData: AuditDataService,
     private readonly eligibility: TemplateEligibilityService,
+    private readonly media: BusinessMediaService,
   ) {}
+
+  /**
+   * Completed donation totals per campaign for one donor (the business owner).
+   * Self-funding is excluded — it is the business funding its own campaign, not
+   * a donation to the prerequisite campaign.
+   */
+  private async donationPenceByCampaign(
+    donorUserId: string,
+    campaignIds: string[],
+  ): Promise<Map<string, number>> {
+    if (!donorUserId || campaignIds.length === 0) return new Map();
+
+    const groups = await this.prisma.contribution.groupBy({
+      by: ["campaignId"],
+      where: {
+        backerId: donorUserId,
+        campaignId: { in: campaignIds },
+        status: "COMPLETED",
+        type: { not: "SELF_FUNDING" },
+      },
+      _sum: { amount: true },
+    });
+
+    return new Map(groups.map((g) => [g.campaignId, g._sum.amount ?? 0]));
+  }
+
+  /**
+   * Hydrates the admin-authored `fieldsConfig` rows into the blueprint shape the
+   * business setup flow renders: a human label, a normalised source, lock/editable
+   * state and — when a campaign exists — its current value.
+   *
+   * Pure and query-free, so it is safe to run for every template in a list.
+   */
+  private fieldBlueprints(
+    rows: unknown,
+    ctx: {
+      answers?: Map<string, string>;
+      campaign?: BusinessCampaign | null;
+      business?: any | null;
+      template?: CampaignTemplate | null;
+    } = {},
+  ): any[] {
+    const sourceMeta: Record<string, { source: string; note: string }> = {
+      template: { source: "template", note: "Set by the Admin template" },
+      admin: { source: "admin", note: "Set by FundOrDonate" },
+      admin_mcom: { source: "mcom", note: "Admin-managed MCOM asset" },
+      business_mcom: { source: "mcom", note: "From your MCOM account" },
+      audit_business: { source: "audit", note: "From your 247GBS Audit" },
+      audit_diagnostic: { source: "audit", note: "From your 247GBS Audit" },
+      business_account: { source: "business_account", note: "From your business account" },
+      business_input: { source: "business_input", note: "Provided by you" },
+      business: { source: "business_account", note: "From your business account" },
+      location: { source: "location", note: "From your business location" },
+    };
+
+    const isoDay = (value?: Date | null) =>
+      value ? value.toISOString().slice(0, 10) : "";
+    const money = (pence?: number | null) =>
+      typeof pence === "number" && pence > 0
+        ? (pence / 100).toFixed(pence % 100 === 0 ? 0 : 2)
+        : "";
+
+    const { answers, campaign, business, template } = ctx;
+
+    return (Array.isArray(rows) ? rows : []).map((row, index) => {
+      const id = String(row?.id ?? `field_${index}`);
+      const label =
+        row?.label ?? row?.field ?? row?.name ?? row?.question ?? id;
+      const meta = sourceMeta[row?.source as string] ?? {
+        source: String(row?.source ?? "template"),
+        note: "",
+      };
+      // "Configurable" is the only access level the wizard opens to the
+      // business ("Business can edit the value"); "conditional" ("only if
+      // enabled") and "no" stay template-managed. Rewards are chosen in the
+      // Rewards step, so they are never a free-text field.
+      const locked = row?.access !== "configurable" || id === "f_rewards";
+
+      let value = answers?.get(id) ?? "";
+      if (!value && campaign) {
+        switch (id) {
+          case "f_title":
+            value = campaign.title ?? "";
+            break;
+          case "f_desc":
+            value = campaign.description ?? "";
+            break;
+          case "f_target":
+            value = money(campaign.targetAmount);
+            break;
+          case "f_period": {
+            const from = isoDay(campaign.startDate);
+            const to = isoDay(campaign.endDate);
+            value = from && to ? `${from} – ${to}` : from || to;
+            break;
+          }
+          case "f_location":
+            value = [business?.address, business?.city, business?.highStreet]
+              .filter(Boolean)
+              .join(", ");
+            break;
+          case "f_contact":
+            value = [business?.email, business?.phone]
+              .filter(Boolean)
+              .join(" · ");
+            break;
+          case "f_rewards":
+            // Rewards are chosen in the Rewards step, not as free text.
+            value = "Chosen in the Rewards step";
+            break;
+          case "f_payout":
+            value = "Managed by FundOrDonate";
+            break;
+          case "f_disclosure":
+            value = template?.selfFundingEnabled
+              ? "Self-funding is disclosed on your campaign"
+              : "";
+            break;
+          default:
+            break;
+        }
+      }
+
+      const inputType: "text" | "number" | "date" | "textarea" =
+        id === "f_target"
+          ? "number"
+          : id === "f_desc"
+            ? "textarea"
+            : /date|deadline|start|end/i.test(id)
+              ? "date"
+              : "text";
+
+      // What kind of control the business should see. Derived from the field id
+      // first (the wizard's standard rows), then from the label so Admin-added
+      // custom rows still get a sensible input.
+      const kind: "money" | "media" | "documents" | "contact" | "date" | "textarea" | "text" =
+        id === "f_target" || /target|amount|budget|funding goal/i.test(label)
+          ? "money"
+          : id === "f_media" || /image|video|media|photo|logo|hero/i.test(label)
+            ? "media"
+            : id === "f_docs" || /document|evidence|attachment|supporting/i.test(label)
+              ? "documents"
+              : id === "f_contact" || /contact|email|phone/i.test(label)
+                ? "contact"
+                : id === "f_period" || /period|deadline|start date|end date/i.test(label)
+                  ? "date"
+                  : inputType === "textarea"
+                    ? "textarea"
+                    : "text";
+
+      return {
+        id,
+        label,
+        value,
+        source: meta.source,
+        sourceNote: meta.note,
+        locked,
+        editable: !locked,
+        // The wizard does not capture a per-field "required" flag; an explicit
+        // one (if ever present) is honoured, otherwise the field is optional.
+        required: Boolean(row?.required),
+        inputType,
+        kind,
+      };
+    });
+  }
 
   /**
    * Evaluates the active templates against the business profile and splits them
@@ -67,23 +244,21 @@ export class BusinessCampaignService {
    * (`config.access.eligibility`) plus the membership-tier gate — nothing is
    * hardcoded. This keeps the Campaign Centre in lock-step with what an admin
    * configures in the template wizard.
+   *
+   * Query shape is deliberately fixed — four statements regardless of how many
+   * templates exist (business, templates, one contribution aggregate, one audit
+   * snapshot). Every per-template check below is pure in-memory work, so adding
+   * templates or eligibility rules never introduces an N+1.
    */
   async getTemplates(businessId: string): Promise<BusinessTemplateView[]> {
-    const business = await this.prisma.business.findUnique({
-      where: { id: businessId },
-    });
-
-    if (!business) {
-      throw new NotFoundException("Business not found");
-    }
-
-    const [templates, contributionAgg, auditStatus] = await Promise.all([
+    const [business, templates, contributionAgg, auditStatus] = await Promise.all([
+      this.prisma.business.findUnique({ where: { id: businessId } }),
       this.prisma.campaignTemplate.findMany({
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
       }),
-      // Total the business has already contributed to the platform — used by
-      // the `min_contribution` eligibility rule.
+      // Total already raised by this business's own campaigns — used by the
+      // `min_contribution` eligibility rule.
       this.prisma.contribution.aggregate({
         where: { businessId, status: "COMPLETED" },
         _sum: { amount: true },
@@ -93,9 +268,16 @@ export class BusinessCampaignService {
       this.auditData.refreshIfStale(businessId),
     ]);
 
+    if (!business) {
+      throw new NotFoundException("Business not found");
+    }
+
     const contributedPence = contributionAgg._sum.amount ?? 0;
     const preAuditMet = auditStatus.linkStatus === AuditLinkStatus.AVAILABLE;
 
+    // Admin-assigned templates stay visible but locked for businesses that were
+    // not picked, with an explicit "Assigned by an Admin" requirement — the
+    // same rule the claim endpoint enforces.
     return templates.map((tpl) => {
       const access = this.eligibility.evaluate({
         business,
@@ -117,6 +299,9 @@ export class BusinessCampaignService {
           required: access.contributionRequiredPence > 0,
           amount: access.contributionRequiredPence,
         },
+        // Shown as an informational note: the donation is collected during
+        // setup and never prevents the business from claiming the template.
+        requiredCampaign: this.eligibility.requiredCampaign(tpl),
         requirements: access.requirements,
         selfFunding: {
           enabled: tpl.selfFundingEnabled,
@@ -125,7 +310,7 @@ export class BusinessCampaignService {
           rewardName: tpl.selfFundingRewardName,
         },
         businessRewardsMode: normalizeBusinessRewardsMode(tpl.businessRewardsMode),
-        fields: (tpl.fieldsConfig as any[]) || [],
+        fields: this.fieldBlueprints(tpl.fieldsConfig, { business, template: tpl }),
         rewards: (tpl.rewardsConfig as any[]) || [],
         mcomAssets: (tpl.mcomAssetsConfig as any[]) || [],
       };
@@ -294,7 +479,7 @@ export class BusinessCampaignService {
       items: items.map((c) => ({
         id: c.id,
         templateId: c.templateId,
-        templateName: c.template.name,
+        templateName: c.template?.name ?? c.title,
         title: c.title,
         description: c.description,
         status: c.status,
@@ -342,6 +527,49 @@ export class BusinessCampaignService {
       throw new NotFoundException("Campaign not found");
     }
 
+    // Business campaigns are always template instances. Platform campaigns
+    // (created by admins) are only reachable through the admin API.
+    if (!campaign.template) {
+      throw new NotFoundException("Campaign template not found");
+    }
+
+    // The attached-campaign donation is required during setup (not to claim the
+    // template), so expose the requirement plus the owner's completed total.
+    const business = campaign.businessId
+      ? await this.prisma.business.findUnique({
+          where: { id: campaign.businessId },
+        })
+      : null;
+
+    const required = this.eligibility.requiredCampaign(campaign.template);
+    let requiredCampaign: {
+      campaignId: string;
+      title: string;
+      minPence: number;
+      donatedPence: number;
+      met: boolean;
+    } | null = null;
+    if (required) {
+      const donations = business
+        ? await this.donationPenceByCampaign(business.ownerId, [
+            required.campaignId,
+          ])
+        : new Map<string, number>();
+      const donatedPence = donations.get(required.campaignId) ?? 0;
+      requiredCampaign = {
+        ...required,
+        donatedPence,
+        met: this.eligibility.campaignDonationMet(
+          campaign.template,
+          donatedPence,
+        ),
+      };
+    }
+
+    const answerMap = new Map(
+      campaign.answers.map((a) => [a.fieldId, a.value] as const),
+    );
+
     return {
       id: campaign.id,
       templateId: campaign.templateId,
@@ -353,7 +581,10 @@ export class BusinessCampaignService {
       businessContribution: campaign.businessContribution,
       rewardTriggered: campaign.rewardTriggered,
       backers: campaign._count.contributions,
+      startDate: campaign.startDate?.toISOString() ?? null,
+      endDate: campaign.endDate?.toISOString() ?? null,
       settings: campaign.settings ?? {},
+      requiredCampaign,
       template: {
         id: campaign.template.id,
         name: campaign.template.name,
@@ -368,7 +599,12 @@ export class BusinessCampaignService {
         businessRewardsMode: normalizeBusinessRewardsMode(
           campaign.template.businessRewardsMode,
         ),
-        fields: (campaign.template.fieldsConfig as any[]) || [],
+        fields: this.fieldBlueprints(campaign.template.fieldsConfig, {
+          answers: answerMap,
+          campaign,
+          business,
+          template: campaign.template,
+        }),
         rewards: (campaign.template.rewardsConfig as any[]) || [],
         mcomAssets: (campaign.template.mcomAssetsConfig as any[]) || [],
       },
@@ -414,28 +650,52 @@ export class BusinessCampaignService {
       );
     }
 
-    // Atomically upsert answers
-    await this.prisma.$transaction(
-      dto.answers.map((ans) =>
-        this.prisma.campaignFieldAnswer.upsert({
-          where: {
-            campaignId_fieldId: {
-              campaignId,
-              fieldId: ans.fieldId,
-            },
-          },
-          update: {
-            value: ans.value,
-          },
-          create: {
+    // Media/document answers are either our own upload paths or remote links —
+    // reject javascript:/data:/file: and private-network URLs before storing.
+    for (const answer of dto.answers) {
+      if (answer.fieldId !== "f_media" && answer.fieldId !== "f_docs") continue;
+      const value = String(answer.value ?? "").trim();
+      if (value) this.media.assertShallowSafeValue(value);
+    }
+
+    // Atomically upsert answers. The funding target is a first-class campaign
+    // column, so an edited `f_target` updates it in the same transaction
+    // instead of leaving the answer stranded as text.
+    const targetAnswer = dto.answers.find((a) => a.fieldId === "f_target");
+    const targetPounds = targetAnswer
+      ? Number(String(targetAnswer.value).replace(/[£,\s]/g, ""))
+      : NaN;
+
+    const operations: any[] = dto.answers.map((ans) =>
+      this.prisma.campaignFieldAnswer.upsert({
+        where: {
+          campaignId_fieldId: {
             campaignId,
             fieldId: ans.fieldId,
-            value: ans.value,
-            source: "business_input",
           },
-        }),
-      ),
+        },
+        update: {
+          value: ans.value,
+        },
+        create: {
+          campaignId,
+          fieldId: ans.fieldId,
+          value: ans.value,
+          source: "business_input",
+        },
+      }),
     );
+
+    if (Number.isFinite(targetPounds) && targetPounds > 0) {
+      operations.push(
+        this.prisma.businessCampaign.update({
+          where: { id: campaignId },
+          data: { targetAmount: Math.round(targetPounds * 100) },
+        }),
+      );
+    }
+
+    await this.prisma.$transaction(operations);
   }
 
   /**
@@ -481,6 +741,12 @@ export class BusinessCampaignService {
       throw new NotFoundException("Campaign not found");
     }
 
+    if (!campaign.template) {
+      throw new ForbiddenException(
+        "This campaign is not managed through the business campaign workflow.",
+      );
+    }
+
     const templateFields = (campaign.template.fieldsConfig as any[]) || [];
     const answerMap = new Map(campaign.answers.map((a) => [a.fieldId, a.value]));
 
@@ -493,6 +759,68 @@ export class BusinessCampaignService {
             `Field '${field.label || field.id}' is required and must be answered before submission.`,
           );
         }
+      }
+    }
+
+    // Self-funding (Step 14): when the template marks seed funding as
+    // required, the business must have paid it into this campaign before the
+    // campaign can be submitted. Optional / not-allowed modes never block.
+    if (
+      !this.eligibility.selfFundingMet(
+        campaign.template,
+        campaign.businessContribution,
+      )
+    ) {
+      const requiredPence = this.eligibility.requiredSelfFundingPence(
+        campaign.template,
+      );
+      const amountLabel =
+        requiredPence > 0
+          ? ` of ${new Intl.NumberFormat("en-GB", {
+              style: "currency",
+              currency: "GBP",
+              maximumFractionDigits: requiredPence % 100 === 0 ? 0 : 2,
+            }).format(requiredPence / 100)}`
+          : "";
+      throw new BadRequestException(
+        `This template requires seed funding${amountLabel} into your own campaign before it can be submitted.`,
+      );
+    }
+
+    // An attached campaign donation is collected during setup and must be
+    // complete before the campaign can be submitted for review.
+    const requiredCampaign = this.eligibility.requiredCampaign(
+      campaign.template,
+    );
+    if (requiredCampaign) {
+      const business = campaign.businessId
+        ? await this.prisma.business.findUnique({
+            where: { id: campaign.businessId },
+            select: { ownerId: true },
+          })
+        : null;
+      const donations = business
+        ? await this.donationPenceByCampaign(business.ownerId, [
+            requiredCampaign.campaignId,
+          ])
+        : new Map<string, number>();
+      const donatedPence =
+        donations.get(requiredCampaign.campaignId) ?? 0;
+      if (
+        !this.eligibility.campaignDonationMet(
+          campaign.template,
+          donatedPence,
+        )
+      ) {
+        const amount =
+          requiredCampaign.minPence > 0
+            ? ` of at least £${(
+                requiredCampaign.minPence / 100
+              ).toFixed(requiredCampaign.minPence % 100 === 0 ? 0 : 2)}`
+            : "";
+        throw new BadRequestException(
+          `A donation${amount} to "${requiredCampaign.title}" is required before this campaign can be submitted.`,
+        );
       }
     }
 

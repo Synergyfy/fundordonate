@@ -9,10 +9,41 @@ interface Props {
   initialCount?: number;
 }
 
+const BOOKMARKS_KEY = "fod:bookmarks";
+
+/**
+ * Bookmarks are persisted on this device. The API has no bookmark endpoint
+ * yet, so it is treated as an optional sync target: local state is always the
+ * source of truth and the request is best-effort.
+ */
+function readBookmarks(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(BOOKMARKS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeBookmarks(ids: Set<string>): void {
+  try {
+    window.localStorage.setItem(BOOKMARKS_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function BookmarkButton({ campaignId, initialBookmarked, initialCount = 0 }: Props) {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const [bookmarked, setBookmarked] = useState(initialBookmarked ?? false);
+  const [bookmarked, setBookmarked] = useState(
+    () => initialBookmarked ?? readBookmarks().has(campaignId),
+  );
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
 
@@ -25,13 +56,14 @@ export function BookmarkButton({ campaignId, initialBookmarked, initialCount = 0
   // Check actual bookmark state on mount only when user is logged in and initialBookmarked was not provided
   useEffect(() => {
     if (!user || initialBookmarked !== undefined) return;
+    setBookmarked(readBookmarks().has(campaignId));
     api
       .get<{ bookmarked: boolean }>(`/campaigns/${campaignId}/bookmark/check`)
       .then((res) => {
-        setBookmarked(res?.bookmarked ?? false);
+        if (typeof res?.bookmarked === "boolean") setBookmarked(res.bookmarked);
       })
       .catch(() => {
-        // Ignore check errors — use initial state
+        // No bookmark endpoint — keep the local state.
       });
   }, [campaignId, user, initialBookmarked]);
 
@@ -43,18 +75,20 @@ export function BookmarkButton({ campaignId, initialBookmarked, initialCount = 0
     if (loading) return;
 
     setLoading(true);
+    const next = !bookmarked;
+    const ids = readBookmarks();
+    if (next) ids.add(campaignId);
+    else ids.delete(campaignId);
+    writeBookmarks(ids);
+
+    setBookmarked(next);
+    setCount((c) => Math.max(0, next ? c + 1 : c - 1));
+
     try {
-      if (bookmarked) {
-        await api.delete(`/campaigns/${campaignId}/bookmark`);
-        setBookmarked(false);
-        setCount((c) => Math.max(0, c - 1));
-      } else {
-        await api.post(`/campaigns/${campaignId}/bookmark`);
-        setBookmarked(true);
-        setCount((c) => c + 1);
-      }
-    } catch (err) {
-      console.error("Bookmark error:", err);
+      if (next) await api.post(`/campaigns/${campaignId}/bookmark`);
+      else await api.delete(`/campaigns/${campaignId}/bookmark`);
+    } catch {
+      // Saved locally for this device — nothing else to do.
     } finally {
       setLoading(false);
     }

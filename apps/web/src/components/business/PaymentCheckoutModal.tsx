@@ -23,7 +23,7 @@ import {
   PaymentGatewaySelector,
   gatewayName,
 } from "@/components/business/PaymentGatewaySelector";
-import { MCOM_CONFIG } from "@/lib/config";
+import { walletApi } from "@/services/wallet";
 import {
   paymentService,
   type PaymentGateway,
@@ -145,7 +145,7 @@ function WalletPaymentForm({
                 You currently have {balance.toFixed(2)} MCOM credits, but this payment requires {amount.toFixed(2)} MCOM.
               </p>
               <a
-                href={`${MCOM_CONFIG.CENTRAL_URL}/dashboard/wallet`}
+                href={walletApi.getCentralTopUpUrl()}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-2 inline-flex items-center gap-1 font-bold text-red-800 underline hover:text-red-900"

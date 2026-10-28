@@ -31,6 +31,16 @@ export class CampaignSchedulerService implements OnModuleInit {
       );
 
       await this.queue.upsertJobScheduler(
+        "city-activation-sweep",
+        { every: 15 * 60 * 1000 }, // every 15 minutes
+        {
+          name: "city-activation-sweep",
+          data: {},
+          opts: { removeOnComplete: true, removeOnFail: 100 },
+        },
+      );
+
+      await this.queue.upsertJobScheduler(
         "season-rollup-sweep",
         { every: 60 * 60 * 1000 }, // hourly
         {

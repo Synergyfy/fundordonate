@@ -124,10 +124,21 @@ export class AdminLocationsController {
 
   @Delete(":id")
   @ApiOperation({
-    summary: "Delete an unused hub location",
+    summary: "Soft-delete a hub location",
+    description:
+      "Marks the location as deleted (deletedAt, isActive=false, isPublic=false) without removing the row. History and attribution are preserved.",
   })
-  @ApiResponse({ status: 200, description: "Location deleted successfully" })
+  @ApiResponse({ status: 200, description: "Location soft-deleted successfully" })
   async deleteLocation(@Param("id") id: string) {
     return this.locationsService.deleteLocation(id);
+  }
+
+  @Put(":id/restore")
+  @ApiOperation({
+    summary: "Restore a soft-deleted hub location",
+  })
+  @ApiResponse({ status: 200, description: "Location restored successfully" })
+  async restoreLocation(@Param("id") id: string) {
+    return this.locationsService.restoreLocation(id);
   }
 }

@@ -213,7 +213,7 @@ export class AdminParticipantsService {
         })
       : [];
     const raisedByBusiness = new Map(
-      contributionTotals.map((row) => [row.businessId, row._sum.amount ?? 0]),
+      contributionTotals.map((row) => [row.businessId as string, row._sum.amount ?? 0]),
     );
 
     return {

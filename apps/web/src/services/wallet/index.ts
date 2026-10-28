@@ -1,5 +1,7 @@
 import api from "../api";
 import { MCOM_CONFIG } from "@/lib/config";
+import { getCentralWalletPath, type DashboardUser } from "@/lib/roles";
+import { useAuthStore } from "@/stores/auth.store";
 import type { McomWalletBalance, WalletSummary } from "./type";
 
 export const walletService = {
@@ -14,10 +16,19 @@ export const walletService = {
   },
 
   /**
-   * Optional helper to build a top-up URL to MCOM Central Hub.
+   * Build the URL of the correct MCOM Central Hub **web app** wallet page for
+   * the current user. Pass `user` to resolve it explicitly, otherwise the
+   * signed-in user from the auth store is used.
    */
-  getCentralTopUpUrl(): string {
-    return `${MCOM_CONFIG.CENTRAL_URL}/wallet/topup`;
+  getCentralTopUpUrl(user?: DashboardUser | null): string {
+    const current = user ?? useAuthStore.getState().user;
+    const base = MCOM_CONFIG.CENTRAL_APP_URL.replace(/\/+$/, "");
+    return `${base}${getCentralWalletPath(current)}`;
+  },
+
+  /** Alias for `getCentralTopUpUrl` — the wallet page is where top-ups happen. */
+  getCentralWalletUrl(user?: DashboardUser | null): string {
+    return walletService.getCentralTopUpUrl(user);
   },
 
   /**

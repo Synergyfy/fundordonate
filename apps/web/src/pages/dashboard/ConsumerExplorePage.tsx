@@ -10,12 +10,10 @@ import {
 import { seasonApi, type Season } from "@/services/season";
 import { campaignService } from "@/services/campaign";
 import {
-  getAreaOptions,
-  getCityOptions,
-  getStreetOptions,
+  scopeToLocationRef,
   scopeToPath,
-  type ExploreScope,
 } from "@/services/explore";
+import { useExploreLocations } from "@/hooks/useExploreLocations";
 import { getConsumerCommunity, setConsumerCommunity } from "@/services/community";
 import {
   ChangeLocationModal,
@@ -77,7 +75,9 @@ function ConsumerCampaignCard({ campaign }: { campaign: ExploreCampaignItem }) {
               {status.label}
             </span>
           </div>
-          <span className="text-xs text-gray-500">Ends {formatDate(campaign.deadline)}</span>
+          <span className="text-xs text-gray-500">
+            {campaign.deadline ? `Ends ${formatDate(campaign.deadline)}` : "Ongoing"}
+          </span>
         </div>
 
         <h3 className="text-sm font-bold text-gray-900 group-hover:text-primary-700">
@@ -167,16 +167,38 @@ export function ConsumerExplorePage() {
 
   const community = getConsumerCommunity();
 
-  const scope: ExploreScope = citySlug
+  const scope = citySlug
     ? { citySlug, areaSlug, streetSlug }
     : {
         citySlug: community.citySlug,
         areaSlug: community.areaSlug,
         streetSlug: community.streetSlug,
       };
-  const scopeCity = scope.citySlug;
-  const scopeArea = scope.areaSlug;
-  const scopeStreet = scope.streetSlug;
+  const { cities: cityOptions, areasFor, streetsFor } = useExploreLocations();
+
+  // Only send a location filter when the slug actually exists in the live
+  // tree. A stale stored community (or a slug from an old link) would
+  // otherwise return an empty list; falling back to "all locations" is better.
+  const knownLocationSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const city of cityOptions) {
+      slugs.add(city.slug);
+      for (const area of areasFor(city.slug)) {
+        slugs.add(area.slug);
+        for (const street of streetsFor(city.slug, area.slug)) {
+          slugs.add(street.slug);
+        }
+      }
+    }
+    return slugs;
+  }, [cityOptions, areasFor, streetsFor]);
+
+  const locationRef = useMemo(() => {
+    const ref = scopeToLocationRef(scope);
+    if (!ref || knownLocationSlugs.size === 0) return undefined;
+    return knownLocationSlugs.has(ref) ? ref : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope.citySlug, scope.areaSlug, scope.streetSlug, knownLocationSlugs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +213,13 @@ export function ConsumerExplorePage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    campaignService.list({ status: "ACTIVE", limit: 30 })
+    campaignService
+      .list({
+        status: "ACTIVE",
+        audience: "consumer",
+        location: locationRef,
+        limit: 30,
+      })
       .then((res: any) => {
         if (cancelled) return;
         const items = res?.items || (Array.isArray(res) ? res : []);
@@ -199,12 +227,14 @@ export function ConsumerExplorePage() {
           id: c.id,
           slug: c.slug || c.id,
           title: c.title,
-          mode: (c.category || "donation").toLowerCase(),
-          raisedAmount: c.raisedAmount || 0,
-          goalAmount: c.targetAmount || 1000,
-          location: c.location?.name || "UK High Street",
-          featuredImage: c.imageUrl || "",
-          deadline: c.endDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+          shortDescription:
+            c.shortDescription || String(c.description ?? "").slice(0, 140),
+          mode: String(c.mode ?? "donation").toLowerCase(),
+          raisedAmount: Number(c.raisedAmount) || 0,
+          goalAmount: Number(c.goalAmount ?? c.targetAmount) || 0,
+          location: c.location || c.cityName || c.business?.city || "",
+          featuredImage: c.featuredImage || c.imageUrl || "",
+          deadline: c.deadline || c.endDate || undefined,
         }));
         setCampaigns(mapped);
         setLoading(false);
@@ -218,16 +248,16 @@ export function ConsumerExplorePage() {
     return () => {
       cancelled = true;
     };
-  }, [scopeCity, scopeArea, scopeStreet]);
+  }, [locationRef]);
 
-  const cities = useMemo(() => getCityOptions(), []);
+  const cities = cityOptions;
   const areas = useMemo(
-    () => (citySlug && areaSlug ? getAreaOptions(citySlug) : []),
-    [citySlug, areaSlug],
+    () => (citySlug && areaSlug ? areasFor(citySlug) : []),
+    [citySlug, areaSlug, areasFor],
   );
   const streets = useMemo(
-    () => (citySlug && areaSlug && streetSlug ? getStreetOptions(citySlug, areaSlug) : []),
-    [citySlug, areaSlug, streetSlug],
+    () => (citySlug && areaSlug && streetSlug ? streetsFor(citySlug, areaSlug) : []),
+    [citySlug, areaSlug, streetSlug, streetsFor],
   );
 
   const cityName = scope.citySlug
@@ -352,6 +382,9 @@ export function ConsumerExplorePage() {
         initialScope={scope}
         currentLocationText={locationText}
         focusSearch={focusSearch}
+        cityOptions={cityOptions}
+        areaOptionsFor={areasFor}
+        streetOptionsFor={streetsFor}
         onClose={() => setModalOpen(false)}
         onApply={handleApply}
         onUseMyLocation={handleUseMyLocation}
