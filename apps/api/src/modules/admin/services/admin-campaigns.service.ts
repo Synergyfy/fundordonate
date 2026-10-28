@@ -12,11 +12,13 @@ import {
   Prisma,
   BusinessCampaignStatus,
   CampaignLocationScope,
+  PreferredAudience,
   TemplateStatus,
 } from "@prisma/client";
 import {
   AdminCampaignQueryDto,
   BulkCampaignActionDto,
+  CreateAdminCampaignDto,
   CreateCampaignTemplateDto,
   DuplicateCampaignTemplateDto,
   InstantiateCampaignTemplateDto,
@@ -33,6 +35,10 @@ import { ADMIN_TASKS_QUEUE } from "../processors/admin-tasks.constants";
 import { AuditDataService } from "@/modules/audit/services/audit-data.service";
 import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
 import { AuditLinkStatus } from "@prisma/client";
+import {
+  getCampaignWizardSettings,
+  normaliseCampaignWizardSettings,
+} from "@/modules/campaigns/campaign-wizard-settings";
 
 /** Why a business was skipped when an admin assigned a template to it. */
 export interface InstantiateSkipReason {
@@ -72,31 +78,43 @@ export class AdminCampaignsService {
 
     const skip = (page - 1) * limit;
     const where: Prisma.BusinessCampaignWhereInput = {};
+    const and: Prisma.BusinessCampaignWhereInput[] = [];
 
     if (status) {
       where.status = status;
     }
 
     if (seasonId) {
-      where.template = { seasonId };
+      // Platform campaigns store their seasons on `settings.seasonIds`; template
+      // campaigns use the template relation.
+      and.push({
+        OR: [
+          { template: { seasonId } },
+          { settings: { path: ["seasonIds"], array_contains: seasonId } },
+        ],
+      });
     }
 
     if (locationId) {
-      where.AND = [
-        {
-          OR: [
-            { locations: { some: { locationId } } },
-            { locations: { none: {} }, business: { locationId } },
-          ],
-        },
-      ];
+      and.push({
+        OR: [
+          { locations: { some: { locationId } } },
+          { locations: { none: {} }, business: { locationId } },
+        ],
+      });
     }
 
     if (audience && audience !== "all") {
-      where.business = {
-        ...where.business,
-        preferredAudience: audience.toUpperCase() as any,
-      };
+      const preferredAudience = audience.toUpperCase() as PreferredAudience;
+      and.push({
+        OR: [
+          { audience: preferredAudience },
+          {
+            audience: null,
+            business: { preferredAudience },
+          },
+        ],
+      });
     }
 
     if (search) {
@@ -105,6 +123,10 @@ export class AdminCampaignsService {
         { description: { contains: search, mode: "insensitive" } },
         { business: { name: { contains: search, mode: "insensitive" } } },
       ];
+    }
+
+    if (and.length > 0) {
+      where.AND = and;
     }
 
     const orderBy: Prisma.BusinessCampaignOrderByWithRelationInput = {
@@ -139,6 +161,16 @@ export class AdminCampaignsService {
               seasonId: true,
             },
           },
+          createdBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatar: true,
+              username: true,
+            },
+          },
           _count: {
             select: {
               contributions: true,
@@ -161,6 +193,238 @@ export class AdminCampaignsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * Creates a platform campaign directly from admin input. Platform campaigns
+   * are stored on the same `business_campaigns` table as business campaigns so
+   * they surface everywhere business campaigns do (homepage, hubs, search), but
+   * they have no owning business or template.
+   */
+  async createCampaign(dto: CreateAdminCampaignDto, adminUserId?: string) {
+    const title = dto.title.trim();
+    if (!title) {
+      throw new BadRequestException("Campaign title is required");
+    }
+
+    const status = dto.status ?? BusinessCampaignStatus.DRAFT;
+
+    // Validate and normalise everything the wizard collected. Draft saves are
+    // allowed to be incomplete; publishing enforces the full rule set.
+    const rawSettings = (dto.settings ?? {}) as Record<string, unknown>;
+    const hasWizardSettings = Object.keys(rawSettings).length > 0;
+    if (
+      hasWizardSettings &&
+      status === BusinessCampaignStatus.ACTIVE &&
+      !dto.shortDescription?.trim()
+    ) {
+      throw new BadRequestException("Short description is required");
+    }
+    const settings = normaliseCampaignWizardSettings(rawSettings, dto.targetAmount, {
+      strict: hasWizardSettings && status === BusinessCampaignStatus.ACTIVE,
+    });
+    const targetAmount = settings.hasTarget === false ? 0 : dto.targetAmount;
+
+    const periodMode = hasWizardSettings ? settings.periodMode ?? "custom" : null;
+    let startDate =
+      dto.startDate !== undefined && dto.startDate !== null
+        ? new Date(dto.startDate)
+        : null;
+    let endDate =
+      dto.endDate !== undefined && dto.endDate !== null
+        ? new Date(dto.endDate)
+        : null;
+
+    if (periodMode === "season") {
+      const seasonIds = settings.seasonIds ?? [];
+      if (seasonIds.length > 0) {
+        const seasons = await this.prisma.season.findMany({
+          where: { id: { in: seasonIds } },
+          select: { id: true, startDate: true, endDate: true },
+        });
+        if (seasons.length !== new Set(seasonIds).size) {
+          const foundIds = new Set(seasons.map((season) => season.id));
+          const missing = seasonIds.filter((id) => !foundIds.has(id));
+          throw new BadRequestException(`Unknown season(s): ${missing.join(", ")}`);
+        }
+        startDate = new Date(Math.min(...seasons.map((season) => season.startDate.getTime())));
+        endDate = new Date(Math.max(...seasons.map((season) => season.endDate.getTime())));
+      } else if (status === BusinessCampaignStatus.ACTIVE) {
+        throw new BadRequestException("Select at least one season for a season-based campaign");
+      }
+    } else if (periodMode === "evergreen") {
+      endDate = null;
+      if (!startDate && status === BusinessCampaignStatus.ACTIVE) {
+        startDate = new Date();
+      }
+    } else if (
+      periodMode === "custom" &&
+      hasWizardSettings &&
+      status === BusinessCampaignStatus.ACTIVE &&
+      (!startDate || !endDate)
+    ) {
+      throw new BadRequestException("Campaign start and end dates are required");
+    } else if (!hasWizardSettings && status === BusinessCampaignStatus.ACTIVE && !startDate) {
+      startDate = new Date();
+    }
+
+    if (startDate && Number.isNaN(startDate.getTime())) {
+      throw new BadRequestException("Invalid campaign start date");
+    }
+    if (endDate && Number.isNaN(endDate.getTime())) {
+      throw new BadRequestException("Invalid campaign end date");
+    }
+    if (startDate && endDate && endDate < startDate) {
+      throw new BadRequestException(
+        "Campaign end date must be after the start date",
+      );
+    }
+
+    const coverage = settings.locationCoverage ?? {};
+    const coverageCityIds = coverage.selectedCities ?? [];
+    const coverageLocalAreaIds = coverage.selectedLocalAreas ?? [];
+    const coverageHighStreetIds = coverage.selectedHighStreets ?? [];
+
+    let primaryLocationId =
+      dto.primaryLocationId ||
+      settings.cityId ||
+      coverageCityIds[0] ||
+      null;
+    let additionalLocationIds = [
+      ...new Set([
+        ...(dto.additionalLocationIds ?? []),
+        ...coverageCityIds,
+        ...coverageLocalAreaIds,
+        ...coverageHighStreetIds,
+      ]),
+    ].filter(Boolean);
+
+    // National coverage is represented by the NATIONAL hub row as the primary
+    // location, so national campaigns are discoverable by location filters.
+    if (coverage.includeNational && !primaryLocationId) {
+      const national = await this.prisma.hubLocation.findFirst({
+        where: { type: "NATIONAL", isActive: true },
+        select: { id: true },
+      });
+      if (national) primaryLocationId = national.id;
+    }
+
+    additionalLocationIds = additionalLocationIds.filter(
+      (id) => id !== primaryLocationId,
+    );
+
+    const hasLocations = Boolean(primaryLocationId) || additionalLocationIds.length > 0;
+    if (
+      status === BusinessCampaignStatus.ACTIVE &&
+      hasWizardSettings &&
+      settings.scope !== "independent" &&
+      !hasLocations
+    ) {
+      throw new BadRequestException("Select at least one location for this campaign");
+    }
+
+    const locationIds = [
+      ...(primaryLocationId ? [primaryLocationId] : []),
+      ...additionalLocationIds,
+    ];
+    if (locationIds.length > 0) {
+      const found = await this.prisma.hubLocation.findMany({
+        where: { id: { in: locationIds }, isActive: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (found.length !== locationIds.length) {
+        const foundIds = new Set(found.map((location) => location.id));
+        const missing = locationIds.filter((id) => !foundIds.has(id));
+        throw new BadRequestException(
+          `Unknown or inactive location(s): ${missing.join(", ")}`,
+        );
+      }
+    }
+
+    const campaign = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.businessCampaign.create({
+        data: {
+          businessId: null,
+          templateId: null,
+          createdById: adminUserId ?? null,
+          title,
+          description: dto.description ?? null,
+          shortDescription: dto.shortDescription ?? null,
+          targetAmount,
+          // "Starting amount" is money already raised/seeded before launch.
+          raisedAmount: settings.startingAmountPence ?? 0,
+          status,
+          isFeatured: dto.isFeatured ?? true,
+          mode: dto.mode ?? "donation",
+          audience: dto.audience ?? PreferredAudience.BOTH,
+          category: dto.category ?? null,
+          imageUrl: dto.imageUrl ?? null,
+          startDate,
+          endDate,
+          settings: settings as Prisma.InputJsonValue,
+        },
+      });
+
+      if (primaryLocationId) {
+        await tx.campaignLocation.create({
+          data: {
+            campaignId: created.id,
+            locationId: primaryLocationId,
+            scope: CampaignLocationScope.PRIMARY,
+          },
+        });
+      }
+      if (additionalLocationIds.length > 0) {
+        await tx.campaignLocation.createMany({
+          data: additionalLocationIds.map((locationId) => ({
+            campaignId: created.id,
+            locationId,
+            scope: CampaignLocationScope.INCLUDED,
+          })),
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: "CAMPAIGN_CREATED",
+          entityType: "campaign",
+          entityId: created.id,
+          details: {
+            kind: "platform",
+            title: created.title,
+            targetAmount: created.targetAmount,
+            status: created.status,
+            primaryLocationId,
+            additionalLocationIds,
+            periodMode,
+            seasonIds: settings.seasonIds ?? [],
+            contributionRules: (settings.contributionRules ?? null) as Prisma.InputJsonValue,
+            allocationRules: (settings.allocationRules ?? null) as Prisma.InputJsonValue,
+            rewardsConfigured: (settings.rewardConfigs ?? []).length,
+          },
+        },
+      });
+
+      return created;
+    });
+
+    await this.invalidateHubCaches();
+
+    return this.getCampaign(campaign.id);
+  }
+
+  /** Best-effort invalidation of the public hub aggregates. */
+  private async invalidateHubCaches() {
+    try {
+      await this.redis.del(
+        "hub:cities:all",
+        "hub:summary:national",
+        "hub:location:tree",
+      );
+    } catch {
+      // Cache invalidation is best-effort.
+    }
   }
 
   /**
@@ -191,6 +455,16 @@ export class AdminCampaignsService {
           },
         },
         template: true,
+        createdBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatar: true,
+            username: true,
+          },
+        },
         answers: true,
         locations: {
           include: {
@@ -229,6 +503,41 @@ export class AdminCampaignsService {
     const campaign = await this.prisma.businessCampaign.findUnique({ where: { id } });
     if (!campaign) {
       throw new NotFoundException(`Campaign with ID ${id} not found`);
+    }
+
+    // Re-run the full wizard rule validation before a draft is made live so
+    // incomplete drafts cannot bypass the checks performed at creation time.
+    if (dto.status === BusinessCampaignStatus.ACTIVE) {
+      const settings = getCampaignWizardSettings(campaign.settings);
+      if (settings.contributionRules) {
+        normaliseCampaignWizardSettings(campaign.settings, campaign.targetAmount, {
+          strict: true,
+        });
+        if (!campaign.shortDescription?.trim()) {
+          throw new BadRequestException("Short description is required");
+        }
+
+        if (settings.periodMode === "season" && (settings.seasonIds?.length ?? 0) === 0) {
+          throw new BadRequestException(
+            "Select at least one season before activating a season-based campaign",
+          );
+        }
+        if (
+          campaign.businessId === null &&
+          settings.periodMode === "custom" &&
+          (!campaign.startDate || !campaign.endDate)
+        ) {
+          throw new BadRequestException("Campaign start and end dates are required");
+        }
+        if (campaign.businessId === null && settings.scope !== "independent") {
+          const locationCount = await this.prisma.campaignLocation.count({
+            where: { campaignId: id },
+          });
+          if (locationCount === 0) {
+            throw new BadRequestException("Select at least one location for this campaign");
+          }
+        }
+      }
     }
 
     const updated = await this.prisma.businessCampaign.update({
@@ -272,6 +581,21 @@ export class AdminCampaignsService {
     if (dto.targetAmount !== undefined) data.targetAmount = dto.targetAmount;
     if (dto.businessContribution !== undefined) {
       data.businessContribution = dto.businessContribution;
+    }
+    if (dto.shortDescription !== undefined) {
+      data.shortDescription = dto.shortDescription;
+    }
+    if (dto.mode !== undefined) data.mode = dto.mode;
+    if (dto.audience !== undefined) data.audience = dto.audience;
+    if (dto.category !== undefined) data.category = dto.category;
+    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
+    if (dto.isFeatured !== undefined) data.isFeatured = dto.isFeatured;
+    if (dto.settings !== undefined) {
+      data.settings = normaliseCampaignWizardSettings(
+        dto.settings,
+        dto.targetAmount ?? campaign.targetAmount,
+        { strict: false },
+      ) as Prisma.InputJsonValue;
     }
 
     const startDate =
@@ -489,6 +813,110 @@ export class AdminCampaignsService {
   }
 
   /**
+   * Validates and normalises the wizard config before persisting.
+   *
+   * When the `required_campaign_donation` rule is active, the attached campaign
+   * must exist; its canonical title and minimum donation are snapshotted into
+   * the access config so the business UI can render the setup-time donation
+   * step without an extra lookup. The rule never locks the template itself.
+   *
+   * When the `admin_assigned` rule is active, the selected businesses are
+   * validated and snapshotted (id, name, email) so the assignment list stays
+   * readable and only those businesses can claim the template.
+   */
+  private async normaliseTemplateConfig(
+    config?: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const next: Record<string, any> = { ...(config ?? {}) };
+    const rawAccess = next.access;
+    if (!rawAccess || typeof rawAccess !== "object" || Array.isArray(rawAccess)) {
+      return next;
+    }
+
+    const access: Record<string, any> = { ...(rawAccess as Record<string, any>) };
+    const eligibility = Array.isArray(access.eligibility)
+      ? access.eligibility.filter((rule): rule is string => typeof rule === "string")
+      : [];
+    const requiresCampaign = eligibility.includes("required_campaign_donation");
+    const rawCampaignId =
+      typeof access.requiredCampaignId === "string"
+        ? access.requiredCampaignId.trim()
+        : "";
+
+    if (!requiresCampaign) {
+      access.requiredCampaignId = null;
+      access.requiredCampaignTitle = null;
+      access.requiredCampaignMinPence = 0;
+    } else if (!rawCampaignId) {
+      throw new BadRequestException(
+        "Select a campaign for the 'Donation to an attached campaign' eligibility rule.",
+      );
+    } else {
+      const campaign = await this.prisma.businessCampaign.findUnique({
+        where: { id: rawCampaignId },
+        select: { id: true, title: true, status: true },
+      });
+      if (!campaign || campaign.status === BusinessCampaignStatus.CANCELLED) {
+        throw new BadRequestException(
+          "The attached prerequisite campaign does not exist or has been cancelled.",
+        );
+      }
+      const minPence = Math.round(Number(access.requiredCampaignMinPence ?? 0));
+      access.requiredCampaignId = campaign.id;
+      access.requiredCampaignTitle = campaign.title;
+      access.requiredCampaignMinPence =
+        Number.isFinite(minPence) && minPence > 0 ? minPence : 0;
+    }
+
+    // ── Admin-assigned access ────────────────────────────────────────────
+    // When the `admin_assigned` rule is active the admin must pick at least
+    // one business; the snapshot of names/emails keeps the wizard and the
+    // admin templates list readable without extra lookups.
+    const requiresAssignment = eligibility.includes("admin_assigned");
+    const rawAssignedIds = Array.isArray(access.assignedBusinessIds)
+      ? access.assignedBusinessIds.filter(
+          (id: unknown): id is string => typeof id === "string" && id.trim().length > 0,
+        )
+      : [];
+
+    if (!requiresAssignment) {
+      access.assignedBusinessIds = [];
+      access.assignedBusinesses = [];
+    } else {
+      const assignedIds = Array.from(new Set<string>(rawAssignedIds));
+      if (assignedIds.length === 0) {
+        throw new BadRequestException(
+          "Select at least one business for the 'Admin assigned' access rule.",
+        );
+      }
+
+      const businesses = await this.prisma.business.findMany({
+        where: { id: { in: assignedIds } },
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" },
+      });
+
+      if (businesses.length !== assignedIds.length) {
+        const found = new Set(businesses.map((b) => b.id));
+        const missing = assignedIds.filter((id) => !found.has(id));
+        throw new BadRequestException(
+          `Unknown business assigned to this template: ${missing.join(", ")}`,
+        );
+      }
+
+      access.assignedBusinessIds = businesses.map((b) => b.id);
+      access.assignedBusinesses = businesses.map((b) => ({
+        id: b.id,
+        name: b.name,
+        email: b.email,
+      }));
+    }
+
+    next.access = access;
+    return next;
+  }
+
+  /**
    * Creates a new campaign template blueprint and persists the full wizard config.
    */
   async createTemplate(dto: CreateCampaignTemplateDto, adminUserId?: string) {
@@ -501,6 +929,7 @@ export class AdminCampaignsService {
 
     const seasonId = await this.resolveSeasonId(dto.seasonId);
     const status = dto.status ?? TemplateStatus.DRAFT;
+    const config = await this.normaliseTemplateConfig(dto.config);
 
     try {
       const created = await this.prisma.campaignTemplate.create({
@@ -526,7 +955,7 @@ export class AdminCampaignsService {
           rewardsConfig: dto.rewardsConfig ?? [],
           mcomAssetsConfig: dto.mcomAssetsConfig ?? [],
           requirementsConfig: dto.requirementsConfig ?? [],
-          config: dto.config ?? {},
+          config,
           isActive: status === TemplateStatus.ACTIVE,
           createdById: adminUserId,
           updatedById: adminUserId,
@@ -592,7 +1021,9 @@ export class AdminCampaignsService {
     if (dto.rewardsConfig !== undefined) data.rewardsConfig = dto.rewardsConfig;
     if (dto.mcomAssetsConfig !== undefined) data.mcomAssetsConfig = dto.mcomAssetsConfig;
     if (dto.requirementsConfig !== undefined) data.requirementsConfig = dto.requirementsConfig;
-    if (dto.config !== undefined) data.config = dto.config;
+    if (dto.config !== undefined) {
+      data.config = (await this.normaliseTemplateConfig(dto.config)) as Prisma.InputJsonValue;
+    }
     if (dto.isActive !== undefined && dto.status === undefined) data.isActive = dto.isActive;
 
     try {
@@ -859,6 +1290,7 @@ export class AdminCampaignsService {
         membershipTier: true,
         membershipExpiry: true,
         locationId: true,
+        ownerId: true,
       },
     });
     const foundBizMap = new Map(businesses.map((b) => [b.id, b]));
@@ -894,7 +1326,7 @@ export class AdminCampaignsService {
         _sum: { amount: true },
       });
       const contributedByBiz = new Map(
-        contributionGroups.map((g) => [g.businessId, g._sum.amount ?? 0]),
+        contributionGroups.map((g) => [g.businessId as string, g._sum.amount ?? 0]),
       );
 
       const preAuditByBiz = new Map<string, boolean>();
@@ -910,6 +1342,8 @@ export class AdminCampaignsService {
         });
       }
 
+      // An attached-campaign donation is a setup-time obligation, not an
+      // assignment gate: the business donates during setup before submitting.
       const kept: string[] = [];
       for (const id of eligibleBizIds) {
         const business = foundBizMap.get(id)!;
@@ -1189,7 +1623,7 @@ export class AdminCampaignsService {
 
     if (locationIds.length > 0) {
       const found = await this.prisma.hubLocation.findMany({
-        where: { id: { in: locationIds }, isActive: true },
+        where: { id: { in: locationIds }, isActive: true, deletedAt: null },
         select: { id: true },
       });
       if (found.length !== locationIds.length) {
@@ -1230,11 +1664,7 @@ export class AdminCampaignsService {
       }
     });
 
-    try {
-      await this.redis.del("hub:cities:all", "hub:summary:national", "hub:location:tree");
-    } catch {
-      // Cache invalidation is best-effort.
-    }
+    await this.invalidateHubCaches();
 
     return this.getCampaignLocations(campaignId);
   }

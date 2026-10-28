@@ -346,7 +346,7 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
       if (isEdit && campaignId) {
         await adminApi.updateCampaign(campaignId, payload);
       } else {
-        await adminApi.createCampaign(payload);
+        await adminApi.createCampaign(payload as any);
       }
       onSaved?.();
       if (!onClose) navigate("/admin/campaigns");

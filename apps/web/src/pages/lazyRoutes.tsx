@@ -98,6 +98,7 @@ export const AdminHubContentPage = lazy(() => import("@/pages/admin/AdminHubCont
 // =============================================================================
 
 export const AllCampaignsPage = lazy(() => import("@/pages/admin/campaigns/AllCampaignsPage").then(m => ({ default: m.AllCampaignsPage })));
+export const NewAdminCampaignWizard = lazy(() => import("@/components/admin/wizard/AdminCampaignWizard").then(m => ({ default: m.AdminCampaignWizard })));
 export const AdminCampaignDetailPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignDetailPage"));
 export const AdminCampaignEditPage = lazy(() => import("@/pages/admin/campaigns/AdminCampaignEditPage").then(m => ({ default: m.AdminCampaignEditPage })));
 export const AdminCampaignTemplatesPage = lazy(() => import("@/pages/admin/campaigns/CampaignTemplatesPage").then(m => ({ default: m.CampaignTemplatesPage })));
@@ -168,6 +169,7 @@ export const AdminBusinessDetailPage = lazy(() => import("@/pages/admin/AdminBus
 export const BusinessOwnerOverviewPage = lazy(() => import("@/pages/business-owner/BusinessOwnerOverviewPage"));
 export const BusinessOwnerCampaignsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerCampaignsPage"));
 export const BusinessOwnerContributionsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerContributionsPage"));
+export const BusinessOwnerMyContributionsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerMyContributionsPage"));
 export const BusinessOwnerLeaderboardPage = lazy(() => import("@/pages/business-owner/BusinessOwnerLeaderboardPage"));
 export const BusinessOwnerRewardsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerRewardsPage"));
 export const BusinessOwnerSettingsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerSettingsPage"));

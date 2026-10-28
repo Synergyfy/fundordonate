@@ -1,20 +1,42 @@
 import { NestFactory } from "@nestjs/core";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import { join } from "node:path";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
+import { uploadsRoot } from "./common/uploads";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   const config = app.get(ConfigService);
   const logger = new Logger("Bootstrap");
 
-  app.use(helmet());
+  // Campaign media is served from /uploads and rendered by the web app on a
+  // different origin, so allow cross-origin embedding for those responses.
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    }),
+  );
   app.use(cookieParser());
+
+  // Only mount local uploads when the local storage provider is active — with
+  // a CDN (MEDIA_STORAGE=cloudinary) media is served from the CDN directly.
+  if ((process.env.MEDIA_STORAGE ?? "local").trim().toLowerCase() !== "cloudinary") {
+    app.useStaticAssets(uploadsRoot(), {
+      prefix: "/uploads/",
+      maxAge: "7d",
+      index: false,
+    });
+  }
 
   const corsOrigin = config.get<string>("cors.origin") ?? "http://localhost:5023";
   const allowedOrigins = corsOrigin === "*" ? true : corsOrigin.split(",").map((o) => o.trim());

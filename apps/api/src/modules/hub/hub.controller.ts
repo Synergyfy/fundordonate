@@ -82,6 +82,18 @@ export class HubController {
     return this.hubService.getLocations({ type, parentId, search });
   }
 
+  @Get("locations/:ref")
+  @ApiOperation({
+    summary: "Get a public hub location by id, slug or full path",
+    description:
+      "Returns a single public location with its active children. Soft-deleted and inactive locations are never returned.",
+  })
+  @ApiResponse({ status: 200, description: "Successfully retrieved location" })
+  @ApiResponse({ status: 404, description: "Location not found" })
+  async getPublicLocation(@Param("ref") ref: string) {
+    return this.hubService.getPublicLocation(ref);
+  }
+
   @Get("seasons")
   @ApiOperation({ summary: "List active or all seasons publicly" })
   @ApiResponse({ status: 200, description: "Successfully retrieved seasons" })

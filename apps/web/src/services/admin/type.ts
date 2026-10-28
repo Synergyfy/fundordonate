@@ -223,6 +223,8 @@ export interface AdminLocation {
   businessCount?: number;
   childrenCount?: number;
   eventCount?: number;
+  /** Present when the location has been soft-deleted by an admin. */
+  deletedAt?: string | null;
   parent?: {
     id: string;
     name: string;
@@ -246,6 +248,7 @@ export interface LocationTreeNode {
   targetAmount: number;
   activationStatus: string;
   businessCount: number;
+  metadata?: Record<string, any> | null;
   children: LocationTreeNode[];
 }
 
@@ -291,11 +294,16 @@ export interface AdminCampaign {
   id: string;
   businessId?: string;
   templateId?: string;
+  createdById?: string;
   title: string;
   slug: string;
   description?: string | null;
+  shortDescription?: string | null;
   status: any;
   mode: string;
+  audience?: string | null;
+  category?: string | null;
+  imageUrl?: string | null;
   goalAmount: number;
   targetAmount?: number;
   raisedAmount: number;
@@ -309,6 +317,14 @@ export interface AdminCampaign {
   openChangesCount?: number;
   authorId?: string;
   author: { id: string; firstName: string; lastName: string; email: string; [key: string]: any };
+  createdBy?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    avatar?: string | null;
+    username?: string | null;
+  } | null;
   _count: { donations: number; pledges: number; [key: string]: any };
   business?: {
     id: string;
@@ -359,6 +375,26 @@ export interface AdminCampaignDetail extends AdminCampaign {
 export interface UpdateCampaignStatusPayload {
   status: string;
   note?: string;
+}
+
+export interface CreateAdminCampaignPayload {
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  /** Target in pence. */
+  targetAmount: number;
+  mode?: "fund" | "donation";
+  audience?: "BUSINESS" | "CONSUMER" | "BOTH";
+  category?: string;
+  imageUrl?: string;
+  isFeatured?: boolean;
+  primaryLocationId?: string;
+  additionalLocationIds?: string[];
+  startDate?: string | null;
+  endDate?: string | null;
+  status?: "DRAFT" | "ACTIVE";
+  /** Full wizard configuration (locations, rules, rewards, terms, …). */
+  settings?: Record<string, unknown>;
 }
 
 export interface RequestCampaignChangesPayload {

@@ -19,6 +19,7 @@
     "prisma:seed": "prisma db seed",
     "verify:hub": "tsx scripts/verify-hub.ts",
     "verify:admin": "tsx scripts/verify-admin-contracts.ts",
+    "verify:campaign-centre": "tsx scripts/verify-campaign-centre-queries.ts",
     "db:push": "prisma db push"
   },
   "prisma": {
@@ -44,12 +45,14 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.7",
+    "form-data": "^4.0.6",
     "helmet": "^8.0.0",
     "ioredis": "^6.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import {
-  getAreaOptions,
-  getCityOptions,
-  getStreetOptions,
   type ExploreScope,
   type ScopeOption,
 } from "@/services/explore";
@@ -19,6 +16,10 @@ interface ChangeLocationModalProps {
   initialScope: ExploreScope;
   currentLocationText: string;
   focusSearch?: boolean;
+  /** Live location options; empty when the tree has not loaded. */
+  cityOptions?: ScopeOption[];
+  areaOptionsFor?: (citySlug?: string) => ScopeOption[];
+  streetOptionsFor?: (citySlug?: string, areaSlug?: string) => ScopeOption[];
   onClose: () => void;
   onApply: (payload: LocationApplyPayload) => void;
   onUseMyLocation: () => void;
@@ -40,6 +41,9 @@ export function ChangeLocationModal({
   initialScope,
   currentLocationText,
   focusSearch = false,
+  cityOptions = [],
+  areaOptionsFor,
+  streetOptionsFor,
   onClose,
   onApply,
   onUseMyLocation,
@@ -68,11 +72,14 @@ export function ChangeLocationModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const allCities = useMemo(() => getCityOptions(), []);
-  const allAreas = useMemo(() => (city ? getAreaOptions(city) : []), [city]);
+  const allCities = useMemo(() => cityOptions, [cityOptions]);
+  const allAreas = useMemo(
+    () => (city ? areaOptionsFor?.(city) ?? [] : []),
+    [city, areaOptionsFor],
+  );
   const allStreets = useMemo(
-    () => (city && area ? getStreetOptions(city, area) : []),
-    [city, area],
+    () => (city && area ? streetOptionsFor?.(city, area) ?? [] : []),
+    [city, area, streetOptionsFor],
   );
 
   const cities = filterOptions(allCities, query, city);

@@ -1,9 +1,8 @@
 // =============================================================================
 // Consumer Settings & Preferences Service
 // Manages notification preferences, privacy and communication settings.
+// Preferences are stored per device — the API does not persist them yet.
 // =============================================================================
-
-import { userDashboardApi } from "@/services/user-dashboard";
 
 export interface ConsumerSettings {
   notifications: {
@@ -49,22 +48,33 @@ const DEFAULT_SETTINGS: ConsumerSettings = {
   },
 };
 
+export function saveConsumerSettings(settings: ConsumerSettings): void {
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Merge persisted settings with the defaults (deep for each section). */
 export function getConsumerSettings(): ConsumerSettings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw) as Partial<ConsumerSettings>;
+      return {
+        notifications: { ...DEFAULT_SETTINGS.notifications, ...parsed.notifications },
+        privacy: { ...DEFAULT_SETTINGS.privacy, ...parsed.privacy },
+        communication: {
+          ...DEFAULT_SETTINGS.communication,
+          ...parsed.communication,
+        },
+      };
     }
-  } catch {}
+  } catch {
+    /* fall through to defaults */
+  }
   return DEFAULT_SETTINGS;
-}
-
-export function saveConsumerSettings(settings: ConsumerSettings): void {
-  try {
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {}
-  // Also sync notifications with backend API
-  userDashboardApi.updateNotificationPrefs(settings.notifications as any).catch(() => {});
 }
 
 export function updateSettingsSection<K extends keyof ConsumerSettings>(

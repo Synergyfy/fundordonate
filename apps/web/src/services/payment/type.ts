@@ -24,6 +24,7 @@ export interface CreateMcomChargeInput {
   notes?: string;
   isAnonymous?: boolean;
   description?: string;
+  acceptedTerms?: boolean;
   metadata?: Record<string, unknown>;
 }
 

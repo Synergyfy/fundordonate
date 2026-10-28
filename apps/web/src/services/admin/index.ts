@@ -18,6 +18,7 @@ import type {
   AdminSettingsMap,
   AdminUser,
   BulkCampaignActionPayload,
+  CreateAdminCampaignPayload,
   CreateCampaignTemplatePayload,
   CreateEventPayload,
   CreateLocationPayload,
@@ -144,8 +145,34 @@ export const adminService = {
     return api.delete(`/admin/locations/${id}`);
   },
 
+  /** Restore a soft-deleted hub location. */
+  async restoreLocation(id: string): Promise<any> {
+    return api.put(`/admin/locations/${id}/restore`);
+  },
+
   async getRollupConfig(): Promise<any> {
     return api.get("/admin/locations/rollup-config");
+  },
+
+  // ---------------------------------------------------------------------------
+  // 3b. Location recommendations (community submissions review queue)
+  // ---------------------------------------------------------------------------
+  async getLocationRecommendations(
+    params: { status?: string; search?: string; page?: number; limit?: number } = {},
+  ): Promise<any> {
+    return api.get("/admin/location-recommendations", { params });
+  },
+
+  async getLocationRecommendationCounts(): Promise<any> {
+    return api.get("/admin/location-recommendations/counts");
+  },
+
+  async approveLocationRecommendation(id: string): Promise<any> {
+    return api.post(`/admin/location-recommendations/${id}/approve`);
+  },
+
+  async rejectLocationRecommendation(id: string): Promise<any> {
+    return api.post(`/admin/location-recommendations/${id}/reject`);
   },
 
   async updateRollupConfig(config: Record<string, any>): Promise<any> {
@@ -185,8 +212,8 @@ export const adminService = {
     return api.put(`/admin/campaigns/${id}/status`, payload);
   },
 
-  async createCampaign(data: Record<string, any>): Promise<any> {
-    return api.post("/campaigns", data);
+  async createCampaign(data: CreateAdminCampaignPayload): Promise<AdminCampaignDetail> {
+    return api.post("/admin/campaigns", data);
   },
 
   async updateCampaign(id: string, data: Record<string, any>): Promise<any> {

@@ -11,7 +11,7 @@ import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import { useBusinessProfile } from "@/services/business/hook";
 import {
   Home, Target, TrendingUp, BarChart3, Award, Settings, Store, LayoutGrid,
-  Ellipsis, X, LogOut,
+  Ellipsis, X, LogOut, Heart,
 } from "lucide-react";
 import { TrialBanner } from "@/components/trial/TrialBanner";
 import { useAuthStore } from "@/stores/auth.store";
@@ -29,6 +29,7 @@ const SIDEBAR_NAV = [
   { to: "/dashboard/campaign-centre", label: "Campaign Centre", icon: LayoutGrid },
   { to: "/dashboard/campaigns", label: "My Campaigns", icon: Target },
   { to: "/dashboard/contributions", label: "Contributions", icon: TrendingUp },
+  { to: "/dashboard/my-contributions", label: "My Contributions", icon: Heart },
   { to: "/dashboard/leaderboard", label: "Leaderboard", icon: BarChart3 },
   { to: "/dashboard/rewards", label: "Rewards", icon: Award },
   { to: "/dashboard/my-business", label: "My Business", icon: Store },

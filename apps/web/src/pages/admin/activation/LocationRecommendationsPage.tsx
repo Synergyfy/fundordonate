@@ -6,7 +6,7 @@
 // page before it is an official location.
 // =============================================================================
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   ChevronRight, Inbox, CheckCircle2, XCircle, Clock, MapPin,
@@ -14,11 +14,11 @@ import {
 } from "lucide-react";
 import {
   listLocationRecommendations,
-  getLocationRecommendationCounts,
   approveLocationRecommendation,
   rejectLocationRecommendation,
   type LocationRecommendation,
   type RecommendationStatus,
+  type RecommendationCounts,
 } from "@/services/recommendations";
 
 type Filter = "pending" | "approved" | "rejected" | "all";
@@ -42,19 +42,30 @@ const fmtDate = (iso: string) =>
 export function LocationRecommendationsPage() {
   const [filter, setFilter] = useState<Filter>("pending");
   const [rows, setRows] = useState<LocationRecommendation[]>([]);
+  const [counts, setCounts] = useState<RecommendationCounts>({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const counts = useMemo(() => getLocationRecommendationCounts(), []);
-
   const refresh = useCallback(async () => {
     setLoading(true);
-    const list = await listLocationRecommendations(
-      filter === "all" ? undefined : { status: filter }
-    );
-    setRows(list);
-    setLoading(false);
+    try {
+      const result = await listLocationRecommendations(
+        filter === "all" ? undefined : { status: filter }
+      );
+      setRows(result.items);
+      setCounts(result.counts);
+    } catch (err) {
+      setRows([]);
+      setToast({ kind: "err", text: err instanceof Error ? err.message : "Could not load recommendations." });
+    } finally {
+      setLoading(false);
+    }
   }, [filter]);
 
   useEffect(() => {
@@ -69,10 +80,12 @@ export function LocationRecommendationsPage() {
   const handleApprove = async (rec: LocationRecommendation) => {
     setBusyId(rec.id);
     try {
-      await approveLocationRecommendation(rec.id);
+      const result = await approveLocationRecommendation(rec.id);
       showToast(
         "ok",
-        `"${rec.name}" added as SUGGESTED — confirm it on the High Streets page to make it official.`
+        result.reusedExistingLocation
+          ? `"${rec.name}" already exists in the hierarchy — recommendation marked approved.`
+          : `"${rec.name}" added as SUGGESTED — confirm it on the High Streets page to make it official.`
       );
       await refresh();
     } catch (err) {

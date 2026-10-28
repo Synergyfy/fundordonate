@@ -21,6 +21,7 @@ import { AdminCampaignsService } from "../services/admin-campaigns.service";
 import {
   AdminCampaignQueryDto,
   BulkCampaignActionDto,
+  CreateAdminCampaignDto,
   CreateCampaignTemplateDto,
   DuplicateCampaignTemplateDto,
   InstantiateCampaignTemplateDto,
@@ -46,6 +47,18 @@ export class AdminCampaignsController {
   @ApiResponse({ status: 200, description: "Successfully retrieved campaigns list" })
   async getCampaigns(@Query() query: AdminCampaignQueryDto) {
     return this.campaignsService.getCampaigns(query);
+  }
+
+  @Post()
+  @ApiOperation({
+    summary: "Create a platform campaign directly (no template or business)",
+  })
+  @ApiResponse({ status: 201, description: "Campaign created successfully" })
+  async createCampaign(
+    @Body() dto: CreateAdminCampaignDto,
+    @CurrentUser("id") adminUserId: string,
+  ) {
+    return this.campaignsService.createCampaign(dto, adminUserId);
   }
 
   @Get("templates")

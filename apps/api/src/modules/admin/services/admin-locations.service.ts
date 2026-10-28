@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
-import { Prisma, HubLocationType } from "@prisma/client";
+import { Prisma, HubLocationType, CampaignLocationScope } from "@prisma/client";
 import {
   CreateLocationDto,
   LocationQueryDto,
@@ -16,6 +16,7 @@ import {
 } from "../dto/location.dto";
 import { REDIS_CLIENT } from "@/redis/redis.constants";
 import Redis from "ioredis";
+import { ActivationService } from "@/modules/activation/activation.service";
 
 export type RollUpAggregationLevel = "realtime" | "hourly" | "daily";
 
@@ -45,7 +46,7 @@ export interface RollUpConfig {
 const DEFAULT_ROLLUP_CONFIG: RollUpConfig = {
   enabled: true,
   aggregationLevel: "realtime",
-  autoPromoteStatus: false,
+  autoPromoteStatus: true,
   activationThreshold: 80,
   rollUpRules: {
     campaignTypes: ["donation", "fund", "founding"],
@@ -112,6 +113,7 @@ export class AdminLocationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly activationService: ActivationService,
   ) {}
 
   private async invalidateLocationCache() {
@@ -146,7 +148,7 @@ export class AdminLocationsService {
     let effectiveParentId = parentId ?? null;
     if (!effectiveParentId && type === HubLocationType.CITY) {
       const national = await this.prisma.hubLocation.findFirst({
-        where: { type: HubLocationType.NATIONAL },
+        where: { type: HubLocationType.NATIONAL, deletedAt: null },
         select: { id: true },
         orderBy: { createdAt: "asc" },
       });
@@ -168,9 +170,9 @@ export class AdminLocationsService {
 
     const parent = await this.prisma.hubLocation.findUnique({
       where: { id: effectiveParentId },
-      select: { id: true, type: true, parentId: true },
+      select: { id: true, type: true, parentId: true, deletedAt: true },
     });
-    if (!parent) {
+    if (!parent || parent.deletedAt) {
       throw new BadRequestException(`Parent location with ID ${effectiveParentId} does not exist`);
     }
 
@@ -206,6 +208,7 @@ export class AdminLocationsService {
    */
   private async recomputeFullPaths() {
     const locations = await this.prisma.hubLocation.findMany({
+      where: { deletedAt: null },
       select: { id: true, slug: true, parentId: true, fullPath: true },
     });
     const byId = new Map(locations.map((l) => [l.id, l]));
@@ -238,10 +241,14 @@ export class AdminLocationsService {
    * Retrieves a paginated list of locations with parent relation and business counts.
    */
   async getLocations(query: LocationQueryDto) {
-    const { page = 1, limit = 20, type, parentId, search, includeInactive = false } = query;
+    const { page = 1, limit = 20, type, parentId, search, includeInactive = false, includeDeleted = false } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.HubLocationWhereInput = {};
+
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    }
 
     if (!includeInactive) {
       where.isActive = true;
@@ -320,7 +327,7 @@ export class AdminLocationsService {
 
     // Pull all active locations in one single DB query
     const allLocations = await this.prisma.hubLocation.findMany({
-      where: { isActive: true },
+      where: { isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
       include: {
         _count: {
@@ -355,6 +362,7 @@ export class AdminLocationsService {
         targetAmount: Number(loc.targetAmount),
         activationStatus: loc.activationStatus,
         businessCount: loc._count.businesses,
+        metadata: loc.metadata ?? {},
         children: [],
       });
     }
@@ -391,7 +399,7 @@ export class AdminLocationsService {
           select: { id: true, name: true, slug: true, type: true },
         },
         children: {
-          where: { isActive: true },
+          where: { isActive: true, deletedAt: null },
           select: {
             id: true,
             name: true,
@@ -439,12 +447,20 @@ export class AdminLocationsService {
 
     const existing = await this.prisma.hubLocation.findUnique({ where: { slug } });
     if (existing) {
-      throw new ConflictException(`Location slug '${slug}' already exists`);
+      if (!existing.deletedAt) {
+        throw new ConflictException(`Location slug '${slug}' already exists`);
+      }
+      // A soft-deleted record still holds the unique slug. Free it so the same
+      // city can be recreated, while keeping the deleted row for history.
+      await this.prisma.hubLocation.update({
+        where: { id: existing.id },
+        data: { slug: `${existing.slug}--deleted-${Date.now()}` },
+      });
     }
 
     if (dto.type === HubLocationType.NATIONAL) {
       const national = await this.prisma.hubLocation.findFirst({
-        where: { type: HubLocationType.NATIONAL },
+        where: { type: HubLocationType.NATIONAL, deletedAt: null },
         select: { id: true },
       });
       if (national) {
@@ -496,6 +512,12 @@ export class AdminLocationsService {
     const location = await this.prisma.hubLocation.findUnique({ where: { id } });
     if (!location) {
       throw new NotFoundException(`Location with ID ${id} not found`);
+    }
+
+    if (location.deletedAt) {
+      throw new BadRequestException(
+        "This location has been deleted. Restore it before making changes.",
+      );
     }
 
     if (dto.slug && dto.slug !== location.slug) {
@@ -562,6 +584,12 @@ export class AdminLocationsService {
       throw new NotFoundException(`Location with ID ${id} not found`);
     }
 
+    if (location.deletedAt) {
+      throw new BadRequestException(
+        "This location has been deleted. Restore it before changing its status.",
+      );
+    }
+
     const updated = await this.prisma.hubLocation.update({
       where: { id },
       data: { isActive },
@@ -577,39 +605,106 @@ export class AdminLocationsService {
   }
 
   /**
-   * Deletes a location if it has no child locations and no registered businesses.
+   * Soft-deletes a location and its descendants. Rows are retained (so
+   * business, campaign and contribution history stays intact) but flagged with
+   * `deletedAt` and hidden from both public and admin listings.
    */
   async deleteLocation(id: string) {
-    const location = await this.prisma.hubLocation.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: { children: true, businesses: true },
-        },
-      },
-    });
-
+    const location = await this.prisma.hubLocation.findUnique({ where: { id } });
     if (!location) {
       throw new NotFoundException(`Location with ID ${id} not found`);
+    }
+
+    if (location.deletedAt) {
+      return { success: true, deletedId: id, alreadyDeleted: true };
     }
 
     if (location.type === HubLocationType.NATIONAL) {
       throw new BadRequestException("The National Hub cannot be deleted.");
     }
 
-    if (location._count.children > 0) {
-      throw new BadRequestException("Cannot delete location with child locations. Deactivate it instead.");
+    // Collect the subtree so the whole branch disappears together.
+    const subtree: Array<{ id: string; metadata: unknown }> = [
+      { id: location.id, metadata: location.metadata },
+    ];
+    let frontier = [location.id];
+    while (frontier.length > 0) {
+      const children = await this.prisma.hubLocation.findMany({
+        where: { parentId: { in: frontier }, deletedAt: null },
+        select: { id: true, metadata: true },
+      });
+      frontier = children.map((child) => child.id);
+      subtree.push(...children);
     }
 
-    if (location._count.businesses > 0) {
-      throw new BadRequestException("Cannot delete location with assigned businesses. Reassign or deactivate it instead.");
+    const now = new Date();
+    await this.prisma.$transaction(
+      subtree.map((node) =>
+        this.prisma.hubLocation.update({
+          where: { id: node.id },
+          data: {
+            deletedAt: now,
+            isActive: false,
+            isPublic: false,
+            internalState: "ARCHIVED",
+            metadata: {
+              ...((node.metadata as Record<string, unknown>) ?? {}),
+              deletedWithRootId: id,
+            },
+          },
+        }),
+      ),
+    );
+
+    await this.invalidateLocationCache();
+
+    return { success: true, deletedId: id, softDeleted: true, cascaded: subtree.length - 1 };
+  }
+
+  /**
+   * Restores a soft-deleted location together with any descendants that were
+   * deleted by the same cascade operation.
+   */
+  async restoreLocation(id: string) {
+    const location = await this.prisma.hubLocation.findUnique({ where: { id } });
+    if (!location) {
+      throw new NotFoundException(`Location with ID ${id} not found`);
+    }
+    if (!location.deletedAt) {
+      return { success: true, restoredId: id, alreadyActive: true };
     }
 
-    await this.prisma.hubLocation.delete({ where: { id } });
+    const deleted = await this.prisma.hubLocation.findMany({
+      where: { deletedAt: { not: null } },
+      select: { id: true, metadata: true },
+    });
+    const toRestore = deleted.filter(
+      (node) => node.id === id || (node.metadata as any)?.deletedWithRootId === id,
+    );
+
+    await this.prisma.$transaction(
+      toRestore.map((node) =>
+        this.prisma.hubLocation.update({
+          where: { id: node.id },
+          data: {
+            deletedAt: null,
+            isActive: true,
+            isPublic: true,
+            internalState: "DRAFT",
+            metadata: Object.fromEntries(
+              Object.entries((node.metadata as Record<string, unknown>) ?? {}).filter(
+                ([key]) => key !== "deletedWithRootId",
+              ),
+            ) as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+    );
+
     await this.recomputeFullPaths();
     await this.invalidateLocationCache();
 
-    return { success: true, deletedId: id };
+    return { success: true, restoredId: id, restored: toRestore.length };
   }
 
   /**
@@ -661,7 +756,16 @@ export class AdminLocationsService {
       }),
       this.prisma.hubLocation.findMany({ select: { id: true, parentId: true, type: true } }),
       this.prisma.businessCampaign.findMany({
-        where: { status: "ACTIVE", business: { status: "ACTIVE" } },
+        where: {
+          status: "ACTIVE",
+          OR: [
+            { locations: { some: { scope: CampaignLocationScope.PRIMARY } } },
+            {
+              locations: { none: {} },
+              business: { status: "ACTIVE" },
+            },
+          ],
+        },
         select: {
           raisedAmount: true,
           business: { select: { locationId: true } },
@@ -755,10 +859,18 @@ export class AdminLocationsService {
 
     await this.invalidateLocationCache();
 
+    // Manual roll-up also runs the activation rules so "Run now" behaves like
+    // the scheduled sweep.
+    const activation = await this.activationService.evaluateAll({ apply: true });
+
     return {
       success: true,
       message: `Roll-up complete — recomputed ${updated} cities.`,
       citiesUpdated: updated,
+      activation: {
+        promoted: activation.promoted,
+        evaluated: activation.evaluated,
+      },
     };
   }
 }

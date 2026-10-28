@@ -7,9 +7,15 @@ export const userDashboardKeys = {
   profile: () => [...userDashboardKeys.all, "profile"] as const,
   donations: (params?: Record<string, any>) => [...userDashboardKeys.all, "donations", params] as const,
   pledges: (params?: Record<string, any>) => [...userDashboardKeys.all, "pledges", params] as const,
-  bookmarks: (params?: Record<string, any>) => [...userDashboardKeys.all, "bookmarks", params] as const,
   notifications: () => [...userDashboardKeys.all, "notifications"] as const,
 };
+
+export function useMyContributions(params: { page?: number; limit?: number } = {}) {
+  return useQuery({
+    queryKey: userDashboardKeys.donations(params),
+    queryFn: () => userDashboardService.getDonations(params),
+  });
+}
 
 export function useUserDashboardStats() {
   return useQuery({
@@ -32,16 +38,6 @@ export function useUpdateUserDashboardProfile() {
       userDashboardService.updateProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: userDashboardKeys.profile() });
-    },
-  });
-}
-
-export function useToggleCampaignBookmark() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (campaignId: string) => userDashboardService.toggleBookmark(campaignId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: userDashboardKeys.bookmarks() });
     },
   });
 }

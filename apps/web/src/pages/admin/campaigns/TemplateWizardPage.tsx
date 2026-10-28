@@ -12,7 +12,7 @@
 // Backend-connected: persists the full template config via the admin API.
 // =============================================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -27,6 +27,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CreditCard,
   Eye,
@@ -83,7 +84,7 @@ import {
   type TemplateLifecycle,
 } from "@/services/templates";
 import { adminApi } from "@/services/admin";
-import { useAdminSeasons } from "@/services/admin/hook";
+import { useAdminSeasons, useAdminCampaigns, useAdminBusinesses } from "@/services/admin/hook";
 import type { McomCatalogueReward } from "@/services/admin/type";
 
 // ---------------------------------------------------------------------------
@@ -224,6 +225,16 @@ interface AccessConfig {
   accessRewardThreshold: string;
   adminApproval: boolean;
   allowAssignmentOverride: boolean;
+  /** Campaign the business must donate to before claiming this template. */
+  requiredCampaignId: string | null;
+  /** Display title captured when the campaign was attached. */
+  requiredCampaignTitle?: string | null;
+  /** Minimum completed donation in pence. `0` means any donation. */
+  requiredCampaignMinPence: number;
+  /** Businesses granted access when the `admin_assigned` rule is active. */
+  assignedBusinessIds: string[];
+  /** Display snapshot of those businesses. */
+  assignedBusinesses: { id: string; name: string; email: string }[];
 }
 
 interface FieldAccessRow {
@@ -258,17 +269,16 @@ const STEPS = [
   { id: 4, area: 1, label: "Funding", icon: <Banknote className="h-4 w-4" /> },
   { id: 5, area: 1, label: "Location", icon: <MapPin className="h-4 w-4" /> },
   { id: 6, area: 1, label: "Audience & Visibility", icon: <Users className="h-4 w-4" /> },
-  { id: 7, area: 2, label: "Access Type", icon: <KeyRound className="h-4 w-4" /> },
-  { id: 8, area: 2, label: "Eligibility Rules", icon: <ShieldCheck className="h-4 w-4" /> },
-  { id: 9, area: 2, label: "Access as Reward", icon: <Ticket className="h-4 w-4" /> },
-  { id: 10, area: 3, label: "Editable Fields", icon: <SlidersHorizontal className="h-4 w-4" /> },
-  { id: 11, area: 4, label: "Internal Assets", icon: <Sparkles className="h-4 w-4" /> },
-  { id: 12, area: 4, label: "Rewards", icon: <Gift className="h-4 w-4" /> },
-  { id: 13, area: 4, label: "Conditions", icon: <ListChecks className="h-4 w-4" /> },
-  { id: 14, area: 4, label: "Delivery", icon: <Package className="h-4 w-4" /> },
-  { id: 15, area: 5, label: "Contribution", icon: <Store className="h-4 w-4" /> },
-  { id: 16, area: 6, label: "Preview", icon: <Eye className="h-4 w-4" /> },
-  { id: 17, area: 7, label: "Review", icon: <CheckCircle2 className="h-4 w-4" /> },
+  { id: 7, area: 2, label: "Access & Eligibility", icon: <KeyRound className="h-4 w-4" /> },
+  { id: 8, area: 2, label: "Access as Reward", icon: <Ticket className="h-4 w-4" /> },
+  { id: 9, area: 3, label: "Editable Fields", icon: <SlidersHorizontal className="h-4 w-4" /> },
+  { id: 10, area: 4, label: "Internal Assets", icon: <Sparkles className="h-4 w-4" /> },
+  { id: 11, area: 4, label: "Rewards", icon: <Gift className="h-4 w-4" /> },
+  { id: 12, area: 4, label: "Conditions", icon: <ListChecks className="h-4 w-4" /> },
+  { id: 13, area: 4, label: "Delivery", icon: <Package className="h-4 w-4" /> },
+  { id: 14, area: 5, label: "Contribution", icon: <Store className="h-4 w-4" /> },
+  { id: 15, area: 6, label: "Preview", icon: <Eye className="h-4 w-4" /> },
+  { id: 16, area: 7, label: "Review", icon: <CheckCircle2 className="h-4 w-4" /> },
 ];
 
 const AREAS: { id: number; label: string; description: string; icon: React.ReactNode }[] = [
@@ -281,8 +291,8 @@ const AREAS: { id: number; label: string; description: string; icon: React.React
   { id: 7, label: "Review & Activate", description: "Summary, status and save / activate.", icon: <CheckCircle2 className="h-4 w-4" /> },
 ];
 
-const PREVIEW_STEP_ID = 16;
-const REVIEW_STEP_ID = 17;
+const PREVIEW_STEP_ID = 15;
+const REVIEW_STEP_ID = 16;
 
 const CAMPAIGN_TYPES: { id: CampaignType; label: string; description: string }[] = [
   { id: "donation", label: "Donation", description: "Give-based campaigns with optional contributor rewards." },
@@ -389,9 +399,9 @@ const PRESENTATION_OPTIONS: { id: Presentation; label: string; description: stri
 const ACCESS_TYPES: { id: AccessTypeId; label: string; description: string; icon: React.ReactNode }[] = [
   { id: "automatic", label: "Automatic", description: "Every eligible business sees the template automatically — no approval needed.", icon: <Zap className="h-4 w-4" /> },
   { id: "audit", label: "After Audit", description: "Unlocked once the business passes its 247GBS Audit pre-audit.", icon: <ShieldCheck className="h-4 w-4" /> },
-  { id: "contribution", label: "Contribution", description: "Unlocked when the business contributes the required amount to the platform.", icon: <Wallet className="h-4 w-4" /> },
+  { id: "contribution", label: "Contribution", description: "Unlocked once the business's own campaigns have raised the required amount through FundOrDonate.", icon: <Wallet className="h-4 w-4" /> },
   { id: "membership", label: "Membership / Package", description: "Unlocked by an active membership or purchased package tier.", icon: <Package className="h-4 w-4" /> },
-  { id: "admin_assigned", label: "Admin Assigned", description: "Granted manually by an Admin to specific businesses.", icon: <UserCheck className="h-4 w-4" /> },
+  { id: "admin_assigned", label: "Admin Assigned", description: "Only the businesses you pick can see and claim it.", icon: <UserCheck className="h-4 w-4" /> },
   { id: "combination", label: "Combination", description: "Mix of the rules above — all selected conditions must be met.", icon: <GitBranch className="h-4 w-4" /> },
 ];
 
@@ -400,17 +410,38 @@ const ELIGIBILITY_RULES: { id: string; label: string; description: string; icon:
   { id: "pre_audit", label: "Passed pre-audit", description: "Business must have completed and shared a 247GBS Audit pre-audit.", icon: <ShieldCheck className="h-4 w-4" /> },
   { id: "membership_active", label: "Active membership", description: "Business must hold an active membership tier.", icon: <BadgeCheck className="h-4 w-4" /> },
   { id: "package_tier", label: "Purchased package", description: "Business must hold the required package tier.", icon: <Package className="h-4 w-4" /> },
-  { id: "min_contribution", label: "Minimum platform contribution", description: "Business must have contributed at least £100 to the platform.", icon: <Wallet className="h-4 w-4" /> },
+  { id: "min_contribution", label: "Minimum funds raised", description: "Business must have raised at least £100 through FundOrDonate — completed contributions to its own campaigns.", icon: <Wallet className="h-4 w-4" /> },
+  { id: "required_campaign_donation", label: "Donation to an attached campaign", description: "The business donates to a published campaign during setup, before the campaign can be submitted. Claiming the template is never blocked.", icon: <Banknote className="h-4 w-4" /> },
+  { id: "admin_assigned", label: "Assigned by an Admin", description: "Only the businesses you pick below can see and claim this template. Admins can still assign it to others from the Templates list.", icon: <UserCheck className="h-4 w-4" /> },
   { id: "admin_approval", label: "Admin review after claiming", description: "An Admin reviews the campaign after it is claimed. Does not lock the template.", icon: <UserCheck className="h-4 w-4" /> },
 ];
 
-const ACCESS_PRESETS: { id: string; label: string; rules: string[]; type: AccessTypeId }[] = [
-  { id: "open", label: "Open (automatic)", rules: ["business_account"], type: "automatic" },
-  { id: "audited", label: "Audited businesses only", rules: ["business_account", "pre_audit"], type: "audit" },
-  { id: "contributing", label: "Contributing businesses", rules: ["business_account", "min_contribution"], type: "contribution" },
-  { id: "members", label: "Members / packages", rules: ["business_account", "membership_active"], type: "membership" },
-  { id: "manual", label: "Admin assigned", rules: ["business_account", "admin_approval"], type: "admin_assigned" },
-];
+/**
+ * The access model is derived from the selected rules — it is never edited
+ * independently. These are the rules each model switches on.
+ */
+const ACCESS_TYPE_RULES: Record<AccessTypeId, string[]> = {
+  automatic: ["business_account"],
+  audit: ["business_account", "pre_audit"],
+  contribution: ["business_account", "min_contribution"],
+  membership: ["business_account", "membership_active"],
+  admin_assigned: ["business_account", "admin_assigned"],
+  combination: [],
+};
+
+/** Rules that represent an actual gate (used to derive the access model). */
+function deriveAccessType(rules: string[]): AccessTypeId {
+  const families = new Set<AccessTypeId>();
+  if (rules.includes("pre_audit")) families.add("audit");
+  if (rules.includes("membership_active") || rules.includes("package_tier"))
+    families.add("membership");
+  if (rules.includes("min_contribution")) families.add("contribution");
+  if (rules.includes("admin_assigned")) families.add("admin_assigned");
+
+  if (families.size === 0) return "automatic";
+  if (families.size > 1) return "combination";
+  return [...families][0];
+}
 
 const FIELD_SOURCE_META: Record<string, { label: string; color: string }> = {
   template: { label: "Template", color: "bg-indigo-100 text-indigo-700" },
@@ -713,6 +744,144 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+type AttachableCampaign = {
+  id: string;
+  title: string;
+  status?: string | null;
+  business?: { name?: string | null } | null;
+};
+
+function CampaignPicker({
+  campaigns,
+  selectedId,
+  selectedTitle,
+  loading,
+  onSelect,
+}: {
+  campaigns: AttachableCampaign[];
+  selectedId: string | null;
+  selectedTitle?: string | null;
+  loading?: boolean;
+  onSelect: (campaign: AttachableCampaign | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  const selected = campaigns.find((c) => c.id === selectedId);
+  const label = selected?.title ?? selectedTitle ?? "";
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return campaigns;
+    return campaigns.filter((c) =>
+      `${c.title ?? ""} ${c.business?.name ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [campaigns, query]);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+      >
+        <span className={label ? "truncate text-gray-900" : "text-gray-400"}>
+          {loading ? "Loading campaigns…" : label || "Select a published campaign…"}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          <div className="border-b border-gray-100 p-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search campaigns or businesses…"
+                className="w-full rounded-md border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto py-1" role="listbox">
+            {loading ? (
+              <p className="px-3 py-4 text-xs text-gray-400">Loading campaigns…</p>
+            ) : results.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-gray-400">
+                {campaigns.length === 0
+                  ? "No published campaigns available yet."
+                  : "No campaigns match your search."}
+              </p>
+            ) : (
+              results.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={c.id === selectedId}
+                  onClick={() => {
+                    onSelect({ id: c.id, title: c.title });
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={`flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50 ${
+                    c.id === selectedId ? "bg-primary-50" : ""
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-gray-900">
+                      {c.title}
+                    </span>
+                    <span className="block truncate text-xs text-gray-500">
+                      {c.business?.name ? `${c.business.name} · ` : "Platform campaign · "}
+                      {c.status ?? "ACTIVE"}
+                    </span>
+                  </span>
+                  {c.id === selectedId && (
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptyRewardsStep() {
   return (
     <div className="rounded-xl border border-dashed border-gray-300 py-14 text-center">
@@ -829,6 +998,16 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     [seasonsData]
   );
 
+  // Campaigns an admin can attach as a prerequisite donation gate. Only
+  // published (ACTIVE) campaigns can be selected — draft or pending campaigns
+  // are not live yet and cannot receive donations.
+  const { data: campaignOptionsData, isLoading: campaignOptionsLoading } =
+    useAdminCampaigns({ limit: 100, status: "ACTIVE" });
+  const attachableCampaigns = useMemo(
+    () => campaignOptionsData?.items ?? [],
+    [campaignOptionsData],
+  );
+
   // Area 1 — Admin-controlled campaign content (spec step 4)
   const [adminSections, setAdminSections] = useState<StructureSection[]>(() => {
     const stored = existing?.structure.sections.filter((s) => s.source === "admin") ?? [];
@@ -861,10 +1040,16 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         }
   );
 
-  // Area 2 — Business access & eligibility
+  // Area 2 — Business access & eligibility (access model is derived from the
+  // selected rules, so the two can never contradict each other).
   const [access, setAccess] = useState<AccessConfig>(() =>
     existing
-      ? { ...existing.accessRules }
+      ? {
+          ...existing.accessRules,
+          type: deriveAccessType(existing.accessRules.eligibility ?? []),
+          assignedBusinessIds: existing.accessRules.assignedBusinessIds ?? [],
+          assignedBusinesses: existing.accessRules.assignedBusinesses ?? [],
+        }
       : {
           type: "automatic",
           eligibility: ["business_account"],
@@ -874,6 +1059,11 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           accessRewardThreshold: "100",
           adminApproval: false,
           allowAssignmentOverride: false,
+          requiredCampaignId: null,
+          requiredCampaignTitle: null,
+          requiredCampaignMinPence: 0,
+          assignedBusinessIds: [],
+          assignedBusinesses: [],
         }
   );
 
@@ -1089,10 +1279,18 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     if (s === 4 && funding.methods.length === 0) return "Select at least one contribution method.";
     if (s === 5 && location.required && location.levels.length === 0)
       return "Select at least one location level, or turn location off.";
-    if (s === 8 && access.eligibility.length === 0)
+    if (s === 7 && access.eligibility.length === 0)
       return "Select at least one eligibility rule.";
-    if (s === 8 && access.eligibility.includes("min_contribution") && !access.minContribution.trim())
-      return "Enter the minimum platform contribution amount, or remove that rule.";
+    if (s === 7 && access.eligibility.includes("min_contribution") && !access.minContribution.trim())
+      return "Enter the minimum funds-raised amount, or remove that rule.";
+    if (
+      s === 7 &&
+      access.eligibility.includes("required_campaign_donation") &&
+      !access.requiredCampaignId
+    )
+      return "Choose the campaign the business must donate to during setup, or remove that rule.";
+    if (s === 7 && access.eligibility.includes("admin_assigned") && access.assignedBusinessIds.length === 0)
+      return "Assign at least one business for the Admin assigned rule, or remove that rule.";
     return null;
   };
 
@@ -1159,15 +1357,33 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
   // Access & eligibility handlers
   // ---------------------------------------------------------------------
 
-  const applyAccessPreset = (presetId: string) => {
-    const preset = ACCESS_PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
-    setAccess((prev) => ({
-      ...prev,
-      type: preset.type,
-      eligibility: [...preset.rules],
-      adminApproval: preset.rules.includes("admin_approval"),
-    }));
+  /**
+   * Choosing an access model switches the matching rules on. Non-gate extras
+   * (setup-time donation, admin review) are preserved so picking a model never
+   * silently drops unrelated configuration. "Combination" is derived, not
+   * selectable.
+   */
+  const applyAccessModel = (model: AccessTypeId) => {
+    if (model === "combination") return;
+
+    setAccess((prev) => {
+      const modelRules = ACCESS_TYPE_RULES[model];
+      const extras = prev.eligibility.filter(
+        (rule) => rule === "required_campaign_donation" || rule === "admin_approval",
+      );
+      const eligibility = Array.from(new Set([...modelRules, ...extras]));
+
+      return {
+        ...prev,
+        type: model,
+        eligibility,
+        minContributionEnabled: eligibility.includes("min_contribution"),
+        adminApproval: eligibility.includes("admin_approval"),
+        ...(eligibility.includes("admin_assigned")
+          ? {}
+          : { assignedBusinessIds: [], assignedBusinesses: [] }),
+      };
+    });
   };
 
   const toggleEligibility = (ruleId: string) => {
@@ -1178,10 +1394,63 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
       return {
         ...prev,
         eligibility,
+        type: deriveAccessType(eligibility),
         minContributionEnabled: eligibility.includes("min_contribution"),
         adminApproval: eligibility.includes("admin_approval"),
+        ...(eligibility.includes("required_campaign_donation")
+          ? {}
+          : {
+              requiredCampaignId: null,
+              requiredCampaignTitle: null,
+              requiredCampaignMinPence: 0,
+            }),
+        ...(eligibility.includes("admin_assigned")
+          ? {}
+          : { assignedBusinessIds: [], assignedBusinesses: [] }),
       };
     });
+  };
+
+  // Admin-assigned access — search businesses by name or email.
+  const [assignQuery, setAssignQuery] = useState("");
+  const [assignSearch, setAssignSearch] = useState("");
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setAssignSearch(assignQuery.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [assignQuery]);
+
+  const { data: assignResults, isLoading: assignLoading } = useAdminBusinesses({
+    search: assignSearch || undefined,
+    limit: 20,
+  });
+
+  const assignableBusinesses = (assignResults?.items ?? []) as any[];
+
+  const assignBusiness = (business: any) => {
+    setAccess((prev) => {
+      if (prev.assignedBusinessIds.includes(business.id)) return prev;
+      return {
+        ...prev,
+        assignedBusinessIds: [...prev.assignedBusinessIds, business.id],
+        assignedBusinesses: [
+          ...prev.assignedBusinesses,
+          {
+            id: business.id,
+            name: business.name,
+            email: business.email ?? business.owner?.email ?? "",
+          },
+        ],
+      };
+    });
+  };
+
+  const unassignBusiness = (businessId: string) => {
+    setAccess((prev) => ({
+      ...prev,
+      assignedBusinessIds: prev.assignedBusinessIds.filter((id) => id !== businessId),
+      assignedBusinesses: prev.assignedBusinesses.filter((b) => b.id !== businessId),
+    }));
   };
 
   const updateFieldAccess = (rowId: string, patch: Partial<FieldAccessRow>) => {
@@ -1504,9 +1773,25 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     (l) => l.label
   );
   const accessMeta = ACCESS_TYPES.find((a) => a.id === access.type);
+  const attachedCampaign = attachableCampaigns.find(
+    (c) => c.id === access.requiredCampaignId,
+  );
   const eligibilityLabels = ELIGIBILITY_RULES.filter((r) =>
     access.eligibility.includes(r.id)
-  ).map((r) => r.label);
+  ).map((r) => {
+    if (r.id === "required_campaign_donation" && access.requiredCampaignId) {
+      const min = access.requiredCampaignMinPence;
+      return `${r.label}: ${access.requiredCampaignTitle ?? "attached campaign"}${
+        min > 0 ? ` (min £${(min / 100).toFixed(min % 100 === 0 ? 0 : 2)})` : " (any amount)"
+      }`;
+    }
+    if (r.id === "admin_assigned") {
+      return `${r.label} (${access.assignedBusinesses.length} business${
+        access.assignedBusinesses.length === 1 ? "" : "es"
+      })`;
+    }
+    return r.label;
+  });
   const contributionModeLabel =
     CONTRIBUTION_MODES.find((m) => m.id === selfFunding.mode)?.label ?? "—";
   const contributionAmountLabel = (() => {
@@ -1530,7 +1815,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     { label: "Admin-controlled content", ok: enabledAdminSections.length > 0, note: `${enabledAdminSections.length} section(s) owned by Admin`, blocking: true },
     { label: "Content requirements", ok: enabledSections.length > 0, note: `${enabledSections.length} sections · ${requiredSections.length} required`, blocking: true },
     { label: "Funding configuration", ok: funding.methods.length > 0, note: funding.methods.length > 0 ? `${funding.methods.length} method(s) · ${durationLabel}` : "No contribution method selected", blocking: true },
-    { label: "Business access", ok: access.eligibility.length > 0, note: accessMeta ? `${accessMeta.label} · ${eligibilityLabels.length} rule(s)` : "No access type", blocking: true },
+    { label: "Business access", ok: access.eligibility.length > 0, note: accessMeta ? `${accessMeta.label} · ${eligibilityLabels.length} rule(s)${access.eligibility.includes("admin_assigned") ? ` · ${access.assignedBusinesses.length} assigned` : ""}` : "No access type", blocking: true },
     { label: "Editable fields", ok: editableFieldCount > 0, note: `${editableFieldCount} of ${fieldAccess.length} fields editable by the business`, blocking: true },
     { label: "Rewards connected", ok: rewards.length > 0, note: rewards.length > 0 ? `${rewards.length} reward(s) from the library` : "No rewards connected (recommended)", blocking: false },
     { label: "Internal asset connections", ok: connectedServices.length > 0, note: connectedServices.length > 0 ? `${connectedServices.length} platform(s) connected` : "No Internal Assets connected (optional)", blocking: false },
@@ -2186,8 +2471,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 11 — Attach Internal Assets, Area 4 (spec step 11) ═════ */}
-      {step === 11 && (
+      {/* ══ Step 10 — Attach Internal Assets, Area 4 (spec step 11) ═════ */}
+      {step === 10 && (
         <div className="space-y-5">
           <Callout tone="teal" icon={<Sparkles className="h-4 w-4" />}>
             Attach the <strong>Internal Assets</strong> this campaign connects to — access to
@@ -2297,8 +2582,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 15 — Business Contribution, Area 5 (spec step 12) ════ */}
-      {step === 15 && (
+      {/* ══ Step 14 — Business Contribution, Area 5 (spec step 12) ════ */}
+      {step === 14 && (
         <div className="space-y-5">
           <Callout tone="blue" icon={<Store className="h-4 w-4" />}>
             Business contribution / self-funding lets a business owner contribute to their{" "}
@@ -2545,8 +2830,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 12 — Connect Reusable Rewards, Area 4 (spec 6–8) ════ */}
-      {step === 12 && (
+      {/* ══ Step 11 — Connect Reusable Rewards, Area 4 (spec 6–8) ════ */}
+      {step === 11 && (
         <div className="space-y-5">
           <Panel
             title="Reusable Rewards"
@@ -2722,8 +3007,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 13 — Reward Conditions, Area 4 (spec step 9) ════════ */}
-      {step === 13 && (
+      {/* ══ Step 12 — Reward Conditions, Area 4 (spec step 9) ════════ */}
+      {step === 12 && (
         <div className="space-y-5">
           <Callout tone="blue">
             Define when each reward applies. The reward itself stays reusable — the campaign
@@ -2931,8 +3216,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 14 — Reward Delivery, Area 4 (spec step 10) ══════════ */}
-      {step === 14 && (
+      {/* ══ Step 13 — Reward Delivery, Area 4 (spec step 10) ══════════ */}
+      {step === 13 && (
         <div className="space-y-5">
           <Callout tone="teal">
             FundOrDonate does not recreate internal assets that already exist on connected MCOM /
@@ -3193,73 +3478,46 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 7 — Access Type, Area 2 ══════════════════════════════ */}
+      {/* ══ Step 7 — Access & Eligibility, Area 2 ═════════════════════ */}
       {step === 7 && (
         <div className="space-y-5">
           <Callout tone="blue" icon={<KeyRound className="h-4 w-4" />}>
-            A template is also a <strong>campaign access grant</strong>. Choose how businesses
-            unlock access to campaigns built from this template.
+            Access is configured in one place. The <strong>access model</strong> is a shortcut —
+            picking one switches on its rules — and the <strong>rules</strong> are what the server
+            actually enforces. A business must satisfy every selected rule before it can claim a
+            campaign from this template. The attached-campaign donation is different: it is
+            collected during setup and never blocks claiming.
           </Callout>
 
-          <Panel title="Access Presets" description="Quick starting points — customise afterwards.">
-            <div className="flex flex-wrap gap-2">
-              {ACCESS_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => applyAccessPreset(preset.id)}
-                  className="rounded-full border border-gray-300 px-3.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Access Type" description="How a business gains access to this template.">
+          <Panel
+            title="Access Model"
+            description="Pick a starting point — this sets the matching rules below. The model follows the rules, so the two can never disagree."
+          >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {ACCESS_TYPES.map((type) => (
                 <ChoiceCard
                   key={type.id}
                   selected={access.type === type.id}
-                  onClick={() => setAccess((p) => ({ ...p, type: type.id }))}
+                  onClick={() => applyAccessModel(type.id)}
                   title={type.label}
-                  description={type.description}
+                  description={
+                    type.id === "combination"
+                      ? "Selected automatically when two or more access rules are active."
+                      : type.description
+                  }
                   icon={type.icon}
                 />
               ))}
             </div>
+            <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Current model: <strong className="text-gray-900">{accessMeta?.label}</strong>
+              {accessMeta ? ` — ${accessMeta.description}` : ""}
+            </p>
           </Panel>
-
-          <div className="rounded-xl border border-primary-200 bg-primary-50 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary-700">
-              <Info className="h-3.5 w-3.5" />
-              Selected access model
-            </div>
-            <p className="mt-2 text-sm text-primary-900">
-              <strong>{accessMeta?.label}</strong> — {accessMeta?.description}
-            </p>
-            <p className="mt-1 text-xs text-primary-700">
-              {eligibilityLabels.length > 0
-                ? `Conditions: ${eligibilityLabels.join(" · ")}`
-                : "No eligibility conditions configured yet."}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ══ Step 8 — Eligibility Rules, Area 2 ════════════════════════ */}
-      {step === 8 && (
-        <div className="space-y-5">
-          <Callout tone="teal" icon={<ShieldCheck className="h-4 w-4" />}>
-            Eligibility rules decide which businesses qualify. A business must satisfy{" "}
-            <strong>every selected rule</strong> before it can create a campaign from this
-            template.
-          </Callout>
 
           <Panel
             title="Eligibility Rules"
-            description="Select all conditions that apply to this template."
+            description="Every selected rule is enforced — for businesses claiming the template and for admins assigning it."
             action={
               <span className="rounded-full bg-primary-100 px-2.5 py-1 text-xs font-semibold text-primary-700">
                 {access.eligibility.length} of {ELIGIBILITY_RULES.length} active
@@ -3282,26 +3540,225 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
 
           {access.eligibility.includes("min_contribution") && (
             <Panel
-              title="Minimum Platform Contribution"
-              description="How much the business must have contributed to the platform to qualify."
+              title="Minimum Funds Raised"
+              description="How much the business's own campaigns must have raised through FundOrDonate to qualify."
             >
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700">Minimum (£)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={access.minContribution}
-                  onChange={(e) =>
-                    setAccess((p) => ({ ...p, minContribution: e.target.value }))
-                  }
-                  className="w-36 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                />
-                <span className="text-xs text-gray-400">Spec default: £100</span>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">Minimum (£)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={access.minContribution}
+                    onChange={(e) =>
+                      setAccess((p) => ({ ...p, minContribution: e.target.value }))
+                    }
+                    className="w-36 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-400">Spec default: £100</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Counted from completed contributions to this business's own campaigns — online,
+                  in-store, funding splits and its own self-funding. Refunded or pending
+                  contributions do not count, and money the business donated to another business's
+                  campaign does not count. This is a track-record gate with no payment step.
+                </p>
               </div>
             </Panel>
           )}
 
-          <Panel title="Eligibility Summary" description="What the business must satisfy.">
+          {access.eligibility.includes("required_campaign_donation") && (
+            <Panel
+              title="Prerequisite Campaign Donation"
+              description="The business donates to this campaign during setup, before the campaign can be submitted. This never locks the template."
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Campaign to donate to
+                  </label>
+                  <CampaignPicker
+                    campaigns={attachableCampaigns}
+                    selectedId={access.requiredCampaignId}
+                    selectedTitle={access.requiredCampaignTitle}
+                    loading={campaignOptionsLoading}
+                    onSelect={(selected) =>
+                      setAccess((p) => ({
+                        ...p,
+                        requiredCampaignId: selected?.id ?? null,
+                        requiredCampaignTitle: selected?.title ?? null,
+                      }))
+                    }
+                  />
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Only published (active) campaigns are listed. Draft and pending campaigns
+                    cannot receive donations.
+                  </p>
+                  {attachableCampaigns.length === 0 && !campaignOptionsLoading && (
+                    <p className="mt-1.5 text-xs text-amber-600">
+                      No published campaigns available yet — publish a campaign first, then attach it here.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">
+                    Minimum donation (£)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={
+                      access.requiredCampaignMinPence > 0
+                        ? access.requiredCampaignMinPence / 100
+                        : ""
+                    }
+                    onChange={(e) =>
+                      setAccess((p) => ({
+                        ...p,
+                        requiredCampaignMinPence: Math.max(
+                          0,
+                          Math.round(Number(e.target.value || 0) * 100),
+                        ),
+                      }))
+                    }
+                    className="w-36 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                  <span className="text-xs text-gray-400">
+                    Leave blank / 0 for any completed donation.
+                  </span>
+                </div>
+
+                {attachedCampaign && (
+                  <div className="rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs text-primary-900">
+                    Setup step: the business donates{" "}
+                    <strong>
+                      {access.requiredCampaignMinPence > 0
+                        ? `at least £${(access.requiredCampaignMinPence / 100).toFixed(
+                            access.requiredCampaignMinPence % 100 === 0 ? 0 : 2,
+                          )}`
+                        : "any amount"}
+                    </strong>{" "}
+                    to <strong>{attachedCampaign.title}</strong> before submitting.
+                    The template can still be claimed without it.
+                  </div>
+                )}
+              </div>
+            </Panel>
+          )}
+
+          {access.eligibility.includes("admin_assigned") && (
+            <Panel
+              title="Admin Assignment"
+              description="Only these businesses can see and claim this template. Search by business name or email."
+            >
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={assignQuery}
+                    onChange={(e) => setAssignQuery(e.target.value)}
+                    placeholder="Search businesses by name or email…"
+                    className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+
+                <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200">
+                  {assignLoading ? (
+                    <p className="px-3 py-4 text-xs text-gray-400">Searching…</p>
+                  ) : assignableBusinesses.length === 0 ? (
+                    <p className="px-3 py-4 text-xs text-gray-400">
+                      {assignSearch
+                        ? `No businesses match “${assignSearch}”.`
+                        : "No businesses found."}
+                    </p>
+                  ) : (
+                    assignableBusinesses.map((business) => {
+                      const assigned = access.assignedBusinessIds.includes(business.id);
+                      const email = business.email ?? business.owner?.email ?? "";
+                      return (
+                        <div
+                          key={business.id}
+                          className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 last:border-b-0"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-gray-900">
+                              {business.name}
+                            </p>
+                            <p className="truncate text-xs text-gray-500">
+                              {email}
+                              {business.city ? ` · ${business.city}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              assigned ? unassignBusiness(business.id) : assignBusiness(business)
+                            }
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                              assigned
+                                ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                : "border-gray-300 text-gray-700 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700"
+                            }`}
+                          >
+                            {assigned ? (
+                              <>
+                                <Check className="h-3.5 w-3.5" /> Assigned
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="h-3.5 w-3.5" /> Add
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Assigned businesses ({access.assignedBusinesses.length})
+                  </p>
+                  {access.assignedBusinesses.length === 0 ? (
+                    <p className="text-xs text-amber-600">
+                      No businesses assigned yet — nobody will be able to claim this template.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {access.assignedBusinesses.map((business) => (
+                        <span
+                          key={business.id}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 py-1 pl-3 pr-1.5 text-xs text-primary-800"
+                        >
+                          <span className="font-semibold">{business.name}</span>
+                          {business.email && (
+                            <span className="text-primary-500">{business.email}</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => unassignBusiness(business.id)}
+                            className="rounded-full p-0.5 text-primary-500 hover:bg-primary-100 hover:text-primary-700"
+                            aria-label={`Remove ${business.name}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Panel>
+          )}
+
+          <Panel
+            title="Eligibility Summary"
+            description="What the business must satisfy to claim this template. The attached-campaign donation is collected during setup instead."
+          >
             {access.eligibility.length === 0 ? (
               <p className="text-sm text-gray-400">No rules selected — every business qualifies.</p>
             ) : (
@@ -3318,6 +3775,25 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                           (£{access.minContribution || "0"})
                         </span>
                       )}
+                      {rule.id === "admin_assigned" && (
+                        <span className="text-xs font-semibold text-teal-700">
+                          ({access.assignedBusinesses.length} business
+                          {access.assignedBusinesses.length === 1 ? "" : "es"})
+                        </span>
+                      )}
+                      {rule.id === "required_campaign_donation" &&
+                        access.requiredCampaignId && (
+                          <span className="text-xs font-semibold text-teal-700">
+                            {access.requiredCampaignTitle}
+                            {access.requiredCampaignMinPence > 0
+                              ? ` · £${(
+                                  access.requiredCampaignMinPence / 100
+                                ).toFixed(
+                                  access.requiredCampaignMinPence % 100 === 0 ? 0 : 2,
+                                )}+`
+                              : " · any donation"}
+                          </span>
+                        )}
                     </li>
                   )
                 )}
@@ -3339,8 +3815,9 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           </Panel>
         </div>
       )}
-      {/* ══ Step 9 — Access as Reward, Area 2 ═════════════════════════ */}
-      {step === 9 && (
+
+      {/* ══ Step 8 — Access as Reward, Area 2 ═════════════════════════ */}
+      {step === 8 && (
         <div className="space-y-5">
           <Callout tone="yellow" icon={<Ticket className="h-4 w-4" />}>
             <strong>Template access can itself be a reward.</strong> This is different from the
@@ -3425,8 +3902,8 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 10 — Business Editable Fields, Area 3 ════════════════ */}
-      {step === 10 && (
+      {/* ══ Step 9 — Business Editable Fields, Area 3 ═════════════════ */}
+      {step === 9 && (
         <div className="space-y-5">
           <Callout tone="blue" icon={<SlidersHorizontal className="h-4 w-4" />}>
             Decide, field by field, what the business can change after the template is applied.
@@ -3545,7 +4022,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 16 — Preview, Area 6 (spec step 17) ══════════════════ */}
+      {/* ══ Step 15 — Preview, Area 6 (spec step 17) ══════════════════ */}
       {step === PREVIEW_STEP_ID && (
         <div className="space-y-5">
           <Callout tone="blue" icon={<Eye className="h-4 w-4" />}>
@@ -3802,7 +4279,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ══ Step 17 — Review, Save & Activate, Area 7 (spec 16,18,19) ══ */}
+      {/* ══ Step 16 — Review, Save & Activate, Area 7 (spec 16,18,19) ══ */}
       {step === REVIEW_STEP_ID && (
         <div className="space-y-5">
           <Panel
@@ -3928,6 +4405,22 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                   }
                 />
                 <SummaryRow
+                  label="Prerequisite campaign"
+                  value={
+                    access.eligibility.includes("required_campaign_donation")
+                      ? `${access.requiredCampaignTitle ?? "Not selected"}${
+                          access.requiredCampaignMinPence > 0
+                            ? ` · min £${(
+                                access.requiredCampaignMinPence / 100
+                              ).toFixed(
+                                access.requiredCampaignMinPence % 100 === 0 ? 0 : 2,
+                              )}`
+                            : " · any donation"
+                        }`
+                      : "None"
+                  }
+                />
+                <SummaryRow
                   label="Access as reward"
                   value={
                     access.accessAsReward
@@ -3971,7 +4464,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
             action={
               <button
                 type="button"
-                onClick={() => goToStep(10)}
+                onClick={() => goToStep(9)}
                 className="text-xs font-semibold text-primary-600 hover:text-primary-700"
               >
                 Edit
@@ -4002,7 +4495,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
             action={
               <button
                 type="button"
-                onClick={() => goToStep(12)}
+                onClick={() => goToStep(11)}
                 className="text-xs font-semibold text-primary-600 hover:text-primary-700"
               >
                 Edit

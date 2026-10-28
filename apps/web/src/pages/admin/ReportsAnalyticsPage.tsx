@@ -53,7 +53,7 @@ export function ReportsAnalyticsPage() {
   const categoryBreakdown = useMemo(() => {
     const counts: Record<string, { count: number; raised: number }> = {};
     campaigns.forEach((c) => {
-      const cat = c.category?.name || "General";
+      const cat = c.category || "General";
       if (!counts[cat]) counts[cat] = { count: 0, raised: 0 };
       counts[cat].count += 1;
       counts[cat].raised += c.raisedAmount || 0;
@@ -146,7 +146,7 @@ export function ReportsAnalyticsPage() {
                       <div key={c.id} className="flex items-center justify-between border-b pb-2 last:border-0">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{c.title}</p>
-                          <p className="text-xs text-gray-400">{c.category?.name || "General"}</p>
+                          <p className="text-xs text-gray-400">{c.category || "General"}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-gray-900">{formatCurrency(c.raisedAmount || 0)}</p>
