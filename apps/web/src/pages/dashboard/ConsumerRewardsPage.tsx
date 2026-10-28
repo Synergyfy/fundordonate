@@ -90,10 +90,15 @@ function RewardCard({ reward }: { reward: IssuedReward }) {
               {status.label}
             </span>
           </div>
-          {reward.campaignTitle && (
+          {reward.campaignLocation && (
             <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              <span className="truncate">{reward.campaignTitle}</span>
+              <span className="truncate">{reward.campaignLocation}</span>
+            </p>
+          )}
+          {reward.campaignTitle && (
+            <p className="mt-0.5 truncate text-xs text-gray-400">
+              {reward.campaignTitle}
             </p>
           )}
           {category && (

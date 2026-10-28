@@ -291,8 +291,23 @@ export default function AdminCampaignDetailPage() {
     const contributorSplit = Math.round(backers * 0.6);
     const consumerSplit = Math.round(raised * 0.6);
 
-    const cityName = c.business?.location?.name || c.cityName || c.location || "Local Hub";
+    const cityName =
+      c.business?.location?.name ||
+      c.locations?.[0]?.location?.name ||
+      c.cityName ||
+      c.location ||
+      "Local Hub";
     const areaName = c.areaName || cityName;
+
+    const rawAudience = String(
+      c.audience || c.template?.audience || "both",
+    ).toLowerCase();
+    const audience: "consumers" | "business_owners" | "both" =
+      rawAudience === "business" || rawAudience === "business_owners"
+        ? "business_owners"
+        : rawAudience === "consumer" || rawAudience === "consumers"
+          ? "consumers"
+          : "both";
 
     return {
       id: c.id,
@@ -300,7 +315,7 @@ export default function AdminCampaignDetailPage() {
       title: c.title || c.name || "Campaign",
       description: c.description || "No description provided for this campaign.",
       season: c.season?.name || (typeof c.season === "string" ? c.season : (c.template?.season?.name || "Current Season")),
-      audience: (c.audience || c.template?.audience || "both") as "consumers" | "business_owners" | "both",
+      audience,
       hierarchyLevel: c.scope || c.hierarchyLevel || "city",
       locations: [
         { name: cityName, area: areaName, streetTrees: 0 },

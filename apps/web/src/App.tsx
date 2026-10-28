@@ -103,6 +103,7 @@ import {
   SeasonWizardPage,
   // Campaigns
   AllCampaignsPage,
+  NewAdminCampaignWizard,
   AdminCampaignDetailPage,
   AdminCampaignEditPage,
   AdminCampaignTemplatesPage,
@@ -135,6 +136,7 @@ import {
   BusinessOwnerOverviewPage,
   BusinessOwnerCampaignsPage,
   BusinessOwnerContributionsPage,
+  BusinessOwnerMyContributionsPage,
   BusinessOwnerLeaderboardPage,
   BusinessOwnerRewardsPage,
   BusinessOwnerSettingsPage,
@@ -431,8 +433,7 @@ function App() {
           <Route path="/admin/campaigns/business" element={<AllCampaignsPage audience="business" key="business" />} />
           <Route path="/admin/campaigns/consumer" element={<AllCampaignsPage audience="consumer" key="consumer" />} />
           <Route path="/admin/campaigns/pending-review" element={<AllCampaignsPage forceStatus="pending_review" key="pending" />} />
-          {/* Direct campaign creation is not implemented; the wizard builds templates. */}
-          <Route path="/admin/campaigns/new" element={<Navigate to="/admin/campaigns/templates/new" replace />} />
+          <Route path="/admin/campaigns/new" element={<NewAdminCampaignWizard />} />
           <Route path="/admin/campaigns/templates" element={<AdminCampaignTemplatesPage />} />
           <Route path="/admin/campaigns/templates/new" element={<AdminTemplateWizardPage />} />
           <Route path="/admin/campaigns/templates/:id/edit" element={<AdminTemplateWizardPage />} />
@@ -559,6 +560,7 @@ function App() {
           <Route path="/dashboard/my-campaigns/:campaignId" element={<BusinessMyCampaignDetailPage />} />
           <Route path="/dashboard/campaigns" element={<BusinessOwnerCampaignsPage />} />
           <Route path="/dashboard/contributions" element={<BusinessOwnerContributionsPage />} />
+          <Route path="/dashboard/my-contributions" element={<BusinessOwnerMyContributionsPage />} />
           <Route path="/dashboard/leaderboard" element={<BusinessOwnerLeaderboardPage />} />
           <Route path="/dashboard/rewards" element={<BusinessOwnerRewardsPage />} />
           <Route path="/dashboard/my-business" element={<MyBusinessPage />} />

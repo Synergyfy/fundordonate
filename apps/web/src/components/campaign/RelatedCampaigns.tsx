@@ -22,27 +22,46 @@ interface Campaign {
 interface Props {
   campaignId: string;
   categoryId?: string;
+  categoryName?: string;
   currentSlug: string;
 }
 
-export function RelatedCampaigns({ campaignId, categoryId, currentSlug }: Props) {
+export function RelatedCampaigns({
+  campaignId,
+  categoryName,
+  currentSlug,
+}: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!categoryId) {
-      setLoading(false);
-      return;
-    }
+    let cancelled = false;
 
     campaignApi
-      .list({ categoryId, status: "published", limit: 4, sortBy: "newest" })
+      .list({ status: "ACTIVE", limit: 12 })
       .then((res) => {
-        setCampaigns(res.items.filter((c) => c.id !== campaignId && c.slug !== currentSlug).slice(0, 3));
+        if (cancelled) return;
+        const others = res.items.filter(
+          (c) => c.id !== campaignId && c.slug !== currentSlug,
+        );
+        // Prefer campaigns in the same category, otherwise show other active
+        // campaigns so the section is never empty for a valid campaign.
+        const sameCategory = categoryName
+          ? others.filter((c) => c.category?.name === categoryName)
+          : [];
+        setCampaigns((sameCategory.length > 0 ? sameCategory : others).slice(0, 3));
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [campaignId, categoryId]);
+      .catch(() => {
+        if (!cancelled) setCampaigns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId, categoryName, currentSlug]);
 
   if (loading) {
     return (

@@ -13,10 +13,10 @@ export interface ConsumerCommunity {
 }
 
 const DEFAULT_COMMUNITY: ConsumerCommunity = {
-  citySlug: "london",
-  cityName: "London",
-  areaSlug: "camden",
-  areaName: "Camden",
+  citySlug: "camden",
+  cityName: "Camden",
+  areaSlug: "camden-town",
+  areaName: "Camden Town",
   streetSlug: "camden-high-street",
   streetName: "Camden High Street",
 };

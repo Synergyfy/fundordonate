@@ -22,7 +22,7 @@ const formatGbp = (n: number) =>
     style: "currency",
     currency: "GBP",
     maximumFractionDigits: 0,
-  }).format(n > 1000 ? n / 100 : n);
+  }).format(n / 100);
 
 const requirementProgress = (template: { requirements?: { met: boolean }[] }) => {
   const reqs = template.requirements || [];
@@ -32,6 +32,15 @@ const requirementProgress = (template: { requirements?: { met: boolean }[] }) =>
     total: reqs.length,
     complete: reqs.length === 0 || met === reqs.length,
   };
+};
+
+const ACCESS_TYPE_LABELS: Record<string, string> = {
+  automatic: "Open",
+  audit: "After audit",
+  contribution: "Funds raised",
+  membership: "Membership",
+  admin_assigned: "Admin assigned",
+  combination: "Combination",
 };
 
 function RequirementRow({
@@ -86,8 +95,23 @@ export function BusinessTemplateCard({
     (r: any) => r.action === "audit" || r.id === "pre_audit",
   );
 
-  const accessLabel = t.accessType || "Open";
-  const hasContributionReq = t.contributionRequirement?.required;
+  // Only the audit requirement has a self-serve action today; everything else
+  // is an Admin/funds/membership gate the business cannot click through.
+  const hasActionableRequirement = needsAudit;
+  const blockedReason = unmet.some((r: any) => r.id === "admin_assigned")
+    ? "Invite only — ask an Admin"
+    : unmet.some((r: any) => r.id === "min_contribution")
+      ? "Funds-raised threshold not met"
+      : unmet.some(
+            (r: any) => r.action === "membership" || r.id === "campaign_eligibility",
+          )
+        ? "Membership tier required"
+        : "Locked by an eligibility rule";
+
+  const accessLabel =
+    ACCESS_TYPE_LABELS[t.accessType as string] ?? t.accessType ?? "Open";
+  const contributionThreshold =
+    (t.requirements || []).find((r: any) => r.id === "min_contribution") ?? null;
   const rewardsMode = normalizeBusinessRewardsMode(t.businessRewardsMode);
 
   return (
@@ -127,6 +151,32 @@ export function BusinessTemplateCard({
         Permission to use · Admin owns this master template
       </p>
 
+      {t.requiredCampaign && (
+        <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
+          <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {t.requiredCampaign.minPence > 0
+              ? `A donation of ${formatGbp(t.requiredCampaign.minPence)} or more`
+              : "A donation"}{" "}
+            to “{t.requiredCampaign.title}” is collected during setup, before you
+            submit. It does not affect your ability to claim.
+          </span>
+        </p>
+      )}
+
+      {t.selfFunding?.enabled && t.selfFunding.mode === "required" && (
+        <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-orange-50 px-2.5 py-1.5 text-[11px] font-semibold text-orange-800">
+          <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {t.selfFunding.amount > 0
+              ? `Seed funding of ${formatGbp(t.selfFunding.amount)}`
+              : "A seed contribution"}{" "}
+            into your own campaign is required at setup — you cannot submit until it is
+            paid.
+          </span>
+        </p>
+      )}
+
       {rewardsMode !== "disabled" && (
         <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary-700">
           <GiftIcon className="h-3.5 w-3.5 shrink-0" />
@@ -153,10 +203,11 @@ export function BusinessTemplateCard({
               `· ${t.mcomAssets.length} internal assets`}
           </span>
         )}
-        {hasContributionReq && (
+        {t.contributionRequirement?.required && (
           <span className="flex items-center gap-1">
             <Wallet className="h-3.5 w-3.5 text-orange-500" />
-            Required contribution {formatGbp(t.contributionRequirement.amount)}
+            {formatGbp(t.contributionRequirement.amount)} raised through FundOrDonate{" "}
+            {contributionThreshold?.met ? "· met" : "required"}
           </span>
         )}
         {t.requirements && t.requirements.length > 0 && (
@@ -180,16 +231,22 @@ export function BusinessTemplateCard({
       ) : (
         <button
           onClick={onCompleteRequirement}
-          disabled={preview || unlocking}
-          title={preview ? "Preview only — business action" : undefined}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          disabled={preview || unlocking || !hasActionableRequirement}
+          title={
+            preview
+              ? "Preview only — business action"
+              : !hasActionableRequirement
+                ? blockedReason
+                : undefined
+          }
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 disabled:hover:bg-transparent"
         >
           <KeyRound className="h-4 w-4" />
           {unlocking
             ? "Completing…"
             : needsAudit
               ? "Go to 247GBS Audit"
-              : "Complete Requirement"}
+              : blockedReason}
         </button>
       )}
     </div>

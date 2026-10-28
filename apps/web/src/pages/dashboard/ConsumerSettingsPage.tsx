@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, ChevronRight, Lock, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 import {
   getConsumerSettings,
   updateSettingsSection,
@@ -130,7 +130,6 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function ConsumerSettingsPage() {
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const centralHubEnabled = useAuthStore((s) => s.centralHubEnabled);
   const centralHubLoading = useAuthStore((s) => s.centralHubLoading);
@@ -285,21 +284,10 @@ export function ConsumerSettingsPage() {
                 : "Not linked"}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/consumer/you/profile?tab=password")}
-          className="flex w-full items-center justify-between border-t border-gray-100 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
-        >
-          <span className="inline-flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Change password
-          </span>
-          <ChevronRight className="h-4 w-4" />
-        </button>
       </Card>
 
       <p className="pb-4 text-center text-xs text-gray-400">
-        Notification preferences are saved to your account. Other preferences are stored on this device.
+        Preferences are stored on this device.
       </p>
     </div>
   );

@@ -47,6 +47,7 @@ interface McomCheckoutPanelProps {
   isAnonymous?: boolean;
   notes?: string;
   description?: string;
+  acceptedTerms?: boolean;
   metadata?: Record<string, unknown>;
   onSuccess: (result: McomCheckoutResult) => void;
   /** Hide the MCOM Wallet option (e.g. anonymous/guest payers). */
@@ -66,6 +67,7 @@ export function McomCheckoutPanel({
   isAnonymous,
   notes,
   description,
+  acceptedTerms,
   metadata,
   onSuccess,
   allowWallet = true,
@@ -112,6 +114,7 @@ export function McomCheckoutPanel({
         isAnonymous,
         notes,
         description,
+        acceptedTerms,
         metadata,
       });
 

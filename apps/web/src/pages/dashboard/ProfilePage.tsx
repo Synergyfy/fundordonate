@@ -27,6 +27,7 @@ interface Profile {
 }
 
 const PROFILE_EXTRAS_KEY = "fod:profileExtras";
+const NOTIFICATION_PREFS_KEY = "fod:notificationPrefs";
 
 interface ProfileExtras {
   firstName?: string;
@@ -69,6 +70,36 @@ interface NotificationPrefs {
   emailWithdrawals: boolean;
   pushDonations: boolean;
   pushCampaignUpdates: boolean;
+}
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  emailDonations: true,
+  emailCampaignUpdates: true,
+  emailNewFollowers: true,
+  emailWithdrawals: true,
+  pushDonations: true,
+  pushCampaignUpdates: false,
+};
+
+function readNotificationPrefs(): NotificationPrefs {
+  try {
+    const raw = window.localStorage.getItem(NOTIFICATION_PREFS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<NotificationPrefs>;
+      return { ...DEFAULT_NOTIFICATION_PREFS, ...parsed };
+    }
+  } catch {
+    /* use defaults */
+  }
+  return DEFAULT_NOTIFICATION_PREFS;
+}
+
+function writeNotificationPrefs(prefs: NotificationPrefs): void {
+  try {
+    window.localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 function Toggle({
@@ -167,14 +198,7 @@ export function ProfilePage() {
     location: "",
   });
   const fileRef = useRef<HTMLInputElement>(null);
-  const [notPrefs, setNotPrefs] = useState<NotificationPrefs>({
-    emailDonations: true,
-    emailCampaignUpdates: true,
-    emailNewFollowers: true,
-    emailWithdrawals: true,
-    pushDonations: true,
-    pushCampaignUpdates: false,
-  });
+  const [notPrefs, setNotPrefs] = useState<NotificationPrefs>(readNotificationPrefs);
 
   // Password change is handled by MCOM Central Hub — no local password UI.
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -182,22 +206,23 @@ export function ProfilePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [profileResult, prefsResult] = await Promise.allSettled([
-        userDashboardApi.getProfile(),
-        userDashboardApi.getNotificationPrefs(),
-      ]);
+      const profileResult = await userDashboardApi.getProfile().then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason) => ({ status: "rejected" as const, reason }),
+      );
       if (cancelled) return;
       const extras = readProfileExtras();
       if (profileResult.status === "fulfilled") {
         const p = profileResult.value;
+        const bio = extras.bio ?? p.bio ?? "";
         const phone = extras.phone ?? p.phone ?? "";
         const location = extras.location ?? p.location ?? "";
-        setProfile({ ...p, phone, location } as any);
+        setProfile({ ...p, bio, phone, location } as any);
         setForm({
           firstName: p.firstName || "",
           lastName: p.lastName || "",
           username: p.username || "",
-          bio: p.bio || "",
+          bio,
           phone,
           location,
         });
@@ -227,7 +252,6 @@ export function ProfilePage() {
           location: merged.location || "",
         });
       }
-      if (prefsResult.status === "fulfilled") setNotPrefs(prefsResult.value);
       setLoading(false);
     })();
     return () => {
@@ -259,6 +283,7 @@ export function ProfilePage() {
       });
       setProfile((p) => ({
         ...updated,
+        bio: form.bio,
         phone: form.phone,
         location: form.location,
         avatar: updated?.avatar ?? p?.avatar ?? null,
@@ -266,7 +291,10 @@ export function ProfilePage() {
       showMessage("success", "Profile updated successfully");
     } catch {
       setProfile((p) => (p ? { ...p, ...form } : p));
-      showMessage("success", "Profile updated successfully");
+      showMessage(
+        "error",
+        "We could not save your profile to the server. Your changes are kept on this device.",
+      );
     }
     setSaving(false);
   };
@@ -293,15 +321,9 @@ export function ProfilePage() {
     e.target.value = "";
   };
 
-  const handleSaveNotifications = async () => {
-    setSaving(true);
-    try {
-      await userDashboardApi.updateNotificationPrefs(notPrefs as unknown as Record<string, boolean>);
-      showMessage("success", "Notification preferences saved");
-    } catch {
-      showMessage("error", "Failed to save preferences");
-    }
-    setSaving(false);
+  const handleSaveNotifications = () => {
+    writeNotificationPrefs(notPrefs);
+    showMessage("success", "Notification preferences saved on this device");
   };
 
   const handleDeleteAccount = async () => {
@@ -491,7 +513,7 @@ export function ProfilePage() {
         <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
           <CardHeader
             title="Notification Preferences"
-            description="Choose what FundOrDonate sends you. Preferences save to your account."
+            description="Choose what FundOrDonate sends you. Preferences are saved on this device."
             icon={
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50">
                 <CheckCircle2 className="h-4 w-4 text-primary-600" />

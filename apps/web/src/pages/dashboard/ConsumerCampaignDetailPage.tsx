@@ -26,20 +26,33 @@ export function ConsumerCampaignDetailPage() {
   useEffect(() => {
     if (!slug) return;
 
+    let cancelled = false;
     setCampaign(null);
     setLoading(true);
     setError(null);
 
-    campaignApi
-      .getBySlug(slug)
-      .then((data: any) => {
-        setCampaign(data);
-      })
-      .catch((err) => {
-        console.error("Campaign fetch error:", err);
-        setError("Campaign not found");
-      })
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        // Route params may be a slug *or* a raw campaign id (Activity links use
+        // ids), so fall back to the id endpoint when the slug lookup misses.
+        const data = await campaignApi.getBySlug(slug);
+        if (!cancelled) setCampaign(data as unknown as DetailCampaign);
+      } catch {
+        try {
+          const data = await campaignApi.getById(slug);
+          if (!cancelled) setCampaign(data as unknown as DetailCampaign);
+        } catch (err) {
+          console.error("Campaign fetch error:", err);
+          if (!cancelled) setError("Campaign not found");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   const handleBack = () => {
@@ -82,18 +95,22 @@ export function ConsumerCampaignDetailPage() {
 
   const community = getConsumerCommunity();
   const hierarchy = {
-    citySlug: community.citySlug,
-    areaSlug: community.areaSlug,
-    streetSlug: community.streetSlug,
+    citySlug: (campaign as any).citySlug || community.citySlug,
+    areaSlug: (campaign as any).areaSlug || community.areaSlug,
+    streetSlug: (campaign as any).streetSlug || community.streetSlug,
   };
   const isFounding =
     campaign.category?.slug === "founding-membership" ||
-    campaign.campaignType === "Founding Membership";
+    (campaign as any).campaignType === "Founding Membership";
+  const status = String((campaign as any).status ?? "").toLowerCase();
   const isEnded =
-    campaign.status === "completed" ||
-    campaign.status === "expired" ||
-    campaign.status === "cancelled" ||
-    new Date(campaign.deadline).getTime() <= Date.now();
+    status === "completed" ||
+    status === "expired" ||
+    status === "cancelled" ||
+    status === "ended" ||
+    (campaign.deadline
+      ? new Date(campaign.deadline).getTime() <= Date.now()
+      : false);
 
   const handleParticipate = () => {
     if (isEnded) return;
@@ -136,6 +153,7 @@ export function ConsumerCampaignDetailPage() {
       <RelatedCampaigns
         campaignId={campaign.id}
         categoryId={campaign.category?.id}
+        categoryName={campaign.category?.name}
         currentSlug={campaign.slug}
       />
 

@@ -413,29 +413,41 @@ export default function NationalHubPage() {
 
   const allCities = useMemo(() => {
     if (liveCities && liveCities.length > 0) {
-      return liveCities.map((c) => ({
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-        region: c.region || "UK",
-        status: (c.status === "active" ? "active" : c.status === "making_progress" ? "making_progress" : "needs_activation") as HubStatus,
-        activationProgress: c.activationProgress ?? (c.status === "active" ? 100 : c.status === "making_progress" ? 65 : 20),
-        fundingRaised: c.fundingRaised || 0,
-        fundingTarget: c.fundingTarget || 200000,
-        localAreas: c.localAreas || c.localAreasCount || 0,
-        highStreets: c.highStreets || c.highStreetsCount || 0,
-        businesses: c.businesses || c.businessesCount || 0,
-        campaigns: c.campaigns || c.campaignsCount || 0,
-        mapX: c.mapX ?? 50,
-        mapY: c.mapY ?? 50,
-        shortDescription: c.shortDescription || `${c.name} Hub`,
-        activity: c.activity || [],
-        imageOne: c.imageOne || `https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&h=500&fit=crop`,
-        imageTwo: c.imageTwo || `https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=500&fit=crop`,
-        campaignSlugs: c.campaignSlugs || [],
-        communities: c.communities || `${c.name} Local Community`,
-        type: "city" as const,
-      }));
+      return liveCities.map((c) => {
+        const rawStatus = String(c.status ?? "").toLowerCase();
+        const status: HubStatus =
+          rawStatus === "active" || rawStatus === "activated"
+            ? "active"
+            : rawStatus === "making_progress" ||
+              rawStatus === "in_progress" ||
+              rawStatus === "preparing" ||
+              rawStatus === "launching"
+            ? "making_progress"
+            : "needs_activation";
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          region: c.region || "UK",
+          status,
+          activationProgress: c.activationProgress ?? (c.status === "active" ? 100 : c.status === "making_progress" ? 65 : 20),
+          fundingRaised: c.fundingRaised || 0,
+          fundingTarget: c.fundingTarget || 200000,
+          localAreas: c.localAreas || c.localAreasCount || 0,
+          highStreets: c.highStreets || c.highStreetsCount || 0,
+          businesses: c.businesses || c.businessesCount || 0,
+          campaigns: c.campaigns || c.campaignsCount || 0,
+          mapX: c.mapX ?? 50,
+          mapY: c.mapY ?? 50,
+          shortDescription: c.shortDescription || `${c.name} Hub`,
+          activity: c.activity || [],
+          imageOne: c.imageOne || `https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&h=500&fit=crop`,
+          imageTwo: c.imageTwo || `https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=500&fit=crop`,
+          campaignSlugs: c.campaignSlugs || [],
+          communities: c.communities || `${c.name} Local Community`,
+          type: "city" as const,
+        };
+      });
     }
     return [];
   }, [liveCities]);

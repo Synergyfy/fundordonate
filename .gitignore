@@ -16,8 +16,6 @@ packages/*/src/*.d.ts.map
 # Environment files
 # Ignore every real env file (.env, .env.local, .env.production, .env.staging, …)
 # but keep the committed templates.
-.env
-.env.*
 !.env.example
 
 # Database
@@ -28,9 +26,10 @@ packages/*/src/*.d.ts.map
 # Uploads
 uploads/*
 !uploads/.gitkeep
+apps/api/uploads/
+.uploads-tmp/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -53,3 +52,4 @@ coverage/
 *.log
 temp/
 .tmp/
+config.bat

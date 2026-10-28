@@ -98,6 +98,16 @@ export interface TemplateAccessRules {
   adminApproval: boolean;
   /** Allow an admin to override eligibility when assigning this template. */
   allowAssignmentOverride: boolean;
+  /** Campaign the claiming business must donate to (when the rule is active). */
+  requiredCampaignId: string | null;
+  /** Display title captured when the campaign was attached. */
+  requiredCampaignTitle?: string | null;
+  /** Minimum completed donation (pence). `0` means any donation. */
+  requiredCampaignMinPence: number;
+  /** Businesses granted access when the `admin_assigned` rule is active. */
+  assignedBusinessIds: string[];
+  /** Display snapshot of those businesses. */
+  assignedBusinesses: { id: string; name: string; email: string }[];
 }
 
 export interface ContributionRules {
@@ -247,6 +257,11 @@ const DEFAULT_ACCESS: TemplateAccessRules = {
   accessRewardThreshold: "100",
   adminApproval: false,
   allowAssignmentOverride: false,
+  requiredCampaignId: null,
+  requiredCampaignTitle: null,
+  requiredCampaignMinPence: 0,
+  assignedBusinessIds: [],
+  assignedBusinesses: [],
 };
 
 const DEFAULT_CONTRIBUTION: ContributionRules = {
@@ -389,6 +404,20 @@ export function adaptAdminTemplateToMaster(tpl: AdminCampaignTemplate): MasterTe
     ...DEFAULT_ACCESS,
     ...(config.access ?? {}),
     allowAssignmentOverride: Boolean(config.access?.allowAssignmentOverride),
+    assignedBusinessIds: Array.isArray(config.access?.assignedBusinessIds)
+      ? config.access.assignedBusinessIds.filter(
+          (id: unknown): id is string => typeof id === "string",
+        )
+      : [],
+    assignedBusinesses: Array.isArray(config.access?.assignedBusinesses)
+      ? config.access.assignedBusinesses
+          .filter((b: any) => b && typeof b.id === "string")
+          .map((b: any) => ({
+            id: b.id,
+            name: typeof b.name === "string" ? b.name : b.id,
+            email: typeof b.email === "string" ? b.email : "",
+          }))
+      : [],
   };
 
   return {

@@ -16,6 +16,7 @@ import { formatCurrency, formatDate } from "@/utils/formatters";
 export interface ConsumerContribution {
   id: string;
   reference: string;
+  campaignId: string;
   campaignSlug: string;
   campaignTitle: string;
   campaignImage?: string;
@@ -25,6 +26,7 @@ export interface ConsumerContribution {
   paymentStatus: string;
   participationType: string;
   rewardEligible: boolean;
+  rewardId?: string;
   rewardTitle?: string;
   rewardStatus?: string;
   createdAt: string;
@@ -34,12 +36,14 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-green-50 text-green-700",
   pending: "bg-amber-50 text-amber-700",
   failed: "bg-red-50 text-red-700",
+  refunded: "bg-blue-50 text-blue-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
   pending: "Pending",
   failed: "Failed",
+  refunded: "Refunded",
 };
 
 const PARTICIPATION_LABELS: Record<string, string> = {
@@ -47,14 +51,30 @@ const PARTICIPATION_LABELS: Record<string, string> = {
   back_campaign: "Backer",
   donation: "Donate",
   donate: "Donate",
+  in_store: "In-store contribution",
+  online: "Online contribution",
+  funding_split: "Funding split",
+  self_funding: "Self funding",
   founding_member: "Founding Member",
   founding_monthly: "Founding Monthly",
 };
 
 const REWARD_STATUS_LABELS: Record<string, string> = {
+  pending: "Being issued",
+  issued: "Available to claim",
   available: "Available to claim",
   claimed: "Claimed",
   redeemed: "Redeemed",
+  expired: "Expired",
+  revoked: "Revoked",
+  failed: "Unavailable",
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  completed: "Paid",
+  pending: "Awaiting payment",
+  failed: "Payment failed",
+  refunded: "Refunded",
 };
 
 function DetailRow({
@@ -84,31 +104,32 @@ export function ContributionDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    userDashboardApi.getDonations()
-      .then((res: any) => {
+    userDashboardApi.getDonation(id ?? "")
+      .then((match) => {
         if (cancelled) return;
-        const raw = res?.items || (Array.isArray(res) ? res : []);
-        const match = raw.find((d: any) => d.id === id) || raw[0];
-        if (match) {
-          setItem({
-            id: match.id,
-            reference: match.id?.slice(0, 8)?.toUpperCase(),
-            campaignSlug: match.campaign?.id || "",
-            campaignTitle: match.campaign?.title || "Community Campaign",
-            campaignImage: match.campaign?.imageUrl,
-            campaignLocation: match.business?.city || "Local High Street",
-            amount: match.amount || 0,
-            status: (match.status || "completed").toLowerCase(),
-            paymentStatus: "Paid",
-            participationType: "donation",
-            rewardEligible: true,
-            rewardTitle: "Supporter Reward",
-            rewardStatus: "available",
-            createdAt: match.createdAt || new Date().toISOString(),
-          });
-        } else {
-          setItem(null);
-        }
+        const status = String(match.status || "COMPLETED").toLowerCase();
+        setItem({
+          id: match.id,
+          reference: match.reference || match.id.slice(0, 8).toUpperCase(),
+          campaignId: match.campaign?.id || match.campaignId || "",
+          campaignSlug: match.campaign?.id || match.campaignId || "",
+          campaignTitle: match.campaign?.title || "Community Campaign",
+          campaignImage: match.campaign?.imageUrl || undefined,
+          campaignLocation:
+            match.business?.highStreet ||
+            match.business?.localArea ||
+            match.business?.city ||
+            undefined,
+          amount: match.amount || 0,
+          status,
+          paymentStatus: PAYMENT_STATUS_LABELS[status] ?? status,
+          participationType: String(match.type || "").toLowerCase(),
+          rewardEligible: Boolean(match.reward),
+          rewardId: match.reward?.id,
+          rewardTitle: match.reward?.title,
+          rewardStatus: match.reward?.status?.toLowerCase(),
+          createdAt: match.createdAt || new Date().toISOString(),
+        });
         setLoading(false);
       })
       .catch(() => {
@@ -168,8 +189,9 @@ export function ContributionDetailPage() {
 
   const statusLabel = STATUS_LABELS[item.status] ?? item.status;
   const statusStyle = STATUS_STYLES[item.status] ?? "bg-gray-100 text-gray-600";
-  const participationLabel =
-    PARTICIPATION_LABELS[item.participationType] ?? item.participationType;
+  const participationLabel = item.participationType
+    ? (PARTICIPATION_LABELS[item.participationType] ?? item.participationType)
+    : "—";
 
   return (
     <div className="space-y-5">
@@ -216,8 +238,7 @@ export function ContributionDetailPage() {
             >
               View Campaign
               <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+            </Link>          </div>
         </div>
       </div>
 
@@ -280,18 +301,18 @@ export function ContributionDetailPage() {
                 {item.rewardTitle ?? "Reward"}
               </span>
               <span className="text-xs font-medium text-gray-500">
-                {REWARD_STATUS_LABELS[item.rewardStatus ?? ""] ?? "Available"}
+                {REWARD_STATUS_LABELS[item.rewardStatus ?? ""] ?? item.rewardStatus ?? "Issued"}
               </span>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Not qualified for a reward</p>
+            <p className="text-sm text-gray-500">No reward was issued for this contribution</p>
           )}
         </DetailRow>
       </div>
 
-      {item.rewardEligible && (
+      {item.rewardEligible && item.rewardId && (
         <Link
-          to={`/consumer/rewards/${item.id}`}
+          to={`/consumer/rewards/${item.rewardId}`}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           <ShieldCheck className="h-4 w-4" />

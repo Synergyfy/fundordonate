@@ -97,7 +97,39 @@ export function CampaignDetailPage() {
     );
   }
 
-  const isEnded = campaign.status === "completed" || campaign.status === "expired" || campaign.status === "cancelled";
+  const isEnded =
+    ["completed", "expired", "cancelled"].includes(
+      String(campaign.status).toLowerCase(),
+    ) ||
+    (campaign.endDate ? new Date(campaign.endDate).getTime() < Date.now() : false);
+  const notStarted = Boolean(
+    campaign.startDate && new Date(campaign.startDate).getTime() > Date.now(),
+  );
+
+  const participation = campaign.participation ?? {
+    backCampaign: campaign.mode === "fund",
+    foundingMember: false,
+    foundingMemberMonthly: false,
+    donateContribute: campaign.mode === "donation",
+  };
+  const canDonate = participation.donateContribute !== false;
+  const canBack = participation.backCampaign !== false;
+  const canFound =
+    participation.foundingMember === true &&
+    campaign.foundingMemberRules?.enabled !== false;
+  const optionCount = [canDonate, canBack, canFound].filter(Boolean).length;
+  const requiresChoice = optionCount > 1;
+  const defaultContributionType =
+    canDonate ? "donate" : canBack ? "backer" : canFound ? "founding_member" : null;
+  const effectiveContributionType =
+    contributionType === "backer" && !canBack
+      ? defaultContributionType
+      : contributionType === "donate" && !canDonate
+        ? defaultContributionType
+        : contributionType === "founding_member" && !canFound
+          ? defaultContributionType
+          : contributionType ?? defaultContributionType;
+
   const selectedReward = (campaign.rewards || []).find(
     (reward: any) => reward.id === pendingRewardId,
   );
@@ -142,12 +174,16 @@ export function CampaignDetailPage() {
       />
 
       {/* Donation/Pledge Form */}
-      {!isEnded && (
+      {!isEnded && !notStarted && (
         <div id="contribute" className="border-t border-gray-200 py-12 scroll-mt-20">
           <div className="container-page max-w-2xl">
             <div className="mb-6 text-center">
               <h2 className="text-2xl font-bold text-gray-900">
-                {campaign.mode === "fund" ? "Fund This Project" : "Donate Now"}
+                {campaign.mode === "fund"
+                  ? "Fund This Project"
+                  : optionCount > 1
+                    ? "Support This Campaign"
+                    : "Donate Now"}
               </h2>
               <p className="mt-1 text-gray-500">
                 {campaign.mode === "fund"
@@ -176,47 +212,77 @@ export function CampaignDetailPage() {
               </div>
             )}
 
-            {!contributionType ? (
+            {optionCount === 0 ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+                This campaign is not currently accepting contributions.
+              </div>
+            ) : requiresChoice && !contributionType ? (
               <ContributionTypeChoice
                 campaignTitle={campaign.title}
                 locationName={campaign.location || undefined}
-                hasFoundingProgramme={!!campaign.locationId}
+                hasFoundingProgramme={canFound}
+                showDonate={canDonate}
+                showBacker={canBack}
                 foundingRemaining={undefined}
                 onSelect={setContributionType}
               />
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setContributionType(null)}
-                    className="text-xs text-gray-400 hover:text-gray-600"
-                  >
-                    ← Change participation type
-                  </button>
-                  <span className="text-xs text-gray-300">|</span>
-                  <span className="text-xs font-medium text-gray-600">
-                    Contributing as: {contributionType === "founding_member" ? "⭐ Founding Member" : "🤝 Backer"}
-                  </span>
-                </div>
-                {campaign.mode === "donation" ? (
-                  <DonationForm
-                    campaignId={campaign.id}
-                    campaignTitle={campaign.title}
-                    hierarchyLevel={campaign.hierarchyLevel}
-                    locationName={campaign.location || undefined}
-                    contributionType={contributionType}
-                    preselectedAmountPence={selectedReward?.amount}
-                  />
-                ) : (
+                {requiresChoice && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setContributionType(null)}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      ← Change participation type
+                    </button>
+                    <span className="text-xs text-gray-300">|</span>
+                    <span className="text-xs font-medium text-gray-600">
+                      Contributing as:{" "}
+                      {effectiveContributionType === "founding_member"
+                        ? "⭐ Founding Member"
+                        : effectiveContributionType === "donate"
+                          ? "💚 Donor"
+                          : "🤝 Backer"}
+                    </span>
+                  </div>
+                )}
+                {effectiveContributionType === "backer" ? (
                   <PledgeForm
                     campaignId={campaign.id}
                     campaignTitle={campaign.title}
                     rewards={campaign.rewards || []}
                     hierarchyLevel={campaign.hierarchyLevel}
                     locationName={campaign.location || undefined}
-                    contributionType={contributionType}
+                    contributionType="backer"
                     preselectedRewardId={pendingRewardId ?? undefined}
+                    rules={campaign}
+                  />
+                ) : effectiveContributionType === "founding_member" && campaign.mode === "fund" ? (
+                  <PledgeForm
+                    campaignId={campaign.id}
+                    campaignTitle={campaign.title}
+                    rewards={campaign.rewards || []}
+                    hierarchyLevel={campaign.hierarchyLevel}
+                    locationName={campaign.location || undefined}
+                    contributionType="founding_member"
+                    preselectedRewardId={pendingRewardId ?? undefined}
+                    rules={campaign}
+                  />
+                ) : (
+                  <DonationForm
+                    campaignId={campaign.id}
+                    campaignTitle={campaign.title}
+                    hierarchyLevel={campaign.hierarchyLevel}
+                    locationName={campaign.location || undefined}
+                    contributionType={
+                      effectiveContributionType === "founding_member"
+                        ? "founding_member"
+                        : "donate"
+                    }
+                    preselectedAmountPence={selectedReward?.amount}
+                    rules={campaign}
                   />
                 )}
               </div>

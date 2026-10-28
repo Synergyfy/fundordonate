@@ -1,39 +1,62 @@
 // =============================================================================
 // UK Cities — Admin Activation
-// Main admin page for UK City Hubs. Shows all cities with live geographic coverage,
-// activation readiness and progress from backend API.
+// Main admin page for UK City Hubs. Shows geographic coverage, activation
+// readiness, operating-area confirmation and progress from the backend API.
 // =============================================================================
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, ChevronRight, MapPin, LayoutGrid, List } from "lucide-react";
-import { adminApi, type AdminLocation } from "@/services/admin";
+import {
+  Search, ChevronRight, MapPin, Plus, LayoutGrid, List, Check, ShieldCheck,
+} from "lucide-react";
+import { adminApi, type AdminLocation, type LocationTreeNode } from "@/services/admin";
+import { useAdminSeasons } from "@/services/admin/hook";
 import { formatCurrency } from "@/utils/formatters";
+import {
+  HUB_STATUS_META,
+  countCityLayers,
+  flattenLocationTree,
+  getHubStatusKey,
+  getMetadata,
+  getSeasonId,
+  isBoundaryConfirmed,
+} from "@/utils/hubLocations";
 
 // ───────────────────── Status Filter Options ─────────────────────
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All Statuses" },
-  { value: "ACTIVE", label: "Active" },
-  { value: "MAKING_PROGRESS", label: "Making Progress" },
   { value: "NEEDS_ACTIVATION", label: "Inactive" },
+  { value: "MAKING_PROGRESS", label: "Making Progress" },
+  { value: "ACTIVE", label: "Active" },
 ];
 
 export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [cities, setCities] = useState<AdminLocation[]>([]);
+  const [tree, setTree] = useState<LocationTreeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [seasonFilter, setSeasonFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const { data: seasonsData, isLoading: seasonsLoading } = useAdminSeasons({ limit: 100 });
+  const seasons = useMemo(() => seasonsData?.items ?? [], [seasonsData]);
 
   const fetchCities = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminApi.getLocations({ type: "CITY", limit: 100 });
-      setCities(res.items || []);
+      const [citiesRes, treeRes] = await Promise.all([
+        adminApi.getLocations({ type: "CITY", limit: 100, includeInactive: true }),
+        adminApi.getLocationTree().catch(() => ({ roots: [] })),
+      ]);
+      setCities(citiesRes.items || []);
+      setTree(treeRes.roots || []);
     } catch {
       setCities([]);
+      setTree([]);
     } finally {
       setLoading(false);
     }
@@ -43,44 +66,129 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
     fetchCities();
   }, [fetchCities]);
 
+  const flatNodes = useMemo(() => flattenLocationTree(tree), [tree]);
+
+  const layerCounts = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof countCityLayers>>();
+    for (const city of cities) {
+      map.set(city.id, countCityLayers(city.id, flatNodes, { businesses: city.businessCount }));
+    }
+    return map;
+  }, [cities, flatNodes]);
+
+  const counts = (city: AdminLocation) =>
+    layerCounts.get(city.id) ?? { localAreas: 0, highStreets: 0, businesses: city.businessCount ?? 0 };
+
+  const seasonLabel = (city: AdminLocation) => {
+    const seasonId = getSeasonId(city);
+    if (!seasonId) return null;
+    return seasons.find((season) => season.id === seasonId)?.name ?? seasonId;
+  };
+
   const filtered = useMemo(() => {
     return cities.filter((city) => {
       if (search && !city.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (statusFilter !== "all") {
-        const effective = city.status === "ACTIVE" ? "ACTIVE" : "NEEDS_ACTIVATION";
-        if (statusFilter === "ACTIVE" && city.status !== "ACTIVE") return false;
-        if (statusFilter === "NEEDS_ACTIVATION" && city.status === "ACTIVE") return false;
-      }
+      if (statusFilter !== "all" && getHubStatusKey(city) !== statusFilter) return false;
+      if (seasonFilter !== "all" && getSeasonId(city) !== seasonFilter) return false;
       return true;
     });
-  }, [cities, search, statusFilter]);
+  }, [cities, search, statusFilter, seasonFilter]);
 
   const statusCounts = useMemo(() => {
-    const active = cities.filter((c) => c.status === "ACTIVE").length;
-    return {
-      all: cities.length,
-      ACTIVE: active,
-      NEEDS_ACTIVATION: cities.length - active,
-      MAKING_PROGRESS: cities.length - active,
-    };
+    const result: Record<string, number> = { all: cities.length };
+    for (const city of cities) {
+      const key = getHubStatusKey(city);
+      result[key] = (result[key] || 0) + 1;
+    }
+    return result;
   }, [cities]);
+
+  const confirmBoundary = async (city: AdminLocation) => {
+    setConfirmingId(city.id);
+    try {
+      const meta = getMetadata(city);
+      await adminApi.updateLocation(city.id, {
+        metadata: {
+          ...meta,
+          boundaryMode: meta.boundaryMode ?? "detected",
+          boundaryConfirmed: true,
+        },
+      });
+      await fetchCities();
+    } catch (err: any) {
+      alert(err?.message || "Failed to confirm the operating area. Please try again.");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const boundaryChip = (city: AdminLocation, align: "center" | "left" = "center") => {
+    const confirmed = isBoundaryConfirmed(city);
+    return (
+      <div className={`mt-1 flex items-center gap-1 ${align === "center" ? "justify-center" : ""}`}>
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+            confirmed
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+          }`}
+          title={
+            confirmed
+              ? "Operating area confirmed by admin"
+              : "Operating area suggested by geographic data — not yet confirmed"
+          }
+        >
+          {confirmed ? <ShieldCheck className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+          {confirmed ? "Boundary confirmed" : "Boundary suggested"}
+        </span>
+        {!confirmed && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              confirmBoundary(city);
+            }}
+            disabled={confirmingId === city.id}
+            className="inline-flex items-center gap-0.5 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-green-700 transition-colors disabled:opacity-60"
+          >
+            <Check className="h-3 w-3" /> {confirmingId === city.id ? "Saving…" : "Confirm"}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const statusBadge = (city: AdminLocation) => {
+    const meta = HUB_STATUS_META[getHubStatusKey(city)];
+    return (
+      <span
+        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${meta.bg} ${meta.color} ${meta.border}`}
+      >
+        {meta.label}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {!embedded && (
           <div>
             <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
               <Link to="/admin" className="hover:text-gray-700">Admin</Link>
               <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-gray-900 font-medium">UK Activation</span>
+              <ChevronRight className="h-3.5 w-3.5" />
               <span className="text-gray-900 font-medium">Cities</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">UK City Hubs</h1>
-            <p className="text-sm text-gray-500">Live configuration and activation status for all {cities.length} UK cities</p>
+            <h1 className="text-2xl font-bold text-gray-900">UK Cities</h1>
+            <p className="text-sm text-gray-500">
+              Manage UK City Hubs, geographic coverage, activation readiness and progress.
+            </p>
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
             <button
               onClick={() => setViewMode("table")}
@@ -101,7 +209,43 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
               <LayoutGrid className="h-4 w-4" />
             </button>
           </div>
+          <button
+            onClick={() => navigate("/admin/cities/new")}
+            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add / Activate City
+          </button>
         </div>
+      </div>
+
+      {/* Status Tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+        {STATUS_OPTIONS.map((opt) => {
+          const count = opt.value === "all" ? statusCounts.all : statusCounts[opt.value] || 0;
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setStatusFilter(opt.value)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                statusFilter === opt.value
+                  ? "bg-primary-50 text-primary-700 border border-primary-200"
+                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {opt.label}
+              <span
+                className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  statusFilter === opt.value
+                    ? "bg-primary-100 text-primary-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filters */}
@@ -116,23 +260,20 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
             className="input-field w-full pl-9"
           />
         </div>
-
-        {/* Status Pills */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setStatusFilter(opt.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === opt.value
-                  ? "bg-primary-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              {opt.label} ({statusCounts[opt.value as keyof typeof statusCounts] || 0})
-            </button>
+        <select
+          value={seasonFilter}
+          onChange={(e) => setSeasonFilter(e.target.value)}
+          disabled={seasonsLoading}
+          className="input-field w-auto min-w-[180px]"
+        >
+          <option value="all">All Seasons</option>
+          {seasons.map((season) => (
+            <option key={season.id} value={season.id}>
+              {season.name}
+              {season.status === "ACTIVE" ? " (current)" : ""}
+            </option>
           ))}
-        </div>
+        </select>
       </div>
 
       {/* Table View */}
@@ -144,25 +285,30 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 <tr className="border-b border-gray-100 text-xs text-gray-500 bg-gray-50/50">
                   <th className="px-5 py-3 text-left font-medium">City</th>
                   <th className="px-5 py-3 text-center font-medium">Status</th>
+                  <th className="px-5 py-3 text-center font-medium">Local Areas</th>
+                  <th className="px-5 py-3 text-center font-medium">High Streets</th>
+                  <th className="px-5 py-3 text-center font-medium">Businesses</th>
                   <th className="px-5 py-3 text-right font-medium">Target</th>
                   <th className="px-5 py-3 text-right font-medium">Funding Raised</th>
+                  <th className="px-5 py-3 text-center font-medium">Operating Area</th>
                   <th className="px-5 py-3 text-center font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">Loading cities from database...</td>
+                    <td colSpan={9} className="py-8 text-center text-gray-400">Loading cities…</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">No cities match criteria.</td>
+                    <td colSpan={9} className="py-8 text-center text-gray-400">No cities match criteria.</td>
                   </tr>
                 ) : (
                   filtered.map((city) => {
-                    const raised = (city as any).fundingRaised || 0;
-                    const target = city.fundingTarget || 10000000;
-                    const isActive = city.status === "ACTIVE";
+                    const raised = city.fundingRaised ?? city.raisedAmount ?? 0;
+                    const target = city.fundingTarget ?? city.targetAmount ?? 0;
+                    const cityCounts = counts(city);
+                    const season = seasonLabel(city);
 
                     return (
                       <tr key={city.id} className="hover:bg-gray-50 transition-colors">
@@ -173,16 +319,22 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
                             </div>
                             <div>
                               <div className="font-medium text-gray-900">{city.name}</div>
-                              <div className="text-xs text-gray-500">{city.slug}</div>
+                              <div className="text-xs text-gray-500">
+                                {city.slug}
+                                {season ? ` • ${season}` : ""}
+                              </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-center">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            isActive ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                          }`}>
-                            {isActive ? "Active" : "Making Progress"}
-                          </span>
+                        <td className="px-5 py-4 text-center">{statusBadge(city)}</td>
+                        <td className="px-5 py-4 text-center text-sm font-medium text-gray-700">
+                          {cityCounts.localAreas}
+                        </td>
+                        <td className="px-5 py-4 text-center text-sm font-medium text-gray-700">
+                          {cityCounts.highStreets}
+                        </td>
+                        <td className="px-5 py-4 text-center text-sm font-medium text-gray-700">
+                          {cityCounts.businesses}
                         </td>
                         <td className="px-5 py-4 text-right text-xs text-gray-600">
                           {formatCurrency(target)}
@@ -190,15 +342,14 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
                         <td className="px-5 py-4 text-right text-xs font-semibold text-gray-900">
                           {formatCurrency(raised)}
                         </td>
+                        <td className="px-5 py-4 text-center">{boundaryChip(city)}</td>
                         <td className="px-5 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Link
-                              to={`/admin/cities/${city.id}`}
-                              className="text-xs font-semibold text-primary-600 hover:text-primary-700"
-                            >
-                              Manage Hub →
-                            </Link>
-                          </div>
+                          <Link
+                            to={`/admin/cities/${city.id}`}
+                            className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                          >
+                            Manage Hub →
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -214,10 +365,11 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
       {viewMode === "cards" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((city) => {
-            const raised = (city as any).fundingRaised || 0;
-            const target = city.fundingTarget || 10000000;
+            const raised = city.fundingRaised ?? city.raisedAmount ?? 0;
+            const target = city.fundingTarget ?? city.targetAmount ?? 0;
             const pct = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 0;
-            const isActive = city.status === "ACTIVE";
+            const cityCounts = counts(city);
+            const season = seasonLabel(city);
 
             return (
               <div key={city.id} className="rounded-xl border bg-white p-5 shadow-xs">
@@ -228,14 +380,27 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900">{city.name}</h3>
-                      <p className="text-xs text-gray-500">{city.slug}</p>
+                      <p className="text-xs text-gray-500">{season ?? city.slug}</p>
                     </div>
                   </div>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    isActive ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                  }`}>
-                    {isActive ? "Active" : "In Progress"}
-                  </span>
+                  {statusBadge(city)}
+                </div>
+
+                {boundaryChip(city, "left")}
+
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <div className="text-sm font-bold text-gray-900">{cityCounts.localAreas}</div>
+                    <div className="text-[10px] text-gray-500">Areas</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <div className="text-sm font-bold text-gray-900">{cityCounts.highStreets}</div>
+                    <div className="text-[10px] text-gray-500">Streets</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 py-2">
+                    <div className="text-sm font-bold text-gray-900">{cityCounts.businesses}</div>
+                    <div className="text-[10px] text-gray-500">Businesses</div>
+                  </div>
                 </div>
 
                 <div className="mt-4">
@@ -263,6 +428,11 @@ export function CitiesPage({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             );
           })}
+          {!loading && filtered.length === 0 && (
+            <div className="col-span-full rounded-xl border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500">
+              No cities match criteria.
+            </div>
+          )}
         </div>
       )}
     </div>

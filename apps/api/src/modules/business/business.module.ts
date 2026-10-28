@@ -15,6 +15,8 @@ import { BusinessContributionService } from "./services/business-contribution.se
 import { BusinessLeaderboardService } from "./services/business-leaderboard.service";
 import { BusinessRewardService } from "./services/business-reward.service";
 import { BusinessSettingsService } from "./services/business-settings.service";
+import { BusinessMediaService } from "./services/business-media.service";
+import { MediaStorageService } from "./services/media-storage.service";
 
 // Controllers
 import { BusinessDashboardController } from "./controllers/business-dashboard.controller";
@@ -25,6 +27,7 @@ import { BusinessContributionController } from "./controllers/business-contribut
 import { BusinessLeaderboardController } from "./controllers/business-leaderboard.controller";
 import { BusinessRewardController } from "./controllers/business-reward.controller";
 import { BusinessSettingsController } from "./controllers/business-settings.controller";
+import { BusinessMediaController } from "./controllers/business-media.controller";
 
 @Module({
   imports: [PrismaModule, RewardsModule, AuditModule, EligibilityModule],
@@ -37,6 +40,7 @@ import { BusinessSettingsController } from "./controllers/business-settings.cont
     BusinessLeaderboardController,
     BusinessRewardController,
     BusinessSettingsController,
+    BusinessMediaController,
   ],
   providers: [
     BusinessOwnerGuard,
@@ -47,6 +51,8 @@ import { BusinessSettingsController } from "./controllers/business-settings.cont
     BusinessLeaderboardService,
     BusinessRewardService,
     BusinessSettingsService,
+    BusinessMediaService,
+    MediaStorageService,
   ],
   exports: [
     BusinessOwnerGuard,
@@ -57,6 +63,8 @@ import { BusinessSettingsController } from "./controllers/business-settings.cont
     BusinessLeaderboardService,
     BusinessRewardService,
     BusinessSettingsService,
+    BusinessMediaService,
+    MediaStorageService,
   ],
 })
 export class BusinessModule {}

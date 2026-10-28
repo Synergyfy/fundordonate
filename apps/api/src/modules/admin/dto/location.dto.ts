@@ -12,7 +12,7 @@ import {
   Min,
   MinLength,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 
 export class LocationQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -49,6 +49,12 @@ export class LocationQueryDto {
   @Type(() => Boolean)
   @IsBoolean()
   includeInactive?: boolean = false;
+
+  @ApiPropertyOptional({ default: false, description: "Whether to include soft-deleted locations" })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  includeDeleted?: boolean = false;
 }
 
 export class CreateLocationDto {

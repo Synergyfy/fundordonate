@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Put,
@@ -53,6 +54,21 @@ export class ConsumerController {
     @Query("limit") limit = 20,
   ) {
     return this.consumerService.getUserDonations(userId, Number(page), Number(limit));
+  }
+
+  @Get("user/donations/:id")
+  @ApiOperation({ summary: "Get a single contribution belonging to the current user" })
+  async getUserDonation(
+    @CurrentUser("id") userId: string,
+    @Param("id") id: string,
+  ) {
+    return this.consumerService.getUserDonation(userId, id);
+  }
+
+  @Delete("user/account")
+  @ApiOperation({ summary: "Permanently delete the current user's account" })
+  async deleteAccount(@CurrentUser("id") userId: string) {
+    return this.consumerService.deleteAccount(userId);
   }
 
   @Get("user/pledges")

@@ -33,6 +33,7 @@ import { AdminLeaderboardController } from "./controllers/admin-leaderboard.cont
 import { RewardsModule } from "../rewards/rewards.module";
 import { AuditModule } from "../audit/audit.module";
 import { EligibilityModule } from "../eligibility/eligibility.module";
+import { ActivationModule } from "../activation/activation.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { EligibilityModule } from "../eligibility/eligibility.module";
     RewardsModule,
     AuditModule,
     EligibilityModule,
+    ActivationModule,
     BullModule.registerQueue({
       name: ADMIN_TASKS_QUEUE,
     }),

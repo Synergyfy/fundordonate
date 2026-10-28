@@ -44,6 +44,7 @@ import {
   type PaymentGateway,
 } from "@/components/business/PaymentGatewaySelector";
 import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
+import { MediaAnswerField, MediaPreview } from "@/components/business/MediaAnswerField";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { campaignService } from "@/services/campaign";
 import { normalizeBusinessRewardsMode } from "@/services/templates";
@@ -76,10 +77,15 @@ const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
   admin: { label: "Admin", color: "bg-purple-100 text-purple-700" },
   template: { label: "Template", color: "bg-indigo-100 text-indigo-700" },
   audit: { label: "247GBS Pre-Audit", color: "bg-amber-100 text-amber-800" },
+  audit_business: { label: "247GBS Pre-Audit", color: "bg-amber-100 text-amber-800" },
+  audit_diagnostic: { label: "247GBS Audit", color: "bg-amber-100 text-amber-800" },
   business_account: { label: "Business account", color: "bg-blue-100 text-blue-700" },
   location: { label: "Location", color: "bg-teal-100 text-teal-700" },
   mcom: { label: "MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
+  admin_mcom: { label: "Admin-MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
+  business_mcom: { label: "Business-MCOM", color: "bg-fuchsia-100 text-fuchsia-700" },
   business_input: { label: "You", color: "bg-green-100 text-green-700" },
+  business: { label: "Business account", color: "bg-blue-100 text-blue-700" },
 };
 
 function SourceBadge({ source }: { source: string }) {
@@ -114,6 +120,7 @@ function FieldView({
   onEdit?: () => void;
 }) {
   const displayVal = valueOverride ?? field.value;
+  const hasValue = Boolean((displayVal ?? "").trim());
   return (
     <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
@@ -128,10 +135,19 @@ function FieldView({
           )}
         </div>
         <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-900">
-          {field.inputType === "date" && displayVal
-            ? formatDate(displayVal)
-            : displayVal || "—"}
+          {hasValue ? (
+            field.inputType === "date" ? (
+              formatDate(displayVal)
+            ) : (
+              displayVal
+            )
+          ) : (
+            <span className="text-gray-400">Not provided</span>
+          )}
         </p>
+        {field.kind === "media" && hasValue && (
+          <MediaPreview url={displayVal} />
+        )}
         {!field.locked && field.sourceNote && (
           <p className="mt-0.5 text-xs text-gray-400">{field.sourceNote}</p>
         )}
@@ -141,7 +157,7 @@ function FieldView({
           onClick={onEdit}
           className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
         >
-          Edit
+          {hasValue ? "Edit" : "Add"}
         </button>
       )}
     </div>
@@ -153,11 +169,13 @@ function AnswerInput({
   value,
   error,
   onChange,
+  campaignId,
 }: {
   field: SetupFieldBlueprint;
   value: string;
   error?: string;
   onChange: (v: string) => void;
+  campaignId?: string;
 }) {
   const base =
     "w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500";
@@ -177,18 +195,61 @@ function AnswerInput({
         )}
       </label>
       <div className="mt-2">
-        {field.inputType === "textarea" ? (
-          <textarea
-            rows={3}
+        {field.kind === "money" ? (
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+              £
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="0"
+              className={`${base} ${border} pl-7`}
+            />
+          </div>
+        ) : field.kind === "media" ? (
+          <MediaAnswerField
+            campaignId={campaignId}
+            value={value}
+            onChange={onChange}
+            error={error}
+          />
+        ) : field.kind === "documents" ? (
+          <>
+            <textarea
+              rows={3}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={"https://… supporting document\nhttps://… (one link per line)"}
+              className={`${base} ${border}`}
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              One link per line — PDF, document or evidence URL.
+            </p>
+          </>
+        ) : field.kind === "contact" ? (
+          <input
+            type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Type your answer…"
+            placeholder="name@business.com · +44 7700 900000"
             className={`${base} ${border}`}
           />
-        ) : field.inputType === "date" ? (
+        ) : field.kind === "date" ? (
           <DatePicker
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            className={`${base} ${border}`}
+          />
+        ) : field.inputType === "textarea" || field.kind === "textarea" ? (
+          <textarea
+            rows={4}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Type your answer…"
             className={`${base} ${border}`}
           />
         ) : (
@@ -302,9 +363,12 @@ export default function CampaignSetupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selfFunded, setSelfFunded] = useState(false);
   const [fundingRewardSeen, setFundingRewardSeen] = useState(false);
+  const [requiredDonationPaid, setRequiredDonationPaid] = useState(false);
+  const [requiredGateway, setRequiredGateway] = useState<PaymentGateway>("stripe");
   const [checkout, setCheckout] = useState<null | "required" | "selfFund">(null);
   const [selfFundGateway, setSelfFundGateway] = useState<PaymentGateway>("stripe");
   const [confirmed, setConfirmed] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedStatus, setSubmittedStatus] = useState<
     "pending_review" | "approved" | null
   >(null);
@@ -432,6 +496,30 @@ export default function CampaignSetupPage() {
     );
   }, [campaign, templateView]);
 
+  // ── Attached-campaign donation (required during setup) ──
+  // Claiming is never blocked by this: the business donates here, before the
+  // campaign can be submitted, mirroring the required-contribution flow.
+  const requiredCampaign = useMemo(() => {
+    return campaign?.requiredCampaign ?? templateView?.requiredCampaign ?? null;
+  }, [campaign, templateView]);
+
+  // `minPence === 0` means any completed donation qualifies — default the
+  // checkout to £10 so there is always a concrete payable amount.
+  const requiredDonationPence = requiredCampaign
+    ? requiredCampaign.minPence > 0
+      ? requiredCampaign.minPence
+      : 1000
+    : 0;
+
+  const requiredDonationDone =
+    !requiredCampaign ||
+    requiredDonationPaid ||
+    Boolean(campaign?.requiredCampaign?.met);
+
+  const selfFundingDone =
+    selfFunded ||
+    (campaign?.businessContribution ?? 0) >= (selfFunding.amount || 0);
+
   const templateName = campaign?.template.name ?? templateView?.name ?? "Campaign";
   const approvalMode =
     campaign?.template.approvalMode ?? templateView?.approval ?? "admin_review";
@@ -447,7 +535,7 @@ export default function CampaignSetupPage() {
   }, [fields, answers]);
 
   const needsAnswers = useMemo(
-    () => fields.some((f) => f.editable && !f.locked && f.required),
+    () => fields.some((f) => f.editable && !f.locked),
     [fields]
   );
 
@@ -552,10 +640,11 @@ export default function CampaignSetupPage() {
       return Object.keys(next).length === 0;
     }
     if (current?.id === "funding") {
-      const isFunded =
-        selfFunded ||
-        (campaign?.businessContribution ?? 0) >= (selfFunding.amount || 0);
-      if (selfFunding.enabled && selfFunding.mode === "required" && !isFunded) {
+      if (
+        selfFunding.enabled &&
+        selfFunding.mode === "required" &&
+        !selfFundingDone
+      ) {
         setErrors({
           funding:
             "Seed funding contribution is required by this template before continuing.",
@@ -594,23 +683,28 @@ export default function CampaignSetupPage() {
     if (!instanceId) return;
 
     try {
+      setSubmitError(null);
       await persistCurrentAnswers();
       const res = await submitMutation.mutateAsync(instanceId);
       const isApproved = res.status === "approved";
       setSubmittedStatus(isApproved ? "approved" : "pending_review");
       setStepIndex(steps.length - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to submit campaign:", err);
-      // Fallback transition
-      setSubmittedStatus(
-        approvalMode === "automatic" ? "approved" : "pending_review"
+      setSubmitError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Could not submit this campaign. Please try again."
       );
-      setStepIndex(steps.length - 1);
     }
   };
 
-  const readyToConfirm = missing.length === 0 && confirmed;
+  const readyToConfirm =
+    missing.length === 0 &&
+    requiredDonationDone &&
+    (!(selfFunding.enabled && selfFunding.mode === "required") || selfFundingDone) &&
+    confirmed;
 
   const body = (() => {
     switch (current?.id) {
@@ -831,12 +925,13 @@ export default function CampaignSetupPage() {
           <div className="space-y-4">
             <div className="rounded-xl border border-primary-100 bg-primary-50 p-4">
               <p className="text-sm font-bold text-primary-900">
-                {missing.length > 0
-                  ? `${missing.length} question${missing.length > 1 ? "s" : ""} left`
-                  : "All required answers complete"}
+                {fields.filter((f) => f.editable && !f.locked).length} field
+                {fields.filter((f) => f.editable && !f.locked).length === 1 ? "" : "s"} open
+                to you
               </p>
               <p className="mt-0.5 text-sm text-primary-800">
-                Only required, unanswered, Admin-enabled fields are shown. Everything else is managed by FundOrDonate.
+                The Admin opened these fields for your input. Everything else is managed by
+                FundOrDonate and locked.
               </p>
             </div>
             {fields
@@ -845,6 +940,7 @@ export default function CampaignSetupPage() {
                 <AnswerInput
                   key={f.id}
                   field={f}
+                  campaignId={instanceId ?? undefined}
                   value={answers[f.id] ?? f.value ?? ""}
                   error={errors[f.id]}
                   onChange={(v) => setAnswer(f.id, v)}
@@ -1048,21 +1144,78 @@ export default function CampaignSetupPage() {
       case "funding":
         return (
           <div className="space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                <Wallet className="h-4 w-4 text-blue-600" /> A · Required contribution
+              </p>
+              {requiredCampaign ? (
+                <>
+                  <p className="mt-1 text-sm text-gray-600">
+                    This template requires{" "}
+                    {requiredCampaign.minPence > 0
+                      ? `a donation of at least ${fmt(requiredCampaign.minPence)}`
+                      : "a donation"}{" "}
+                    to <strong>{requiredCampaign.title}</strong> before the
+                    campaign can be submitted. It does not affect your ability to
+                    claim the template.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-bold text-gray-900">
+                      {fmt(requiredDonationPence)}
+                    </span>
+                    {requiredDonationDone ? (
+                      <span className="flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                        <CheckCircle2 className="h-4 w-4" /> Donation received
+                        {requiredDonationPaid
+                          ? ` via ${gatewayName(requiredGateway)}`
+                          : ""}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setCheckout("required")}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      >
+                        Donate {fmt(requiredDonationPence)}
+                      </button>
+                    )}
+                  </div>
+                  {requiredCampaign.minPence > 0 && !requiredDonationDone && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Minimum {fmt(requiredCampaign.minPence)} — donations above the
+                      minimum also qualify.
+                    </p>
+                  )}
+                  {requiredCampaign.minPence === 0 && !requiredDonationDone && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Any completed donation to this campaign qualifies.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-gray-600">
+                  No required contribution for this template.
+                </p>
+              )}
+            </div>
+
             {selfFunding.enabled && (
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                 <p className="flex items-center gap-2 text-sm font-bold text-orange-900">
-                  <Wallet className="h-4 w-4" /> Fund My Campaign
+                  <Wallet className="h-4 w-4" /> B · Fund My Campaign
                 </p>
                 <p className="mt-1 text-sm text-orange-800">
-                  Contribute your business seed funding to boost public trust.
+                  Separate from the required contribution — this money goes into
+                  your own campaign
                   {selfFunding.mode === "required"
-                    ? " This contribution is required by the template."
-                    : " This contribution is optional."}
+                    ? " and is required by this template."
+                    : " and is optional."}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  {selfFunded || (campaign?.businessContribution ?? 0) >= (selfFunding.amount || 0) ? (
+                  {selfFundingDone ? (
                     <span className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700 shadow-sm border border-green-200">
-                      <CheckCircle2 className="h-4 w-4" /> {fmt(campaign?.businessContribution || selfFunding.amount)} funded
+                      <CheckCircle2 className="h-4 w-4" />{" "}
+                      {fmt(campaign?.businessContribution || selfFunding.amount)}{" "}
+                      funded
                       {selfFundGateway ? ` via ${gatewayName(selfFundGateway)}` : ""}
                     </span>
                   ) : (
@@ -1077,9 +1230,6 @@ export default function CampaignSetupPage() {
                     {selfFunding.mode === "required" ? "Required by template" : "Optional"}
                   </span>
                 </div>
-                {errors.funding && (
-                  <p className="mt-2 text-xs font-bold text-red-600">{errors.funding}</p>
-                )}
                 {(fundingRewardSeen || Boolean(campaign?.rewardTriggered)) && selfFunding.rewardName && (
                   <div className="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-green-700">
                     <Sparkles className="h-4 w-4" /> Reward triggered: {campaign?.rewardTriggered || selfFunding.rewardName}
@@ -1088,24 +1238,61 @@ export default function CampaignSetupPage() {
               </div>
             )}
 
+            {requiredCampaign && selfFunding.enabled && (
+              <div className="rounded-xl border bg-white p-4">
+                <p className="text-sm font-bold text-gray-900">
+                  Two separate contributions
+                </p>
+                <ul className="mt-1 list-inside list-disc space-y-1 text-sm text-gray-600">
+                  <li>
+                    Contribution A — required donation to “{requiredCampaign.title}”
+                  </li>
+                  <li>Contribution B — your own campaign (funds your campaign)</li>
+                </ul>
+              </div>
+            )}
+
             <div className="rounded-xl border bg-white p-4">
-              <p className="text-sm font-bold text-gray-900">Live Seed Contribution</p>
+              <p className="text-sm font-bold text-gray-900">Secure payments</p>
               <p className="mt-1 text-sm text-gray-600">
-                Payments made here are securely processed via Central Hub (Stripe, PayPal, or MCOM Wallet) and immediately registered under your live campaign.
+                Payments made here are securely processed via Central Hub (Stripe,
+                PayPal, or MCOM Wallet) and immediately registered against the
+                selected campaign.
               </p>
             </div>
+
+            {errors.funding && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                {errors.funding}
+              </p>
+            )}
 
             <PaymentCheckoutModal
               open={checkout !== null}
               onClose={() => setCheckout(null)}
-              title="Fund My Campaign"
-              amount={selfFunding.amount > 0 ? selfFunding.amount / 100 : 100}
-              campaignId={instanceId ?? undefined}
+              title={checkout === "selfFund" ? "Fund My Campaign" : "Required contribution"}
+              amount={
+                checkout === "selfFund"
+                  ? selfFunding.amount > 0
+                    ? selfFunding.amount / 100
+                    : 100
+                  : requiredDonationPence / 100
+              }
+              campaignId={
+                checkout === "selfFund"
+                  ? instanceId ?? undefined
+                  : requiredCampaign?.campaignId
+              }
+              purpose={checkout === "selfFund" ? "SELF_FUNDING" : "DONATION"}
               onSuccess={async (payment) => {
-                setSelfFundGateway(payment.gateway);
-                setSelfFunded(true);
-                setFundingRewardSeen(true);
-                setCheckout(null);
+                if (checkout === "selfFund") {
+                  setSelfFundGateway(payment.gateway);
+                  setSelfFunded(true);
+                  setFundingRewardSeen(true);
+                } else {
+                  setRequiredGateway(payment.gateway);
+                  setRequiredDonationPaid(true);
+                }
                 setErrors((prev) => {
                   const next = { ...prev };
                   delete next.funding;
@@ -1120,22 +1307,123 @@ export default function CampaignSetupPage() {
       case "review":
         return (
           <div className="space-y-4">
-            {missing.length > 0 && (
+            {(missing.length > 0 || !requiredDonationDone || (selfFunding.enabled && selfFunding.mode === "required" && !selfFundingDone)) && (
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                 <p className="flex items-center gap-2 text-sm font-bold text-orange-900">
                   <CircleAlert className="h-4 w-4" /> Before you continue
                 </p>
-                <p className="mt-1 text-sm text-orange-800">
-                  {missing.length} required field{missing.length > 1 ? "s" : ""} still missing.{" "}
-                  <button
-                    onClick={() => jumpTo("answers")}
-                    className="font-semibold underline"
-                  >
-                    Answer now
-                  </button>
-                </p>
+                <ul className="mt-1 list-inside list-disc text-sm text-orange-800">
+                  {missing.length > 0 && (
+                    <li>
+                      {missing.length} required field{missing.length > 1 ? "s" : ""} still missing
+                      <button
+                        onClick={() => jumpTo("answers")}
+                        className="ml-2 font-semibold underline"
+                      >
+                        answer now
+                      </button>
+                    </li>
+                  )}
+                  {!requiredDonationDone && requiredCampaign && (
+                    <li>
+                      Required donation
+                      {requiredCampaign.minPence > 0
+                        ? ` of ${fmt(requiredCampaign.minPence)}`
+                        : ""}{" "}
+                      to “{requiredCampaign.title}” not yet paid
+                      <button
+                        onClick={() => jumpTo("funding")}
+                        className="ml-2 font-semibold underline"
+                      >
+                        pay now
+                      </button>
+                    </li>
+                  )}
+                  {selfFunding.enabled && selfFunding.mode === "required" && !selfFundingDone && (
+                    <li>
+                      Seed funding of {fmt(selfFunding.amount)} not yet paid
+                      <button
+                        onClick={() => jumpTo("funding")}
+                        className="ml-2 font-semibold underline"
+                      >
+                        fund now
+                      </button>
+                    </li>
+                  )}
+                </ul>
               </div>
             )}
+
+            {submitError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <p className="flex items-center gap-2 font-bold">
+                  <AlertCircle className="h-4 w-4" /> Could not submit campaign
+                </p>
+                <p className="mt-1">{submitError}</p>
+              </div>
+            )}
+
+            <div className="rounded-xl border bg-white p-4">
+              <p className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+                <Store className="h-4 w-4 text-gray-400" /> Campaign summary
+              </p>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Campaign
+                  </dt>
+                  <dd className="text-sm font-semibold text-gray-900">
+                    {campaign?.title ?? templateName}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Template
+                  </dt>
+                  <dd className="text-sm text-gray-900">{templateName}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Funding target
+                  </dt>
+                  <dd className="text-sm text-gray-900">{fmt(campaign?.target ?? 0)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Campaign period
+                  </dt>
+                  <dd className="text-sm text-gray-900">
+                    {campaign?.startDate && campaign?.endDate
+                      ? `${campaign.startDate.slice(0, 10)} – ${campaign.endDate.slice(0, 10)}`
+                      : "Set when the campaign goes live"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Business
+                  </dt>
+                  <dd className="text-sm text-gray-900">
+                    {profile?.name ?? "—"}
+                    {profile?.city ? ` · ${profile.city}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Approval
+                  </dt>
+                  <dd className="text-sm text-gray-900">
+                    {approvalMode === "admin_review"
+                      ? "Admin review after submission"
+                      : "Automatic — goes live on submit"}
+                  </dd>
+                </div>
+              </dl>
+              {campaign?.description && (
+                <p className="mt-3 whitespace-pre-wrap border-t border-gray-100 pt-3 text-sm text-gray-700">
+                  {campaign.description}
+                </p>
+              )}
+            </div>
 
             <div className="rounded-xl border bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
@@ -1144,14 +1432,27 @@ export default function CampaignSetupPage() {
                 </p>
                 <span className="text-xs text-gray-400">🔒 = managed by FundOrDonate</span>
               </div>
-              {fields.map((f) => (
-                <FieldView
-                  key={f.id}
-                  field={f}
-                  valueOverride={answers[f.id]}
-                  onEdit={() => jumpTo("answers")}
-                />
-              ))}
+              {fields.filter(
+                (f) => (answers[f.id] ?? f.value ?? "").trim() || f.editable,
+              ).length === 0 && (
+                <p className="py-3 text-sm text-gray-500">
+                  Every field here is managed by FundOrDonate — nothing for you to fill in.
+                </p>
+              )}
+              {fields
+                .filter((f) => (answers[f.id] ?? f.value ?? "").trim() || f.editable)
+                .map((f) => (
+                  <FieldView
+                    key={f.id}
+                    field={f}
+                    valueOverride={
+                      f.id === "f_target"
+                        ? fmt(campaign?.target ?? 0)
+                        : answers[f.id]
+                    }
+                    onEdit={() => jumpTo("answers")}
+                  />
+                ))}
             </div>
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border bg-white p-4">

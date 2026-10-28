@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { adminApi } from "@/services/admin";
 import { useAdminSeasons } from "@/services/admin/hook";
-import { getCommunityRecommendations } from "@/services/recommendations";
+import { getCommunityRecommendations, type CommunityRecommendation } from "@/services/recommendations";
 
 export type LocationOrigin = "geographic data" | "manual" | "recommendation";
 
@@ -187,6 +187,15 @@ export function AddCityWizard() {
   const isFirstStep = currentStep === 0;
   const isLastStep = currentStep === STEPS.length - 1;
 
+  // Client-side step validation: never advance past Location or create a City
+  // Hub without the required city information (the API also validates this).
+  const canContinue =
+    currentStep === 0
+      ? Boolean(data.cityName?.trim() || data.selectedCity)
+      : currentStep === 2
+      ? Boolean(data.cityName?.trim())
+      : true;
+
   const goNext = () => {
     if (isLastStep) return;
     setCompletedSteps((prev) => new Set([...prev, currentStep]));
@@ -221,9 +230,13 @@ export function AddCityWizard() {
         metadata: {
           areaTerminology: data.areaTerminology || "Local Area",
           boundaryMode: data.boundaryMode,
+          boundaryConfirmed: true,
           radiusMiles: data.radiusMiles,
+          seasonId: data.currentSeason || undefined,
           makingProgressRules: data.makingProgressRules,
+          makingProgressLogic: data.makingProgressLogic,
           activeRules: data.activeRules,
+          activeLogic: data.activeLogic,
         },
       } as any);
 
@@ -374,7 +387,8 @@ export function AddCityWizard() {
                 const cityId = await persistConfirmations();
                 if (cityId) navigate(`/admin/cities/${cityId}`);
               } : goNext}
-              className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
+              disabled={!canContinue}
+              className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLastStep ? (
                 <>
@@ -1175,21 +1189,32 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
   const [newStreet, setNewStreet] = useState({ name: "", localArea: "", postcode: "" });
   const [newPostcode, setNewPostcode] = useState("");
 
-  // Community recommendations
-  const recommendations: HighStreetRecommendation[] = useMemo(() => {
-    return getCommunityRecommendations()
-      .filter((r) => !data.cityName || r.cityName.toLowerCase() === data.cityName.toLowerCase())
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        postcode: r.postcodes?.[0] || "",
-        localArea: r.areaName || "",
-        city: r.cityName || data.cityName || "",
-        businessCount: 1,
-        consumerCount: 1,
-        status: (r.status === "pending" ? "new" : r.status) as any,
-      }));
+  // Community recommendations (live from the API; pending + approved only)
+  const [communityRecommendations, setCommunityRecommendations] = useState<CommunityRecommendation[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const citySlug = data.cityName?.toLowerCase().replace(/\s+/g, "-");
+    getCommunityRecommendations(citySlug).then((items) => {
+      if (!cancelled) setCommunityRecommendations(items);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [data.cityName]);
+
+  const recommendations: HighStreetRecommendation[] = useMemo(() => {
+    return communityRecommendations.map((r) => ({
+      id: r.id,
+      name: r.name,
+      postcode: r.postcodes?.[0] || "",
+      localArea: r.areaName || "",
+      city: r.cityName || data.cityName || "",
+      businessCount: 1,
+      consumerCount: 1,
+      status: (r.status === "pending" ? "new" : r.status) as any,
+    }));
+  }, [communityRecommendations, data.cityName]);
 
   // Get all high streets from included local areas
   const allHighStreets = useMemo(() => {
@@ -1246,20 +1271,22 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
     setNewPostcode("");
   };
 
-  const handleAddStreet = () => {
+  const handleAddStreet = (confirmed = false) => {
     if (!newStreet.name.trim()) return;
     const slug = newStreet.name.toLowerCase().replace(/\s+/g, "-");
     const newHS: HighStreetSetup = {
       name: newStreet.name,
       slug,
       localAreaSlug: newStreet.localArea || data.localAreas[0]?.slug || "",
-      confirmed: false,
-      suggested: true,
-      status: "SUGGESTED",
+      confirmed,
+      suggested: !confirmed,
+      status: confirmed ? "CONFIRMED" : "SUGGESTED",
       suggestedBy: "Admin added",
       postcodes: newStreet.postcode ? [newStreet.postcode] : [],
     };
-    update({ highStreets: [...highStreets, newHS] });
+    update({
+      highStreets: [...highStreets.filter((hs) => hs.slug !== slug), newHS],
+    });
     setNewStreet({ name: "", localArea: "", postcode: "" });
     setShowAddModal(false);
   };
@@ -1658,20 +1685,14 @@ function StepHighStreets({ data, update }: { data: CitySetupData; update: (u: Pa
                 Cancel
               </button>
               <button
-                onClick={handleAddStreet}
+                onClick={() => handleAddStreet(false)}
                 disabled={!newStreet.name.trim()}
                 className="flex-1 rounded-lg border border-primary-300 bg-white px-4 py-2.5 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50"
               >
                 Save as Suggested
               </button>
               <button
-                onClick={() => {
-                  handleAddStreet();
-                  if (newStreet.name.trim()) {
-                    const slug = newStreet.name.toLowerCase().replace(/\s+/g, "-");
-                    confirmStreet(slug);
-                  }
-                }}
+                onClick={() => handleAddStreet(true)}
                 disabled={!newStreet.name.trim()}
                 className="flex-1 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
               >

@@ -50,6 +50,11 @@ export function useBusinessTemplates() {
   return useQuery({
     queryKey: campaignKeys.templates(),
     queryFn: () => campaignService.getTemplates(),
+    // Eligibility depends on live donations (e.g. a prerequisite campaign
+    // donation). Always re-check when the Campaign Centre is opened so a
+    // business does not stay stuck on "locked" after donating.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

@@ -1,10 +1,26 @@
+export interface ContributionBacker {
+  id: string;
+  name: string | null;
+  username: string | null;
+  avatar: string | null;
+}
+
 export interface ContributionItem {
   id: string;
+  campaignId: string;
   campaign: string;
+  campaignStatus: string;
+  campaignMode: string | null;
+  campaignImage: string | null;
+  campaignTargetAmount: number;
+  campaignRaisedAmount: number;
+  campaignEndDate: string | null;
   type: "IN_STORE" | "ONLINE" | "FUNDING_SPLIT" | "SELF_FUNDING";
   amount: number;
+  status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
   reference: string;
   gateway: string | null;
+  backer: ContributionBacker | null;
   date: string;
   createdAt: string;
 }

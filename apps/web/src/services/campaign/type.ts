@@ -3,6 +3,9 @@ export interface TemplateRequirementCheck {
   label: string;
   hint: string;
   met: boolean;
+  action?: "audit" | "membership" | "contribution" | "account" | "donation" | null;
+  campaignId?: string;
+  minDonationPence?: number;
 }
 
 export interface SetupFieldBlueprint {
@@ -15,6 +18,8 @@ export interface SetupFieldBlueprint {
   editable: boolean;
   required: boolean;
   inputType: "text" | "number" | "date" | "textarea";
+  /** Which control to render — richer than `inputType` for setup answers. */
+  kind?: "money" | "media" | "documents" | "contact" | "date" | "textarea" | "text";
   sourceNote?: string;
 }
 
@@ -41,8 +46,14 @@ export interface BusinessTemplateView {
   status: "available" | "locked";
   /** Human label for the configured access model (e.g. "Automatic"). */
   accessType: string;
-  /** The platform contribution (pence) required to unlock, if configured. */
+  /** Minimum amount the business must have raised through FundOrDonate to unlock, if configured. */
   contributionRequirement: { required: boolean; amount: number };
+  /** Campaign the business must donate to during setup (never locks claiming). */
+  requiredCampaign: {
+    campaignId: string;
+    title: string;
+    minPence: number;
+  } | null;
   requirements: TemplateRequirementCheck[];
   selfFunding: {
     enabled: boolean;
@@ -92,6 +103,16 @@ export interface CampaignRequestedChangeItem {
   note: string;
 }
 
+export interface RequiredCampaignContribution {
+  campaignId: string;
+  title: string;
+  /** Minimum completed donation (pence). `0` means any completed donation. */
+  minPence: number;
+  donatedPence: number;
+  /** Whether the business owner's completed donations satisfy the requirement. */
+  met: boolean;
+}
+
 export interface CampaignDetailData {
   id: string;
   templateId: string;
@@ -103,6 +124,11 @@ export interface CampaignDetailData {
   businessContribution: number;
   rewardTriggered: string | null;
   backers: number;
+  /** Campaign period (ISO) — set when the campaign goes live. */
+  startDate?: string | null;
+  endDate?: string | null;
+  /** Donation to the attached campaign, required before submission. */
+  requiredCampaign: RequiredCampaignContribution | null;
   template: {
     id: string;
     name: string;
@@ -242,6 +268,24 @@ export interface Campaign {
   category?: { id: string; name: string; slug: string };
   images?: { id: string; url: string; alt?: string; order: number }[];
   rewards?: Reward[];
+  /** Admin-configured checkout rules, surfaced by the public campaigns API. */
+  participation?: {
+    backCampaign?: boolean;
+    foundingMember?: boolean;
+    foundingMemberMonthly?: boolean;
+    donateContribute?: boolean;
+  };
+  contributionRules?: {
+    minContribution?: string;
+    maxContribution?: string;
+    suggestedAmounts?: string[];
+    allowCustomAmount?: boolean;
+    contributionTypes?: string[];
+  };
+  allocationEnabled?: boolean;
+  allocationDestinations?: { id: string; name: string; description?: string; percentage?: string }[];
+  terms?: Record<string, string>;
+  leaderboard?: { enabled?: boolean };
   tags?: { tag: { id: string; name: string; slug: string } }[];
   _count?: { donations: number; pledges: number; comments: number; bookmarks: number };
   // Campaign Hierarchy

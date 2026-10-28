@@ -44,37 +44,99 @@ export interface ConsumerNotification {
   reference?: string;
 }
 
+const READ_KEY = "fod:notifications:read";
+const MAX_TRACKED_READS = 500;
+
+/** Ids of notifications the user has already opened on this device. */
+function readIds(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(READ_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeReadIds(ids: Set<string>): void {
+  try {
+    // Keep the newest ids so the set cannot grow without bound.
+    const trimmed = [...ids].slice(-MAX_TRACKED_READS);
+    window.localStorage.setItem(READ_KEY, JSON.stringify(trimmed));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+const KNOWN_CATEGORIES = new Set<NotificationCategory>(
+  NOTIFICATION_CATEGORIES.map((category) => category.id),
+);
+
+function normalizeCategory(type: string): NotificationCategory {
+  return KNOWN_CATEGORIES.has(type as NotificationCategory)
+    ? (type as NotificationCategory)
+    : "system";
+}
+
+/** Last list fetched — lets read actions recompute the unread badge. */
+let notificationCache: ConsumerNotification[] = [];
+
 export async function listNotifications(): Promise<ConsumerNotification[]> {
   try {
     const list = await consumerService.getNotifications();
-    return list.map((n) => ({
-      ...n,
-      category: (n.type as NotificationCategory) || "contribution",
+    const read = readIds();
+    notificationCache = list.map((notification) => ({
+      ...notification,
+      body: notification.body ?? notification.message,
+      category: normalizeCategory(notification.type),
+      read: Boolean(notification.read) || read.has(notification.id),
     }));
+    return notificationCache;
   } catch {
+    notificationCache = [];
     return [];
   }
 }
 
-export async function markNotificationRead(_id: string): Promise<void> {
-  // update unread count
-  try {
-    const current = Number(window.localStorage.getItem("fod:notifications:unread") || "0");
-    setUnreadCount(Math.max(0, current - 1));
-  } catch {}
+export async function markNotificationRead(id: string): Promise<void> {
+  const read = readIds();
+  read.add(id);
+  writeReadIds(read);
+
+  notificationCache = notificationCache.map((notification) =>
+    notification.id === id ? { ...notification, read: true } : notification,
+  );
+  if (notificationCache.length > 0) {
+    setUnreadCount(notificationCache.filter((notification) => !notification.read).length);
+  }
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
+  const read = readIds();
+  for (const notification of notificationCache) read.add(notification.id);
+  writeReadIds(read);
+
+  notificationCache = notificationCache.map((notification) => ({
+    ...notification,
+    read: true,
+  }));
   setUnreadCount(0);
 }
 
 export async function syncUnreadBadge(): Promise<void> {
   try {
     const list = await consumerService.getNotifications();
-    const count = list.filter((n) => !n.read).length;
-    setUnreadCount(count);
+    const read = readIds();
+    const unread = list.filter(
+      (notification) => !notification.read && !read.has(notification.id),
+    ).length;
+    setUnreadCount(unread);
   } catch {
-    // ignore
+    // ignore — keep the last known badge
   }
 }
 

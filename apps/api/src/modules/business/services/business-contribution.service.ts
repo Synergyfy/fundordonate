@@ -11,12 +11,14 @@ import {
 import { ContributionQueryDto } from "../dto/contribution-query.dto";
 import { SelfFundDto } from "../dto/self-fund.dto";
 import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
+import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
 
 @Injectable()
 export class BusinessContributionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewardIssuanceQueue: RewardIssueQueueService,
+    private readonly eligibility: TemplateEligibilityService,
   ) {}
 
   /**
@@ -59,7 +61,23 @@ export class BusinessContributionService {
         include: {
           campaign: {
             select: {
+              id: true,
               title: true,
+              status: true,
+              mode: true,
+              imageUrl: true,
+              targetAmount: true,
+              raisedAmount: true,
+              endDate: true,
+            },
+          },
+          backer: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              username: true,
+              avatar: true,
             },
           },
         },
@@ -76,16 +94,42 @@ export class BusinessContributionService {
         totalAmount: agg._sum.amount ?? 0,
         transactionCount: total,
       },
-      items: items.map((c) => ({
-        id: c.id,
-        campaign: c.campaign.title,
-        type: c.type,
-        amount: c.amount,
-        reference: c.reference,
-        gateway: c.gateway,
-        date: c.createdAt.toISOString().split("T")[0],
-        createdAt: c.createdAt.toISOString(),
-      })),
+      items: items.map((c) => {
+        const backerName =
+          [c.backer?.firstName, c.backer?.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim() ||
+          c.backer?.username ||
+          null;
+
+        return {
+          id: c.id,
+          campaignId: c.campaignId,
+          campaign: c.campaign.title,
+          campaignStatus: c.campaign.status,
+          campaignMode: c.campaign.mode,
+          campaignImage: c.campaign.imageUrl,
+          campaignTargetAmount: c.campaign.targetAmount,
+          campaignRaisedAmount: c.campaign.raisedAmount,
+          campaignEndDate: c.campaign.endDate?.toISOString() ?? null,
+          type: c.type,
+          amount: c.amount,
+          status: c.status,
+          reference: c.reference,
+          gateway: c.gateway,
+          backer: c.backer
+            ? {
+                id: c.backer.id,
+                name: backerName,
+                username: c.backer.username,
+                avatar: c.backer.avatar,
+              }
+            : null,
+          date: c.createdAt.toISOString().split("T")[0],
+          createdAt: c.createdAt.toISOString(),
+        };
+      }),
       total,
       page: query.page,
       limit: query.limit,
@@ -106,10 +150,21 @@ export class BusinessContributionService {
   }> {
     const campaign = await this.prisma.businessCampaign.findFirst({
       where: { id: campaignId, businessId },
+      include: { template: true },
     });
 
     if (!campaign) {
       throw new NotFoundException("Campaign not found");
+    }
+
+    // Step 14 — "Not allowed" really means not allowed, not just hidden in the UI.
+    if (
+      campaign.template &&
+      this.eligibility.selfFundingMode(campaign.template) === "not_allowed"
+    ) {
+      throw new BadRequestException(
+        "This template does not allow self-funding.",
+      );
     }
 
     const reference = `SELF-${Date.now().toString(36).toUpperCase()}-${Math.floor(

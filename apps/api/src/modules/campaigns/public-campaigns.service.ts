@@ -79,6 +79,8 @@ export interface PublicCampaignItem {
   description: string;
   shortDescription: string;
   mode: "fund" | "donation";
+  /** Campaign lifecycle status, lower-cased (`active`, `completed`, …). */
+  status: string;
   targetAudience: "business" | "consumer" | "both";
   goalAmount: number; // In pence
   raisedAmount: number; // In pence
@@ -120,6 +122,26 @@ export interface PublicCampaignItem {
   };
   /** Campaign-level presentation settings (FAQs, terms, …). */
   settings?: Record<string, unknown>;
+  startDate?: string | null;
+  endDate?: string | null;
+  /** Admin-configured participation/rules, surfaced for checkout UIs. */
+  participation?: {
+    backCampaign?: boolean;
+    foundingMember?: boolean;
+    foundingMemberMonthly?: boolean;
+    donateContribute?: boolean;
+  };
+  contributionRules?: Record<string, unknown>;
+  allocationEnabled?: boolean;
+  allocationRequired?: boolean;
+  allocationAllowSplit?: boolean;
+  allocationMaxDestinations?: string;
+  allocationMinAllocation?: string;
+  allocationDestinations?: Array<Record<string, unknown>>;
+  backerRules?: Record<string, unknown>;
+  foundingMemberRules?: Record<string, unknown>;
+  terms?: Record<string, string>;
+  leaderboard?: Record<string, unknown>;
   _count?: {
     contributions?: number;
     donations?: number;
@@ -145,6 +167,15 @@ type PublicCampaignRecord = Prisma.BusinessCampaignGetPayload<{
             username: true;
           };
         };
+      };
+    };
+    createdBy: {
+      select: {
+        id: true;
+        firstName: true;
+        lastName: true;
+        avatar: true;
+        username: true;
       };
     };
     locations: { include: { location: true } };
@@ -194,12 +225,13 @@ export class PublicCampaignsService {
    */
   private async resolveLocationScope(ref: string): Promise<string[] | null> {
     const root = await this.prisma.hubLocation.findFirst({
-      where: { OR: [{ id: ref }, { slug: ref }] },
+      where: { OR: [{ id: ref }, { slug: ref }], isActive: true, deletedAt: null },
       select: { id: true },
     });
     if (!root) return null;
 
     const locations = await this.prisma.hubLocation.findMany({
+      where: { isActive: true, deletedAt: null },
       select: { id: true, parentId: true },
     });
     const children = new Map<string, string[]>();
@@ -224,25 +256,49 @@ export class PublicCampaignsService {
   /** Maps a campaign row (with relations) to its public, non-sensitive shape. */
   private toPublicItem(c: PublicCampaignRecord): PublicCampaignItem {
     const biz = c.business;
+    const platform = !biz;
     const primaryLink = c.locations?.find((link) => link.scope === "PRIMARY");
-    const campaignLocation = primaryLink?.location ?? biz.location ?? null;
-    const citySlug = this.slugify(biz.city);
-    const areaSlug = this.slugify(biz.localArea);
-    const streetSlug = this.slugify(biz.highStreet);
+    const campaignLocation = primaryLink?.location ?? biz?.location ?? null;
+
+    const locationName = campaignLocation?.name ?? null;
+    const cityName = biz?.city || locationName || "United Kingdom";
+    const areaName = biz?.localArea || locationName || cityName;
+    const streetName = biz?.highStreet || "";
+
+    const citySlug = this.slugify(cityName);
+    const areaSlug = this.slugify(areaName);
+    const streetSlug = this.slugify(streetName);
     const campaignSlug = `${this.slugify(c.title)}-${c.id.slice(0, 8)}`;
     const percentage =
       c.targetAmount > 0
         ? Math.min(100, Math.round((c.raisedAmount / c.targetAmount) * 100))
         : 0;
 
+    // Platform campaigns carry their own audience; business campaigns inherit
+    // it from the owning business (with a legacy fallback to BOTH).
     const audience: "business" | "consumer" | "both" =
-      biz.preferredAudience === PreferredAudience.BUSINESS
+      c.audience === PreferredAudience.BUSINESS
         ? "business"
-        : biz.preferredAudience === PreferredAudience.CONSUMER
+        : c.audience === PreferredAudience.CONSUMER
           ? "consumer"
-          : "both";
-    const mode = c.template.origin === "AUDIT" ? "fund" : "donation";
-    const catName = biz.category || "Community & Commerce";
+          : c.audience === PreferredAudience.BOTH
+            ? "both"
+            : biz?.preferredAudience === PreferredAudience.BUSINESS
+              ? "business"
+              : biz?.preferredAudience === PreferredAudience.CONSUMER
+                ? "consumer"
+                : "both";
+
+    // Platform campaigns store their mode explicitly; business campaigns derive
+    // it from the template origin (AUDIT templates are fund campaigns).
+    const mode: "fund" | "donation" =
+      c.mode === "fund" || c.mode === "donation"
+        ? c.mode
+        : c.template?.origin === "AUDIT"
+          ? "fund"
+          : "donation";
+
+    const catName = c.category || biz?.category || "Community & Commerce";
 
     // Fallback high quality imagery
     const fallbackImages = [
@@ -253,17 +309,44 @@ export class PublicCampaignsService {
     ];
     const imgIdx =
       Math.abs(c.id.charCodeAt(0) + c.title.charCodeAt(0)) % fallbackImages.length;
-    const featuredImage = biz.coverImageUrl || biz.logoUrl || fallbackImages[imgIdx]!;
+    const featuredImage =
+      c.imageUrl || biz?.coverImageUrl || biz?.logoUrl || fallbackImages[imgIdx]!;
+
+    const displayName = biz?.name ?? "FundorDonate";
+    const description = c.description || c.title;
+
+    const settings =
+      c.settings && typeof c.settings === "object" && !Array.isArray(c.settings)
+        ? (c.settings as Record<string, unknown>)
+        : {};
+    const allocationRules =
+      settings.allocationRules && typeof settings.allocationRules === "object"
+        ? (settings.allocationRules as Record<string, unknown>)
+        : {};
+    const allocationDestinations = Array.isArray(allocationRules.destinations)
+      ? (allocationRules.destinations as Array<Record<string, unknown>>)
+      : [];
+    const participation =
+      settings.participation && typeof settings.participation === "object"
+        ? (settings.participation as PublicCampaignItem["participation"])
+        : {
+            backCampaign: mode === "fund",
+            foundingMember: false,
+            foundingMemberMonthly: false,
+            donateContribute: mode === "donation",
+          };
 
     return {
       id: c.id,
       slug: campaignSlug,
       title: c.title,
-      description: c.description || c.title,
+      description,
       shortDescription:
-        c.description?.slice(0, 150) ||
-        `Support ${biz.name} in ${biz.localArea}, ${biz.city}.`,
+        c.shortDescription?.trim() ||
+        description.slice(0, 150) ||
+        `Support ${displayName} in ${areaName}, ${cityName}.`,
       mode,
+      status: c.status.toLowerCase(),
       targetAudience: audience,
       goalAmount: c.targetAmount,
       raisedAmount: c.raisedAmount,
@@ -279,42 +362,81 @@ export class PublicCampaignsService {
         slug: this.slugify(catName),
       },
       business: {
-        id: biz.id,
-        name: biz.name,
-        slug: biz.slug,
-        city: biz.city,
-        localArea: biz.localArea,
-        highStreet: biz.highStreet,
-        logoUrl: biz.logoUrl,
-        coverImageUrl: biz.coverImageUrl,
+        id: biz?.id ?? "platform",
+        name: displayName,
+        slug: biz?.slug ?? "fundordonate",
+        city: cityName,
+        localArea: areaName,
+        highStreet: streetName,
+        logoUrl: biz?.logoUrl ?? null,
+        coverImageUrl: biz?.coverImageUrl ?? null,
       },
       citySlug,
-      cityName: biz.city,
+      cityName,
       areaSlug,
-      areaName: biz.localArea,
+      areaName,
       streetSlug,
-      streetName: biz.highStreet,
+      streetName,
       locationId: campaignLocation?.id ?? null,
       location:
-        campaignLocation?.name ||
-        biz.highStreet ||
-        biz.localArea ||
-        biz.city ||
+        locationName ||
+        biz?.highStreet ||
+        biz?.localArea ||
+        biz?.city ||
         undefined,
       hierarchyLevel: this.toHierarchyLevel(campaignLocation?.type),
-      // The person running the campaign is the business owner; fall back to
-      // the business identity only when the owner record is incomplete.
+      // The person running the campaign: the admin who created a platform
+      // campaign, otherwise the business owner. Fall back to the platform
+      // identity when there is no user behind the campaign.
       author: {
-        id: biz.owner?.id ?? biz.ownerId,
-        firstName: biz.owner?.firstName ?? biz.name,
-        lastName: biz.owner?.lastName ?? null,
-        avatar: biz.owner?.avatar ?? null,
-        username: biz.owner?.username ?? biz.slug,
+        id: c.createdBy?.id ?? biz?.owner?.id ?? biz?.ownerId ?? "platform",
+        firstName:
+          c.createdBy?.firstName ??
+          biz?.owner?.firstName ??
+          (platform ? "FundorDonate" : biz?.name ?? null),
+        lastName: c.createdBy?.lastName ?? biz?.owner?.lastName ?? null,
+        avatar: c.createdBy?.avatar ?? biz?.owner?.avatar ?? null,
+        username:
+          c.createdBy?.username ??
+          biz?.owner?.username ??
+          (platform ? "fundordonate" : biz?.slug ?? null),
       },
-      settings:
-        c.settings && typeof c.settings === "object" && !Array.isArray(c.settings)
-          ? (c.settings as Record<string, unknown>)
-          : {},
+      settings,
+      startDate: c.startDate?.toISOString() ?? null,
+      endDate: c.endDate?.toISOString() ?? null,
+      participation,
+      contributionRules:
+        settings.contributionRules && typeof settings.contributionRules === "object"
+          ? (settings.contributionRules as Record<string, unknown>)
+          : undefined,
+      allocationEnabled: allocationRules.enabled === true,
+      allocationRequired: allocationRules.required === true,
+      allocationAllowSplit: allocationRules.allowSplit !== false,
+      allocationMaxDestinations:
+        typeof allocationRules.maxDestinations === "string"
+          ? allocationRules.maxDestinations
+          : undefined,
+      allocationMinAllocation:
+        typeof allocationRules.minAllocation === "string"
+          ? allocationRules.minAllocation
+          : undefined,
+      allocationDestinations,
+      backerRules:
+        settings.backerRules && typeof settings.backerRules === "object"
+          ? (settings.backerRules as Record<string, unknown>)
+          : undefined,
+      foundingMemberRules:
+        settings.foundingMemberRules && typeof settings.foundingMemberRules === "object"
+          ? (settings.foundingMemberRules as Record<string, unknown>)
+          : undefined,
+      terms:
+        settings.terms && typeof settings.terms === "object"
+          ? (settings.terms as Record<string, string>)
+          : undefined,
+      leaderboard:
+        settings.leaderboard && typeof settings.leaderboard === "object"
+          ? (settings.leaderboard as Record<string, unknown>)
+          : undefined,
       _count: {
         contributions: c._count?.contributions || 0,
         donations: c.backerCount || c._count?.contributions || 0,
@@ -352,7 +474,10 @@ export class PublicCampaignsService {
         title: contribution.campaign.title,
         slug: this.slugify(contribution.campaign.title),
       },
-      business: { name: contribution.business.name, location: contribution.business.city },
+      business: {
+        name: contribution.business?.name ?? "FundorDonate",
+        location: contribution.business?.city ?? "",
+      },
     };
   }
 
@@ -371,20 +496,55 @@ export class PublicCampaignsService {
         : BusinessCampaignStatus.ACTIVE,
     };
 
-    const businessWhere: Prisma.BusinessWhereInput = {};
     const andClauses: Prisma.BusinessCampaignWhereInput[] = [];
 
-    // Filter by audience (business vs consumer) - strictly isolated
+    // Filter by audience (business vs consumer). Platform campaigns carry their
+    // own audience; business campaigns inherit it from the owning business.
     if (query.audience && query.audience.toLowerCase() !== "all") {
       const aud = query.audience.toLowerCase();
-      if (aud === "business") {
-        businessWhere.preferredAudience = {
-          in: [PreferredAudience.BUSINESS, PreferredAudience.BOTH],
-        };
-      } else if (aud === "consumer") {
-        businessWhere.preferredAudience = {
-          in: [PreferredAudience.CONSUMER, PreferredAudience.BOTH],
-        };
+      const audiences =
+        aud === "business"
+          ? [PreferredAudience.BUSINESS, PreferredAudience.BOTH]
+          : aud === "consumer"
+            ? [PreferredAudience.CONSUMER, PreferredAudience.BOTH]
+            : null;
+      if (audiences) {
+        andClauses.push({
+          OR: [
+            { audience: { in: audiences } },
+            {
+              audience: null,
+              business: { preferredAudience: { in: audiences } },
+            },
+          ],
+        });
+      }
+    }
+
+    // Filter by campaign mode. Platform campaigns store it; business campaigns
+    // derive it from the template origin (AUDIT = fund, everything else = donation).
+    if (query.mode) {
+      const normalizedMode = query.mode.toLowerCase();
+      if (normalizedMode === "fund" || normalizedMode === "funding") {
+        andClauses.push({
+          OR: [
+            { mode: "fund" },
+            { mode: null, template: { origin: TemplateOrigin.AUDIT } },
+          ],
+        });
+      } else if (
+        normalizedMode === "donation" ||
+        normalizedMode === "donate"
+      ) {
+        andClauses.push({
+          OR: [
+            { mode: "donation" },
+            {
+              mode: null,
+              template: { origin: { not: TemplateOrigin.AUDIT } },
+            },
+          ],
+        });
       }
     }
 
@@ -393,6 +553,8 @@ export class PublicCampaignsService {
       const cityLocation = await this.prisma.hubLocation.findFirst({
         where: {
           type: "CITY",
+          isActive: true,
+          deletedAt: null,
           OR: [
             { name: { equals: query.city, mode: "insensitive" } },
             { slug: { equals: this.slugify(query.city) } },
@@ -409,7 +571,9 @@ export class PublicCampaignsService {
           ],
         });
       } else {
-        businessWhere.city = { equals: query.city, mode: "insensitive" };
+        andClauses.push({
+          business: { city: { equals: query.city, mode: "insensitive" } },
+        });
       }
     }
 
@@ -433,18 +597,17 @@ export class PublicCampaignsService {
       });
     }
 
-    if (Object.keys(businessWhere).length > 0) {
-      where.business = businessWhere;
-    }
-
-    // Filter by category
+    // Filter by category (platform campaigns store it on the campaign).
     if (query.category) {
-      businessWhere.category = { contains: query.category, mode: "insensitive" };
+      const category = {
+        contains: query.category,
+        mode: "insensitive" as const,
+      };
+      andClauses.push({
+        OR: [{ category }, { business: { category } }],
+      });
     }
 
-    if (Object.keys(businessWhere).length > 0) {
-      where.business = businessWhere;
-    }
     if (andClauses.length > 0) {
       where.AND = andClauses;
     }
@@ -455,6 +618,7 @@ export class PublicCampaignsService {
       where.OR = [
         { title: { contains: s, mode: "insensitive" } },
         { description: { contains: s, mode: "insensitive" } },
+        { category: { contains: s, mode: "insensitive" } },
         { business: { name: { contains: s, mode: "insensitive" } } },
         { business: { city: { contains: s, mode: "insensitive" } } },
         { business: { localArea: { contains: s, mode: "insensitive" } } },
@@ -485,6 +649,15 @@ export class PublicCampaignsService {
             },
           },
           locations: { include: { location: true } },
+          createdBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+              username: true,
+            },
+          },
           _count: {
             select: { contributions: true },
           },
@@ -524,37 +697,62 @@ export class PublicCampaignsService {
       status: BusinessCampaignStatus.ACTIVE,
     };
 
-    // Mode is derived from the template origin: AUDIT templates are fund
-    // campaigns, every other template is a donation campaign.
+    const andClauses: Prisma.BusinessCampaignWhereInput[] = [];
+
+    // Mode is explicit on platform campaigns and derived from the template
+    // origin on business campaigns: AUDIT templates are fund campaigns, every
+    // other template is a donation campaign.
     const normalizedMode = mode?.toLowerCase();
-    if (normalizedMode === "fund") {
-      where.template = { origin: TemplateOrigin.AUDIT };
+    if (normalizedMode === "fund" || normalizedMode === "funding") {
+      andClauses.push({
+        OR: [
+          { mode: "fund" },
+          { mode: null, template: { origin: TemplateOrigin.AUDIT } },
+        ],
+      });
     } else if (normalizedMode === "donation" || normalizedMode === "donate") {
-      where.template = { origin: { not: TemplateOrigin.AUDIT } };
+      andClauses.push({
+        OR: [
+          { mode: "donation" },
+          { mode: null, template: { origin: { not: TemplateOrigin.AUDIT } } },
+        ],
+      });
     }
 
     if (audience && audience.toLowerCase() !== "all") {
       const aud = audience.toLowerCase();
-      if (aud === "business") {
-        where.business = {
-          preferredAudience: {
-            in: [PreferredAudience.BUSINESS, PreferredAudience.BOTH],
-          },
-        };
-      } else if (aud === "consumer") {
-        where.business = {
-          preferredAudience: {
-            in: [PreferredAudience.CONSUMER, PreferredAudience.BOTH],
-          },
-        };
+      const audiences =
+        aud === "business"
+          ? [PreferredAudience.BUSINESS, PreferredAudience.BOTH]
+          : aud === "consumer"
+            ? [PreferredAudience.CONSUMER, PreferredAudience.BOTH]
+            : null;
+      if (audiences) {
+        andClauses.push({
+          OR: [
+            { audience: { in: audiences } },
+            {
+              audience: null,
+              business: { preferredAudience: { in: audiences } },
+            },
+          ],
+        });
       }
+    }
+
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     const [rawItems, total] = await Promise.all([
       this.prisma.businessCampaign.findMany({
         where,
         take,
-        orderBy: [{ raisedAmount: "desc" }, { createdAt: "desc" }],
+        orderBy: [
+          { isFeatured: "desc" },
+          { raisedAmount: "desc" },
+          { createdAt: "desc" },
+        ],
         include: {
           template: true,
           business: {
@@ -572,6 +770,15 @@ export class PublicCampaignsService {
           },
         },
           locations: { include: { location: true } },
+          createdBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+              username: true,
+            },
+          },
           _count: { select: { contributions: true } },
         },
       }),
@@ -608,6 +815,15 @@ export class PublicCampaignsService {
           },
         },
         locations: { include: { location: true } },
+        createdBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
+            username: true,
+          },
+        },
         rewardAttachments: { orderBy: { createdAt: "asc" } },
         _count: { select: { contributions: true } },
       },
@@ -624,6 +840,7 @@ export class PublicCampaignsService {
         c.template?.rewardsConfig,
         c.rewardAttachments,
         c.template?.businessRewardsMode,
+        c.settings,
       ),
     };
   }
@@ -656,6 +873,7 @@ export class PublicCampaignsService {
       campaign.template?.rewardsConfig,
       campaign.rewardAttachments,
       campaign.template?.businessRewardsMode,
+      campaign.settings,
     );
     return { data, total: data.length };
   }
@@ -666,10 +884,19 @@ export class PublicCampaignsService {
     rawConfig: unknown,
     attachments: CampaignRewardAttachment[] = [],
     businessRewardsMode?: string | null,
+    campaignSettings?: unknown,
   ): Promise<PublicCampaignReward[]> {
-    const configs: StoredRewardConfig[] = Array.isArray(rawConfig)
+    const templateConfigs: StoredRewardConfig[] = Array.isArray(rawConfig)
       ? (rawConfig as unknown as StoredRewardConfig[])
       : [];
+    // Platform campaigns have no template, so rewards authored in the admin
+    // wizard live on the campaign settings.
+    const settingsConfigs: StoredRewardConfig[] = Array.isArray(
+      (campaignSettings as { rewardConfigs?: unknown } | null | undefined)?.rewardConfigs,
+    )
+      ? ((campaignSettings as { rewardConfigs: StoredRewardConfig[] }).rewardConfigs ?? [])
+      : [];
+    const configs = templateConfigs.length > 0 ? templateConfigs : settingsConfigs;
     const enabledAttachments = attachments.filter(
       (a) => a.enabled && (!a.expiresAt || a.expiresAt.getTime() > Date.now()),
     );
@@ -840,46 +1067,87 @@ export class PublicCampaignsService {
 
   /**
    * Retrieves single public campaign by slug.
+   *
+   * Accepts a raw UUID, a `title-slug-<id prefix>` reference, a title slug or a
+   * campaign code. Ended campaigns remain reachable so receipts and historical
+   * links keep working.
    */
   async getBySlug(slug: string): Promise<PublicCampaignItem> {
-    // If slug has ID suffix e.g. feed-manchester-12345678
-    const parts = slug.split("-");
-    const lastPart = parts[parts.length - 1];
+    const ref = slug.trim();
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
 
-    let campaign = null;
-    if (lastPart && lastPart.length === 8) {
-      campaign = await this.prisma.businessCampaign.findFirst({
-        where: { id: { startsWith: lastPart } },
-        include: {
-          template: true,
-          business: true,
-          _count: { select: { contributions: true } },
-        },
+    let campaignId: string | null = null;
+
+    if (isUuid) {
+      const exact = await this.prisma.businessCampaign.findUnique({
+        where: { id: ref },
+        select: { id: true },
       });
+      campaignId = exact?.id ?? null;
     }
 
-    if (!campaign) {
-      // Find by title slug match or template match
-      const allActive = await this.prisma.businessCampaign.findMany({
-        where: { status: BusinessCampaignStatus.ACTIVE },
-        include: {
-          template: true,
-          business: true,
-          _count: { select: { contributions: true } },
-        },
-      });
-
-      campaign = allActive.find(
-        (c) =>
-          this.slugify(c.title) === slug ||
-          `${this.slugify(c.title)}-${c.id.slice(0, 8)}` === slug,
-      ) ?? null;
+    if (!campaignId) {
+      // If the slug has an ID suffix e.g. feed-manchester-12345678
+      const parts = ref.split("-");
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.length === 8) {
+        const prefixed = await this.prisma.businessCampaign.findFirst({
+          where: {
+            id: { startsWith: lastPart },
+            status: {
+              in: [
+                BusinessCampaignStatus.ACTIVE,
+                BusinessCampaignStatus.COMPLETED,
+                BusinessCampaignStatus.CANCELLED,
+              ],
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+        campaignId = prefixed?.id ?? null;
+      }
     }
 
-    if (!campaign) {
+    if (!campaignId) {
+      // Find by title slug, title + id suffix, or campaign code. Drafts are not
+      // publicly addressable, but ended campaigns stay reachable.
+      const campaigns = await this.prisma.businessCampaign.findMany({
+        where: {
+          status: {
+            in: [
+              BusinessCampaignStatus.ACTIVE,
+              BusinessCampaignStatus.COMPLETED,
+              BusinessCampaignStatus.CANCELLED,
+            ],
+          },
+        },
+        select: { id: true, title: true, settings: true },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const match = campaigns.find((c) => {
+        const titleSlug = this.slugify(c.title);
+        const code = this.slugify(
+          String(
+            (c.settings as { campaignCode?: unknown } | null | undefined)
+              ?.campaignCode ?? "",
+          ),
+        );
+        return (
+          titleSlug === ref ||
+          `${titleSlug}-${c.id.slice(0, 8)}` === ref ||
+          (code.length > 0 && code === ref)
+        );
+      });
+      campaignId = match?.id ?? null;
+    }
+
+    if (!campaignId) {
       throw new NotFoundException(`Campaign '${slug}' not found`);
     }
 
-    return this.getById(campaign.id);
+    return this.getById(campaignId);
   }
 }

@@ -101,7 +101,14 @@ export const FORM_CONFIG = {
 // =============================================================================
 
 export const MCOM_CONFIG = {
+  /** MCOM Central Hub API base URL (backend, used for server-to-server calls). */
   CENTRAL_URL: env.VITE_MCOM_CENTRAL_URL || "http://localhost:3010",
+  /**
+   * MCOM Central Hub web app base URL. Wallet pages live on the frontend, not
+   * the API: `/customer/wallet` for consumers and `/dashboard/wallet` for
+   * business users.
+   */
+  CENTRAL_APP_URL: env.VITE_MCOM_CENTRAL_APP_URL || "http://localhost:3000",
   CLIENT_ID: env.VITE_MCOM_CLIENT_ID || "fundordonate",
   REDIRECT_URI:
     env.VITE_MCOM_REDIRECT_URI || `${window.location.origin}/auth/callback`,

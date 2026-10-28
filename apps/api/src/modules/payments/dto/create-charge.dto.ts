@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -7,7 +9,9 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
 
 export enum PaymentMethod {
   STRIPE = "stripe",
@@ -20,6 +24,27 @@ export enum ChargePurposeType {
   PLEDGE = "PLEDGE",
   MEMBERSHIP = "MEMBERSHIP",
   SELF_FUNDING = "SELF_FUNDING",
+}
+
+export class CampaignAllocationDto {
+  @ApiProperty({ description: "Allocation destination id configured on the campaign" })
+  @IsString()
+  @IsNotEmpty()
+  destinationId!: string;
+
+  @ApiPropertyOptional({ description: "Amount allocated to this destination, in pence" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amountMinor?: number;
+
+  @ApiPropertyOptional({ description: "Percentage allocated to this destination" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  percentage?: number;
 }
 
 export class CreateChargeDto {
@@ -78,6 +103,24 @@ export class CreateChargeDto {
   @IsString()
   @IsOptional()
   rewardId?: string;
+
+  @ApiPropertyOptional({
+    type: [CampaignAllocationDto],
+    description: "Optional allocation split for campaigns that enable funding allocation",
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CampaignAllocationDto)
+  @IsOptional()
+  allocations?: CampaignAllocationDto[];
+
+  @ApiPropertyOptional({
+    description: "Whether the contributor accepted the campaign terms",
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  acceptedTerms?: boolean;
 
   @ApiPropertyOptional({
     description: "Optional tribute or backer notes",
