@@ -128,7 +128,7 @@ export class CampaignPostsService {
       throw new NotFoundException("Campaign not found");
     }
 
-    if (userRole !== "admin" && campaign.business.ownerId !== userId) {
+    if (userRole !== "admin" && campaign.business?.ownerId !== userId) {
       throw new ForbiddenException(
         "Only the campaign owner can manage campaign updates",
       );

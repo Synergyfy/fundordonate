@@ -36,6 +36,7 @@ interface StoredRewardConfig {
   audience?: string;
   delivery?: string;
   qualificationMode?: string; // "highest" | "cumulative"
+  triggerType?: string; // "contribution" | "backer" | "first_n" | ...
   conditions?: StoredCondition[];
   trigger?: StoredCondition;
   // caps + availability (authored in the wizard; all optional)
@@ -181,10 +182,20 @@ export class RewardTriggerService {
     const issued: RewardIssuance[] = [];
 
     const template = contribution.campaign?.template;
-    const configs =
+    const templateConfigs =
       template && Array.isArray(template.rewardsConfig)
         ? (template.rewardsConfig as unknown as StoredRewardConfig[])
         : [];
+    // Platform campaigns have no template; the admin wizard stores reward
+    // rules on the campaign settings instead.
+    const settingsConfigs = Array.isArray(
+      (contribution.campaign?.settings as { rewardConfigs?: unknown } | null | undefined)
+        ?.rewardConfigs,
+    )
+      ? ((contribution.campaign.settings as { rewardConfigs: StoredRewardConfig[] })
+          .rewardConfigs ?? [])
+      : [];
+    const configs = templateConfigs.length > 0 ? templateConfigs : settingsConfigs;
 
     // "replace" mode: when the business has attached at least one of its own
     // rewards, those supersede the template rewards. If it hasn't attached any,
@@ -201,6 +212,10 @@ export class RewardTriggerService {
       const candidates: Array<{ cfg: StoredRewardConfig; amount: number }> = [];
       for (const cfg of configs) {
         if (!cfg || typeof cfg !== "object") continue;
+        // This engine is contribution-driven. Rewards authored for other
+        // trigger types are persisted/displayed but not issued here.
+        const triggerType = (cfg.triggerType ?? "contribution").toLowerCase();
+        if (triggerType !== "contribution" && triggerType !== "backer") continue;
         if (!this.isAvailable(cfg, contribution.createdAt)) continue;
 
         const amount = await this.qualifyingAmount(cfg, contribution, precomputedCumulative);

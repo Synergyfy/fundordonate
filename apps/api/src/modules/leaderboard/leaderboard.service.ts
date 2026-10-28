@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
 import { ContributionStatus, Prisma } from "@prisma/client";
+import { getCampaignWizardSettings } from "@/modules/campaigns/campaign-wizard-settings";
 
 export interface LeaderboardEntryView {
   id: string;
@@ -40,9 +41,9 @@ export class LeaderboardService {
     level: string,
     scopeId: string | undefined,
     top: number,
-    sortBy: "totalContributed" | "campaignCount" = "totalContributed",
+    sortBy?: "totalContributed" | "campaignCount",
   ): Promise<LeaderboardView> {
-    const take = Number.isFinite(top) && top > 0 ? Math.min(top, 500) : 100;
+    let take = Number.isFinite(top) && top > 0 ? Math.min(top, 500) : 100;
 
     const where: Prisma.ContributionWhereInput = {
       status: ContributionStatus.COMPLETED,
@@ -50,18 +51,45 @@ export class LeaderboardService {
     };
 
     let scopeName: string | undefined;
+    let effectiveSortBy: "totalContributed" | "campaignCount" =
+      sortBy ?? "totalContributed";
     if (scopeId && level === "campaign") {
       // Campaign leaderboards are scoped by campaign id, not by hub location.
       const campaign = await this.prisma.businessCampaign.findUnique({
         where: { id: scopeId },
-        select: { title: true },
+        select: { title: true, settings: true },
       });
       scopeName = campaign?.title;
       where.campaignId = scopeId;
+
+      const leaderboard = getCampaignWizardSettings(campaign?.settings).leaderboard;
+      if (leaderboard?.enabled === false) {
+        return {
+          id: `leaderboard-${level}-${scopeId}`,
+          scope: level,
+          scopeId,
+          scopeName,
+          totalEntries: 0,
+          lastUpdated: new Date().toISOString(),
+          entries: [],
+        };
+      }
+      const winners = Number(leaderboard?.numberOfWinners);
+      if (Number.isFinite(winners) && winners > 0) {
+        take = Math.min(take, Math.floor(winners));
+      }
+      if (!sortBy && leaderboard?.rankingMethod === "number_of_contributions") {
+        effectiveSortBy = "campaignCount";
+      }
     } else if (scopeId && level !== "national") {
       const location = await this.prisma.hubLocation.findUnique({
         where: { id: scopeId },
-        include: { children: { include: { children: true } } },
+        include: {
+          children: {
+            where: { deletedAt: null },
+            include: { children: { where: { deletedAt: null } } },
+          },
+        },
       });
       const locationIds = location
         ? [location.id, ...location.children.flatMap((c) => [c.id, ...c.children.map((g) => g.id)])]
@@ -77,7 +105,7 @@ export class LeaderboardService {
         ],
       };
     } else if (scopeId) {
-      const location = await this.prisma.hubLocation.findUnique({ where: { id: scopeId } });
+      const location = await this.prisma.hubLocation.findFirst({ where: { id: scopeId, deletedAt: null } });
       scopeName = location?.name;
     }
 
@@ -87,7 +115,7 @@ export class LeaderboardService {
       _sum: { amount: true },
       _count: { _all: true },
       orderBy:
-        sortBy === "campaignCount"
+        effectiveSortBy === "campaignCount"
           ? { _count: { backerId: "desc" } }
           : { _sum: { amount: "desc" } },
       take,
@@ -171,7 +199,7 @@ export class LeaderboardService {
   }> {
     const national = await this.getLeaderboard("national", undefined, 50);
     const cities = await this.prisma.hubLocation.findMany({
-      where: { type: "CITY" },
+      where: { type: "CITY", isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });

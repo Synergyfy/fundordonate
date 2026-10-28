@@ -28,6 +28,8 @@ packages/*/src/*.d.ts.map
 # Uploads
 uploads/*
 !uploads/.gitkeep
+apps/api/uploads/
+.uploads-tmp/
 
 # IDE
 .vscode/

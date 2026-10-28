@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   BusinessCampaignStatus,
   MembershipTier,
+  PreferredAudience,
   TemplateApprovalMode,
   TemplateOrigin,
   TemplateStatus,
@@ -99,11 +100,17 @@ export class UpdateAdminCampaignDto {
   @MaxLength(10000)
   description?: string;
 
+  @ApiPropertyOptional({ description: "Short description shown on cards" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  shortDescription?: string;
+
   @ApiPropertyOptional({ description: "Funding target in pence" })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
+  @Min(0)
   targetAmount?: number;
 
   @ApiPropertyOptional({ description: "Business self-funding amount in pence" })
@@ -112,6 +119,36 @@ export class UpdateAdminCampaignDto {
   @IsInt()
   @Min(0)
   businessContribution?: number;
+
+  @ApiPropertyOptional({ enum: ["fund", "donation"] })
+  @IsOptional()
+  @IsIn(["fund", "donation"])
+  mode?: string;
+
+  @ApiPropertyOptional({ enum: PreferredAudience })
+  @IsOptional()
+  @IsEnum(PreferredAudience)
+  audience?: PreferredAudience;
+
+  @ApiPropertyOptional({ description: "Public category label" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @ApiPropertyOptional({ description: "Featured image URL" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: "Pin the campaign to the homepage featured carousel",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 
   @ApiPropertyOptional({ description: "Campaign start date (ISO string)" })
   @IsOptional()
@@ -122,6 +159,110 @@ export class UpdateAdminCampaignDto {
   @IsOptional()
   @IsDateString()
   endDate?: string | null;
+
+  @ApiPropertyOptional({ description: "Campaign presentation and wizard settings" })
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, any>;
+}
+
+/**
+ * Creates a platform campaign directly (no template and no owning business).
+ * It is stored on `business_campaigns` so it appears alongside business
+ * campaigns on the public site, including the homepage.
+ */
+export class CreateAdminCampaignDto {
+  @ApiProperty({ description: "Campaign title", example: "Winter High Street Fund" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional({ description: "Short description shown on cards" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  shortDescription?: string;
+
+  @ApiPropertyOptional({ description: "Full campaign description" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
+
+  @ApiProperty({ description: "Funding target in pence", example: 5000000 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  targetAmount!: number;
+
+  @ApiPropertyOptional({ enum: ["fund", "donation"], default: "donation" })
+  @IsOptional()
+  @IsIn(["fund", "donation"])
+  mode?: string = "donation";
+
+  @ApiPropertyOptional({ enum: PreferredAudience, default: PreferredAudience.BOTH })
+  @IsOptional()
+  @IsEnum(PreferredAudience)
+  audience?: PreferredAudience = PreferredAudience.BOTH;
+
+  @ApiPropertyOptional({ description: "Public category label" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @ApiPropertyOptional({ description: "Featured image URL" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: "Pin the campaign to the homepage featured carousel",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean = true;
+
+  @ApiPropertyOptional({ description: "Primary HubLocation id (financial owner)" })
+  @IsOptional()
+  @IsString()
+  primaryLocationId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Additional HubLocation ids (visibility only)",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  additionalLocationIds?: string[];
+
+  @ApiPropertyOptional({ description: "Campaign start date (ISO string)" })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string | null;
+
+  @ApiPropertyOptional({ description: "Campaign end date (ISO string)" })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @ApiPropertyOptional({
+    enum: [BusinessCampaignStatus.DRAFT, BusinessCampaignStatus.ACTIVE],
+    default: BusinessCampaignStatus.DRAFT,
+    description: "DRAFT keeps it private; ACTIVE publishes it immediately.",
+  })
+  @IsOptional()
+  @IsIn([BusinessCampaignStatus.DRAFT, BusinessCampaignStatus.ACTIVE])
+  status?: BusinessCampaignStatus;
+
+  @ApiPropertyOptional({ description: "Campaign presentation settings (FAQs, terms, …)" })
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, any>;
 }
 
 export class RequestCampaignChangesDto {

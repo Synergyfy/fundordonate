@@ -317,8 +317,8 @@ export class AdminDashboardService {
     return campaigns.map((c) => ({
       id: c.id,
       title: c.title,
-      businessName: c.business.name,
-      businessCity: c.business.city,
+      businessName: c.business?.name ?? "FundorDonate",
+      businessCity: c.business?.city ?? "Platform",
       raisedAmount: c.raisedAmount,
       targetAmount: c.targetAmount,
       percentage: c.targetAmount > 0 ? Math.min(100, Math.round((c.raisedAmount / c.targetAmount) * 100)) : 0,

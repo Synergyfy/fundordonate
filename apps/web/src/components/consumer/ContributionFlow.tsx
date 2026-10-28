@@ -220,7 +220,7 @@ function AmountStep({
 }) {
   const rules = campaign.contributionRules;
   const minAmount = rules?.minContribution ? parseFloat(rules.minContribution) : 1;
-  const maxAmount = rules?.maxContribution ? parseFloat(rules.maxContribution) : 10000;
+  const maxAmount = rules?.maxContribution ? parseFloat(rules.maxContribution) : Number.POSITIVE_INFINITY;
   const suggestedAmounts = rules?.suggestedAmounts?.map(Number) || PRESET_AMOUNTS;
   const allowCustom = rules?.allowCustomAmount !== false;
 
@@ -268,7 +268,9 @@ function AmountStep({
       <p className="text-sm text-gray-500 mb-4">
         Select a suggested amount or enter a custom amount.
         {minAmount > 1 && <span className="text-amber-600"> Minimum: £{minAmount}</span>}
-        {maxAmount < 10000 && <span className="text-amber-600"> Maximum: £{maxAmount}</span>}
+        {maxAmount !== Number.POSITIVE_INFINITY && (
+          <span className="text-amber-600"> Maximum: £{maxAmount}</span>
+        )}
       </p>
 
       <div className="grid grid-cols-3 gap-2">
@@ -297,7 +299,7 @@ function AmountStep({
               value={amount || ""}
               onChange={(e) => onAmountChange(parseFloat(e.target.value) || 0)}
               min={minAmount}
-              max={maxAmount}
+              max={maxAmount === Number.POSITIVE_INFINITY ? undefined : maxAmount}
               className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               placeholder="Enter custom amount"
             />
@@ -608,6 +610,7 @@ function PaymentStep({
   rewardId,
   metadata,
   amountPence,
+  acceptedTerms,
   onPaid,
 }: {
   amount: number;
@@ -616,6 +619,7 @@ function PaymentStep({
   rewardId?: string;
   metadata?: Record<string, unknown>;
   amountPence: number;
+  acceptedTerms?: boolean;
   onPaid: (reference: string, offline?: boolean) => void;
 }) {
   const [offline, setOffline] = useState(false);
@@ -672,6 +676,7 @@ function PaymentStep({
         campaignId={campaignId}
         rewardId={rewardId}
         metadata={metadata}
+        acceptedTerms={acceptedTerms}
         formatGbp={formatGbp}
         onSuccess={(result) => onPaid(result.reference)}
       />
@@ -894,11 +899,11 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
           featuredImage: c.featuredImage,
           allocationEnabled: c.allocationEnabled,
           allocationDestinations: c.allocationDestinations,
-          participation: {
-            backCampaign: c.mode === "fund" || !c.mode,
+          participation: c.participation ?? {
+            backCampaign: c.mode === "fund" || c.mode === "pledge" || !c.mode,
             foundingMember: Boolean(c.isFounding || c.membership),
             foundingMemberMonthly: Boolean(c.isFoundingMonthly || c.recurringEnabled),
-            donateContribute: c.mode === "donate" || !c.mode,
+            donateContribute: c.mode === "donate" || c.mode === "donation" || !c.mode,
           },
           rewards: c.rewards?.map((r: any) => ({
             id: r.id,
@@ -909,7 +914,7 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
           })),
           terms: c.terms,
           contributionRules: c.contributionRules,
-          leaderboard: { enabled: true },
+          leaderboard: c.leaderboard ?? { enabled: true },
         });
       })
       .catch((err) => {
@@ -933,6 +938,12 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
   const [completedAt, setCompletedAt] = useState("");
   const [paidOffline, setPaidOffline] = useState(false);
   const [issuedRewards, setIssuedRewards] = useState<{ id: string; title: string }[]>([]);
+
+  const campaignTerms = campaign.terms?.campaignTerms?.trim();
+  const contributionTerms = campaign.terms?.contributionTerms?.trim();
+  const termsAccepted =
+    (!campaignTerms || acceptedTerms) &&
+    (!contributionTerms || acceptedContributionTerms);
 
   // Preselect the reward a supporter clicked on the campaign page.
   useEffect(() => {
@@ -1120,10 +1131,12 @@ export function ContributionFlow({ campaign: campaignProp, onClose: onCloseProp,
                 ?.filter((r) => Math.round(amount * 100) >= (r.amount ?? 0))
                 .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0]?.id
             }
+            acceptedTerms={termsAccepted}
             metadata={{
               participationType,
               campaignTitle: campaign.title,
               allocations: allocationEnabled ? allocations : undefined,
+              acceptedTerms: termsAccepted,
             }}
             onPaid={handlePaid}
           />

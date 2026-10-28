@@ -16,16 +16,16 @@ datasource db {
 // =============================================================================
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  username  String?  @unique
-  password  String? // local password — admins only; SSO users have none
-  firstName String?
-  lastName  String?
-  avatar    String?
-  role          String   @default("donor") // admin | fundraiser | collaborator | backer | donor
-  userType      String   @default("consumer") // admin | business | consumer
-  emailVerified Boolean  @default(true) // SSO emails are verified by MCOM
+  id            String  @id @default(uuid())
+  email         String  @unique
+  username      String? @unique
+  password      String? // local password — admins only; SSO users have none
+  firstName     String?
+  lastName      String?
+  avatar        String?
+  role          String  @default("donor") // admin | fundraiser | collaborator | backer | donor
+  userType      String  @default("consumer") // admin | business | consumer
+  emailVerified Boolean @default(true) // SSO emails are verified by MCOM
 
   // ── MCOM Central Hub linkage ──
   mcomUserId         String?   @unique // Central user UUID (sub)
@@ -37,23 +37,24 @@ model User {
   lastSsoSyncAt      DateTime?
 
   // ── Cached MCOM membership / entitlement snapshot ──
-  membershipLevel    String?
-  membershipPlanName String?
-  membershipStatus   String?
-  membershipTier     String?
-  hasPaidVerificationFee Boolean @default(false)
-  trialAccessExpiresAt    DateTime?
-  appPlan            Json?
+  membershipLevel        String?
+  membershipPlanName     String?
+  membershipStatus       String?
+  membershipTier         String?
+  hasPaidVerificationFee Boolean   @default(false)
+  trialAccessExpiresAt   DateTime?
+  appPlan                Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
-  subscription  Subscription?
-  businesses    Business[]     @relation("BusinessOwner")
-  contributions Contribution[] @relation("UserContributions")
-  campaignPosts CampaignPost[] @relation("CampaignPostAuthor")
-  auditLogs     AuditLog[]
+  refreshTokens       RefreshToken[]
+  subscription        Subscription?
+  businesses          Business[]           @relation("BusinessOwner")
+  contributions       Contribution[]       @relation("UserContributions")
+  campaignPosts       CampaignPost[]       @relation("CampaignPostAuthor")
+  createdCampaigns    BusinessCampaign[]   @relation("CampaignCreator")
+  auditLogs           AuditLog[]
   foundingMemberships FoundingMembership[]
 
   @@index([mcomUserId])
@@ -81,23 +82,23 @@ model RefreshToken {
 // =============================================================================
 
 model Subscription {
-  id      String @id @default(uuid())
-  userId  String @unique
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   planId   String?
   planName String?
   source   String? // membership | trial | direct
-  status   String  @default("inactive")
-  quotas   Json    @default("{}")
-  limits   Json    @default("{}")
+  status   String   @default("inactive")
+  quotas   Json     @default("{}")
+  limits   Json     @default("{}")
   features String[] @default([])
 
-  isTrial         Boolean   @default(false)
-  tasksToComplete Json      @default("[]")
+  isTrial            Boolean   @default(false)
+  tasksToComplete    Json      @default("[]")
   membershipPlanName String?
-  expiresAt       DateTime?
-  isActive        Boolean   @default(false)
+  expiresAt          DateTime?
+  isActive           Boolean   @default(false)
 
   lastSyncedAt DateTime @default(now())
   createdAt    DateTime @default(now())
@@ -132,15 +133,15 @@ enum HubLocationInternalState {
 }
 
 model HubLocation {
-  id                 String          @id @default(uuid())
+  id                 String                   @id @default(uuid())
   name               String
-  slug               String          @unique
-  type               HubLocationType @default(CITY)
+  slug               String                   @unique
+  type               HubLocationType          @default(CITY)
   parentId           String?
-  parent             HubLocation?    @relation("LocationHierarchy", fields: [parentId], references: [id])
-  children           HubLocation[]   @relation("LocationHierarchy")
+  parent             HubLocation?             @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children           HubLocation[]            @relation("LocationHierarchy")
   shortDescription   String?
-  description        String?         @db.Text
+  description        String?                  @db.Text
   heroHeadline       String?
   heroSupportingText String?
   postcodePrefix     String?
@@ -148,35 +149,80 @@ model HubLocation {
   longitude          Float?
   /// Canonical hierarchy path (e.g. united-kingdom/manchester/northern-quarter).
   fullPath           String?
-  isActive           Boolean         @default(true)
+  isActive           Boolean                  @default(true)
   /// Distinct from isActive: controls public visibility even while operating.
-  isPublic           Boolean         @default(true)
+  isPublic           Boolean                  @default(true)
   /// Internal admin workflow state; never exposed as the public status.
   internalState      HubLocationInternalState @default(DRAFT)
   /// Public activation status override resolved by the location service.
   statusOverride     String?
   /// Whether the location should appear on the UK map.
-  mapEnabled         Boolean         @default(true)
-  mapZoomLevel       Int             @default(6)
+  mapEnabled         Boolean                  @default(true)
+  mapZoomLevel       Int                      @default(6)
   primaryImage       String?
   secondaryImage     String?
-  targetAmount       BigInt          @default(0)
-  activationStatus   String          @default("PENDING") // PENDING | IN_PROGRESS | ACTIVATED | PAUSED
-  metadata           Json            @default("{}")
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  targetAmount       BigInt                   @default(0)
+  activationStatus   String                   @default("PENDING") // PENDING | IN_PROGRESS | ACTIVATED | PAUSED
+  metadata           Json                     @default("{}")
+  /// Soft-delete marker. Deleted locations are hidden from every public and
+  /// admin listing but remain in the database so history/attribution survives.
+  deletedAt          DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
-  businesses         Business[]
-  events             PlatformEvent[]
-  foundingProgrammes FoundingProgramme[]
-  campaignLocations  CampaignLocation[]
+  businesses            Business[]
+  events                PlatformEvent[]
+  foundingProgrammes    FoundingProgramme[]
+  campaignLocations     CampaignLocation[]
+  recommendationsAsCity LocationRecommendation[] @relation("CityLocationRecommendations")
+  recommendationsAsArea LocationRecommendation[] @relation("AreaLocationRecommendations")
 
   @@index([parentId])
   @@index([type])
   @@index([slug])
   @@index([fullPath])
   @@index([mapEnabled])
+  @@index([deletedAt])
   @@map("hub_locations")
+}
+
+enum RecommendationKind {
+  HIGH_STREET
+  LOCAL_AREA
+}
+
+enum RecommendationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Community-submitted high street / local area suggestions reviewed by admins.
+/// Approving one creates a suggested HubLocation under the submitted city/area.
+model LocationRecommendation {
+  id                String               @id @default(uuid())
+  kind              RecommendationKind   @default(HIGH_STREET)
+  name              String
+  slug              String
+  postcodes         String[]
+  note              String?
+  suggestedBy       String?
+  submittedByRole   String // business | consumer
+  cityId            String
+  city              HubLocation          @relation("CityLocationRecommendations", fields: [cityId], references: [id], onDelete: Cascade)
+  areaId            String?
+  area              HubLocation?         @relation("AreaLocationRecommendations", fields: [areaId], references: [id], onDelete: SetNull)
+  status            RecommendationStatus @default(PENDING)
+  createdLocationId String?
+  reviewedById      String?
+  reviewedAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([status])
+  @@index([cityId])
+  @@index([areaId])
+  @@map("location_recommendations")
 }
 
 // =============================================================================
@@ -216,61 +262,61 @@ enum PreferredAudience {
 }
 
 model Business {
-  id                   String            @id @default(uuid())
-  ownerId              String
-  owner                User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  name                 String
-  slug                 String            @unique
-  registrationNumber   String?
-  businessType         String            // "Restaurant & Cafe", "Retail & Shop", etc.
-  category             String            // e.g. "Food & Drink"
-  subcategories        String[]          @default([])
-  description          String?           @db.Text
-  email                String
-  phone                String?
-  website              String?
-  logoUrl              String?
-  coverImageUrl        String?
-  status               BusinessStatus    @default(ACTIVE)
-  membershipTier       MembershipTier    @default(BRONZE)
-  membershipExpiry     DateTime?
-  preferredAudience    PreferredAudience @default(BOTH)
-  campaignGoal         String?
+  id                 String            @id @default(uuid())
+  ownerId            String
+  owner              User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name               String
+  slug               String            @unique
+  registrationNumber String?
+  businessType       String // "Restaurant & Cafe", "Retail & Shop", etc.
+  category           String // e.g. "Food & Drink"
+  subcategories      String[]          @default([])
+  description        String?           @db.Text
+  email              String
+  phone              String?
+  website            String?
+  logoUrl            String?
+  coverImageUrl      String?
+  status             BusinessStatus    @default(ACTIVE)
+  membershipTier     MembershipTier    @default(BRONZE)
+  membershipExpiry   DateTime?
+  preferredAudience  PreferredAudience @default(BOTH)
+  campaignGoal       String?
   // ── DEPRECATED: fake pre-audit state (superseded by the 247GBS Audit read).
   //    Kept for one release so nothing crashes mid-migration; do not write.
-  auditReference       String?           // AUD-xxxxxx from Public Pre-Audit
-  preAuditAnswers      Json              @default("{}") // Pre-audit cached answer tree
+  auditReference     String? // AUD-xxxxxx from Public Pre-Audit
+  preAuditAnswers    Json              @default("{}") // Pre-audit cached answer tree
 
   // ── 247GBS Audit snapshot (source of truth = 247GBS Audit) ──
-  auditLinkStatus        AuditLinkStatus @default(NOT_LINKED)
-  auditPreAuditId        String? // 247GBS pre-audit session id
-  auditRecommendedType   String? // SHORT_FORM | LONG_FORM
-  auditDestinationType   String? // SHORT_FORM | LONG_FORM | FUND_OR_DONATE | ...
-  auditDestinationTarget String?
-  auditConsentVersion    String?
+  auditLinkStatus          AuditLinkStatus @default(NOT_LINKED)
+  auditPreAuditId          String? // 247GBS pre-audit session id
+  auditRecommendedType     String? // SHORT_FORM | LONG_FORM
+  auditDestinationType     String? // SHORT_FORM | LONG_FORM | FUND_OR_DONATE | ...
+  auditDestinationTarget   String?
+  auditConsentVersion      String?
   auditPreAuditCompletedAt DateTime?
-  auditDiagnostic        Json? // full diagnosticSummary
-  auditLinkedAt          DateTime? // first successful AVAILABLE read
-  auditSyncedAt          DateTime? // last successful read
-  auditLastError         String? // last failure reason / provider code
-  
+  auditDiagnostic          Json? // full diagnosticSummary
+  auditLinkedAt            DateTime? // first successful AVAILABLE read
+  auditSyncedAt            DateTime? // last successful read
+  auditLastError           String? // last failure reason / provider code
+
   // Location Hierarchy Linkage
-  locationId           String?
-  location             HubLocation?      @relation(fields: [locationId], references: [id])
-  city                 String
-  localArea            String
-  highStreet           String
-  address              String?
-  postcode             String
-  
+  locationId String?
+  location   HubLocation? @relation(fields: [locationId], references: [id])
+  city       String
+  localArea  String
+  highStreet String
+  address    String?
+  postcode   String
+
   // Relations
-  campaigns            BusinessCampaign[]
-  contributions        Contribution[]
-  settings             BusinessSettings?
-  payouts              PayoutRequest[]
-  auditSessions        AuditSessionMirror[]
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  campaigns     BusinessCampaign[]
+  contributions Contribution[]
+  settings      BusinessSettings?
+  payouts       PayoutRequest[]
+  auditSessions AuditSessionMirror[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   @@index([ownerId])
   @@index([status])
@@ -281,17 +327,17 @@ model Business {
 }
 
 model BusinessSettings {
-  id                  String   @id @default(uuid())
-  businessId          String   @unique
-  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  emailAlerts         Boolean  @default(true)
-  campaignUpdates     Boolean  @default(true)
-  leaderboardChanges  Boolean  @default(true)
-  rewardsEarned       Boolean  @default(true)
-  newBackers          Boolean  @default(false)
-  weeklyDigest        Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  businessId         String   @unique
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  emailAlerts        Boolean  @default(true)
+  campaignUpdates    Boolean  @default(true)
+  leaderboardChanges Boolean  @default(true)
+  rewardsEarned      Boolean  @default(true)
+  newBackers         Boolean  @default(false)
+  weeklyDigest       Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@map("business_settings")
 }
@@ -304,9 +350,9 @@ model BusinessSettings {
 // provider and are never stored here — only calculated metrics + AI insight.
 
 model AuditSessionMirror {
-  id                String   @id @default(uuid())
-  businessId        String
-  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   /// 247GBS audit session id (stable, unique across the provider).
   auditId           String   @unique
@@ -323,9 +369,9 @@ model AuditSessionMirror {
   completedAt       DateTime?
   providerCreatedAt DateTime?
   providerUpdatedAt DateTime?
-  syncedAt          DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  syncedAt          DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([businessId])
   @@index([status])
@@ -373,7 +419,7 @@ model CampaignTemplate {
   origin                  TemplateOrigin       @default(DIRECT)
   approvalMode            TemplateApprovalMode @default(ADMIN_REVIEW)
   status                  TemplateStatus       @default(DRAFT)
-  category                String?              // donation | crowdfunding | fund
+  category                String? // donation | crowdfunding | fund
   audience                String               @default("BOTH") // BUSINESS | CONSUMER | BOTH
   minEligibilityTier      MembershipTier       @default(BRONZE)
   minContributionRequired Boolean              @default(false)
@@ -386,22 +432,22 @@ model CampaignTemplate {
   // this template's rewards: "disabled" | "coexist" | "replace".
   // ("enabled" is a legacy alias for "coexist".)
   businessRewardsMode     String               @default("disabled")
-  
-  // Configurations
-  fieldsConfig            Json                 @default("[]") // Blueprint of fields, locks, questions
-  rewardsConfig           Json                 @default("[]") // Reward configs
-  mcomAssetsConfig        Json                 @default("[]") // Assets/collateral
-  requirementsConfig      Json                 @default("[]") // Eligibility requirements
-  config                  Json                 @default("{}") // Full wizard config (sections, funding, location, visibility, access, contribution rules)
-  
-  isActive                Boolean              @default(true)
-  version                 Int                  @default(1)
-  createdById             String?
-  updatedById             String?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
 
-  instances               BusinessCampaign[]
+  // Configurations
+  fieldsConfig       Json @default("[]") // Blueprint of fields, locks, questions
+  rewardsConfig      Json @default("[]") // Reward configs
+  mcomAssetsConfig   Json @default("[]") // Assets/collateral
+  requirementsConfig Json @default("[]") // Eligibility requirements
+  config             Json @default("{}") // Full wizard config (sections, funding, location, visibility, access, contribution rules)
+
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances BusinessCampaign[]
 
   @@index([isActive, seasonId])
   @@index([status, seasonId])
@@ -410,35 +456,53 @@ model CampaignTemplate {
 
 model BusinessCampaign {
   id                   String                 @id @default(uuid())
-  businessId           String
-  business             Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  templateId           String
-  template             CampaignTemplate       @relation(fields: [templateId], references: [id])
+  // Nullable: platform campaigns are created directly by admins and are not
+  // owned by a business. Business campaigns keep both links.
+  businessId           String?
+  business             Business?              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  templateId           String?
+  template             CampaignTemplate?      @relation(fields: [templateId], references: [id])
+  /// Admin user who created a platform campaign (null for business campaigns).
+  createdById          String?
+  createdBy            User?                  @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
   title                String
   description          String?                @db.Text
+  shortDescription     String?
   status               BusinessCampaignStatus @default(DRAFT)
-  targetAmount         Int                    // In pence
+  /// Pins an admin-created campaign to the homepage featured carousel.
+  isFeatured           Boolean                @default(false)
+  targetAmount         Int // In pence
   raisedAmount         Int                    @default(0) // In pence
   businessContribution Int                    @default(0) // In pence (Self-funding)
   rewardTriggered      String?
+  /// Presentation mode for platform campaigns ("fund" | "donation").
+  /// Business campaigns derive this from their template origin.
+  mode                 String?
+  /// Audience for platform campaigns. Business campaigns derive this from the
+  /// owning business.
+  audience             PreferredAudience?
+  category             String?
+  imageUrl             String?
   startDate            DateTime?
   endDate              DateTime?
   backerCount          Int                    @default(0)
   /// Campaign-level settings: FAQ copy, terms and other presentation config.
   settings             Json                   @default("{}")
-  
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
 
-  answers              CampaignFieldAnswer[]
-  requestedChanges     CampaignRequestedChange[]
-  contributions        Contribution[]
-  rewardAttachments    CampaignRewardAttachment[]
-  posts                CampaignPost[]
-  locations            CampaignLocation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers           CampaignFieldAnswer[]
+  requestedChanges  CampaignRequestedChange[]
+  contributions     Contribution[]
+  rewardAttachments CampaignRewardAttachment[]
+  posts             CampaignPost[]
+  locations         CampaignLocation[]
 
   @@index([businessId, status])
   @@index([templateId])
+  @@index([createdById])
+  @@index([status, isFeatured])
   @@index([status, endDate])
   @@map("business_campaigns")
 }
@@ -483,14 +547,14 @@ model CampaignPost {
 }
 
 model CampaignFieldAnswer {
-  id          String           @id @default(uuid())
-  campaignId  String
-  campaign    BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  fieldId     String           // identifier matching template field ID
-  value       String           @db.Text
-  source      String           @default("business_input") // "business_input", "audit", "template", etc.
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id         String           @id @default(uuid())
+  campaignId String
+  campaign   BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fieldId    String // identifier matching template field ID
+  value      String           @db.Text
+  source     String           @default("business_input") // "business_input", "audit", "template", etc.
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([campaignId, fieldId])
   @@index([campaignId])
@@ -498,15 +562,15 @@ model CampaignFieldAnswer {
 }
 
 model CampaignRequestedChange {
-  id          String           @id @default(uuid())
-  campaignId  String
-  campaign    BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  fieldId     String
-  label       String
-  note        String           @db.Text
-  resolved    Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id         String           @id @default(uuid())
+  campaignId String
+  campaign   BusinessCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fieldId    String
+  label      String
+  note       String           @db.Text
+  resolved   Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@index([campaignId, resolved])
   @@map("campaign_requested_changes")
@@ -532,17 +596,18 @@ enum ContributionStatus {
 
 model Contribution {
   id              String             @id @default(uuid())
-  businessId      String
-  business        Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// Nullable for platform campaigns that are not owned by a business.
+  businessId      String?
+  business        Business?          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   campaignId      String
   campaign        BusinessCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   backerId        String?
   backer          User?              @relation("UserContributions", fields: [backerId], references: [id])
   type            ContributionType
   status          ContributionStatus @default(COMPLETED)
-  amount          Int                // In pence
+  amount          Int // In pence
   reference       String             @unique // POS-001, WEB-042, SPLIT-012
-  gateway         String?            // "stripe", "paypal", "mcom_wallet", "pos_terminal"
+  gateway         String? // "stripe", "paypal", "mcom_wallet", "pos_terminal"
   paymentIntentId String?
   mcomChargeId    String?            @unique
   metadata        Json               @default("{}")
@@ -567,47 +632,47 @@ model Contribution {
 // =============================================================================
 
 model Season {
-  id                            String             @id @default(uuid())
-  name                          String
-  programmeName                 String?
-  referenceCode                 String?            @unique
-  description                   String?            @db.Text
-  publicDescription             String?            @db.Text
-  internalNotes                 String?            @db.Text
-  status                        String             @default("DRAFT") // DRAFT | SCHEDULED | ACTIVE | CLOSING | REVIEW | COMPLETED | ARCHIVED
-  startDate                     DateTime
-  endDate                       DateTime
-  durationDays                  Int                @default(90)
+  id                String   @id @default(uuid())
+  name              String
+  programmeName     String?
+  referenceCode     String?  @unique
+  description       String?  @db.Text
+  publicDescription String?  @db.Text
+  internalNotes     String?  @db.Text
+  status            String   @default("DRAFT") // DRAFT | SCHEDULED | ACTIVE | CLOSING | REVIEW | COMPLETED | ARCHIVED
+  startDate         DateTime
+  endDate           DateTime
+  durationDays      Int      @default(90)
 
   // Targets in pence
-  overallTarget                 BigInt             @default(0)
-  nationalTarget                BigInt             @default(0)
-  cityTargetDefault             BigInt             @default(0)
-  localAreaTargetDefault        BigInt             @default(0)
-  highStreetTargetDefault       BigInt             @default(0)
-  businessCampaignTargetDefault BigInt             @default(0)
+  overallTarget                 BigInt @default(0)
+  nationalTarget                BigInt @default(0)
+  cityTargetDefault             BigInt @default(0)
+  localAreaTargetDefault        BigInt @default(0)
+  highStreetTargetDefault       BigInt @default(0)
+  businessCampaignTargetDefault BigInt @default(0)
 
   // Aggregate metrics cache
-  totalRaised                   BigInt             @default(0)
-  totalContributions            Int                @default(0)
-  activeCampaigns               Int                @default(0)
-  totalParticipants             Int                @default(0)
+  totalRaised        BigInt @default(0)
+  totalContributions Int    @default(0)
+  activeCampaigns    Int    @default(0)
+  totalParticipants  Int    @default(0)
 
   // Configuration snapshots
-  activationScope               Json               @default("{}")
-  participationConfig           Json               @default("{}")
-  engagementConfig              Json               @default("{}")
-  spilloverConfig               Json               @default("{}")
-  communicationConfig           Json               @default("{}")
+  activationScope     Json @default("{}")
+  participationConfig Json @default("{}")
+  engagementConfig    Json @default("{}")
+  spilloverConfig     Json @default("{}")
+  communicationConfig Json @default("{}")
 
-  createdById                   String?
-  createdAt                     DateTime           @default(now())
-  updatedAt                     DateTime           @updatedAt
-  activatedAt                   DateTime?
-  completedAt                   DateTime?
-  archivedAt                    DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  activatedAt DateTime?
+  completedAt DateTime?
+  archivedAt  DateTime?
 
-  templates                     CampaignTemplate[]
+  templates CampaignTemplate[]
 
   @@index([status])
   @@index([startDate, endDate])
@@ -699,19 +764,29 @@ model AuditLog {
  */
 model RewardIssuance {
   id                 String    @id @default(uuid())
-  /** Provider issuance id (unique per issuance in MCOM Rewards). */
+  /**
+   * Provider issuance id (unique per issuance in MCOM Rewards).
+   */
   externalIssuanceId String    @unique
   mcomRewardId       String
   rewardTitle        String?
   rewardType         String?
-  /** Correlation ref sent to the provider (e.g. campaignId). */
+  /**
+   * Correlation ref sent to the provider (e.g. campaignId).
+   */
   externalRef        String?
-  /** Stable idempotency key used when issuing. */
+  /**
+   * Stable idempotency key used when issuing.
+   */
   idempotencyKey     String    @unique
   campaignId         String?
-  /** Reward rule (config id within the campaign) this issuance satisfies. */
+  /**
+   * Reward rule (config id within the campaign) this issuance satisfies.
+   */
   rewardConfigId     String?
-  /** Business-owned MCOM reward id when issued from a business's own reward. */
+  /**
+   * Business-owned MCOM reward id when issued from a business's own reward.
+   */
   businessRewardId   String?
   contributionId     String?
   userId             String?
@@ -779,7 +854,7 @@ model PayoutRequest {
   id                 String    @id @default(uuid())
   businessId         String
   business           Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  amount             Int       // In pence
+  amount             Int // In pence
   currency           String    @default("GBP")
   status             String    @default("PENDING") // PENDING | APPROVED | REJECTED | COMPLETED
   method             String    @default("bank_transfer")
@@ -897,4 +972,3 @@ model SupportTicket {
   @@index([status, createdAt(sort: Desc)])
   @@map("support_tickets")
 }
-

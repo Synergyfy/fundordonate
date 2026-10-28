@@ -21,8 +21,49 @@ export interface DetailCampaign {
   deadline: string;
   status: string;
   mode: string;
+  startDate?: string | null;
+  endDate?: string | null;
   /** Who the campaign is aimed at. */
   targetAudience?: "business" | "consumer" | "both";
+  participation?: {
+    backCampaign?: boolean;
+    foundingMember?: boolean;
+    foundingMemberMonthly?: boolean;
+    donateContribute?: boolean;
+  };
+  contributionRules?: {
+    minContribution?: string;
+    maxContribution?: string;
+    suggestedAmounts?: string[];
+    allowCustomAmount?: boolean;
+    contributionTypes?: string[];
+  };
+  allocationEnabled?: boolean;
+  allocationRequired?: boolean;
+  allocationAllowSplit?: boolean;
+  allocationMaxDestinations?: string;
+  allocationMinAllocation?: string;
+  allocationDestinations?: {
+    id: string;
+    name: string;
+    description?: string;
+    percentage?: string;
+    fixedAmount?: string;
+  }[];
+  backerRules?: {
+    enabled?: boolean;
+    minBackerAmount?: string;
+    maxBackers?: string;
+  };
+  foundingMemberRules?: {
+    enabled?: boolean;
+    contributionRequired?: string;
+    maxFoundingMembers?: string;
+    foundingMonthlyEnabled?: boolean;
+    foundingMonthlyContribution?: string;
+  };
+  terms?: Record<string, string>;
+  leaderboard?: { enabled?: boolean };
   featuredImage?: string;
   videoUrl?: string;
   platformFee?: number;
@@ -66,6 +107,20 @@ export interface DetailCampaign {
   selfFundingLevel?: string;
   children?: { id: string; slug: string; title: string; shortDescription?: string; goalAmount: number; raisedAmount: number; deadline: string; mode: string; featuredImage?: string; _count?: { donations: number; pledges: number } }[];
 }
+
+export type CampaignCheckoutRules = Pick<
+  DetailCampaign,
+  | "participation"
+  | "contributionRules"
+  | "allocationEnabled"
+  | "allocationRequired"
+  | "allocationAllowSplit"
+  | "allocationMaxDestinations"
+  | "allocationDestinations"
+  | "backerRules"
+  | "foundingMemberRules"
+  | "terms"
+>;
 
 interface CampaignDetailBodyProps {
   campaign: DetailCampaign;

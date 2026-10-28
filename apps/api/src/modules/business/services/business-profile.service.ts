@@ -143,6 +143,7 @@ export class BusinessProfileService {
     // Find location ID if matching city/localArea/highStreet exists in HubLocation
     const location = await this.prisma.hubLocation.findFirst({
       where: {
+        deletedAt: null,
         name: {
           equals: dto.highStreet || dto.localArea || dto.city,
           mode: "insensitive",

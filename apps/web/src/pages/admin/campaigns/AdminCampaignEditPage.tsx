@@ -26,19 +26,31 @@ function toIsoDate(value: string, endOfDay = false): string | null {
 interface EditForm {
   title: string;
   description: string;
+  shortDescription: string;
+  category: string;
+  imageUrl: string;
+  mode: "fund" | "donation";
+  audience: "BUSINESS" | "CONSUMER" | "BOTH";
   targetAmount: string;
   businessContribution: string;
   startDate: string;
   endDate: string;
+  isFeatured: boolean;
 }
 
 const EMPTY_FORM: EditForm = {
   title: "",
   description: "",
+  shortDescription: "",
+  category: "",
+  imageUrl: "",
+  mode: "donation",
+  audience: "BOTH",
   targetAmount: "",
   businessContribution: "",
   startDate: "",
   endDate: "",
+  isFeatured: false,
 };
 
 export function AdminCampaignEditPage() {
@@ -66,10 +78,19 @@ export function AdminCampaignEditPage() {
         setForm({
           title: data.title ?? "",
           description: data.description ?? "",
+          shortDescription: data.shortDescription ?? "",
+          category: data.category ?? "",
+          imageUrl: data.imageUrl ?? "",
+          mode: data.mode === "fund" ? "fund" : "donation",
+          audience:
+            data.audience === "BUSINESS" || data.audience === "CONSUMER"
+              ? data.audience
+              : "BOTH",
           targetAmount: String((data.targetAmount ?? data.goalAmount ?? 0) / 100),
           businessContribution: String((data.businessContribution ?? 0) / 100),
           startDate: toDateInput(data.startDate),
           endDate: toDateInput(data.endDate),
+          isFeatured: Boolean(data.isFeatured),
         });
       } catch (err: unknown) {
         const message =
@@ -116,7 +137,7 @@ export function AdminCampaignEditPage() {
     setSaving(true);
     setError("");
     try {
-      await adminApi.updateCampaign(id, {
+      const payload: Record<string, any> = {
         title: form.title.trim(),
         description: form.description.trim(),
         targetAmount: Math.round(Number(form.targetAmount) * 100),
@@ -125,7 +146,23 @@ export function AdminCampaignEditPage() {
         ),
         startDate: toIsoDate(form.startDate),
         endDate: toIsoDate(form.endDate, true),
-      });
+      };
+
+      // Platform campaigns own their presentation fields. Business campaigns
+      // derive mode/audience/category/imagery from their template and business,
+      // so never overwrite those from this form.
+      if (campaign && !campaign.businessId) {
+        Object.assign(payload, {
+          shortDescription: form.shortDescription.trim(),
+          category: form.category.trim(),
+          imageUrl: form.imageUrl.trim(),
+          mode: form.mode,
+          audience: form.audience,
+          isFeatured: form.isFeatured,
+        });
+      }
+
+      await adminApi.updateCampaign(id, payload);
       navigate(`/admin/campaigns/${id}`);
     } catch (err: unknown) {
       const message =
@@ -224,6 +261,91 @@ export function AdminCampaignEditPage() {
           />
         </div>
 
+        {!campaign.businessId && (
+          <div className="space-y-6">
+        <div>
+          <label htmlFor="shortDescription" className="label">
+            Short description
+          </label>
+          <input
+            id="shortDescription"
+            type="text"
+            className="input-field mt-1.5"
+            value={form.shortDescription}
+            onChange={(e) => patch({ shortDescription: e.target.value })}
+            placeholder="One line shown on campaign cards"
+            maxLength={300}
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="category" className="label">
+              Category
+            </label>
+            <input
+              id="category"
+              type="text"
+              className="input-field mt-1.5"
+              value={form.category}
+              onChange={(e) => patch({ category: e.target.value })}
+              placeholder="Community & Commerce"
+              maxLength={100}
+            />
+          </div>
+          <div>
+            <label htmlFor="imageUrl" className="label">
+              Featured image URL
+            </label>
+            <input
+              id="imageUrl"
+              type="url"
+              className="input-field mt-1.5"
+              value={form.imageUrl}
+              onChange={(e) => patch({ imageUrl: e.target.value })}
+              placeholder="https://…"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="mode" className="label">
+              Mode
+            </label>
+            <select
+              id="mode"
+              className="input-field mt-1.5"
+              value={form.mode}
+              onChange={(e) =>
+                patch({ mode: e.target.value as EditForm["mode"] })
+              }
+            >
+              <option value="donation">Donation</option>
+              <option value="fund">Fund</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="audience" className="label">
+              Audience
+            </label>
+            <select
+              id="audience"
+              className="input-field mt-1.5"
+              value={form.audience}
+              onChange={(e) =>
+                patch({ audience: e.target.value as EditForm["audience"] })
+              }
+            >
+              <option value="BOTH">Everyone</option>
+              <option value="CONSUMER">Customers</option>
+              <option value="BUSINESS">Businesses</option>
+            </select>
+          </div>
+        </div>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="targetAmount" className="label">
@@ -293,6 +415,25 @@ export function AdminCampaignEditPage() {
             )}
           </div>
         </div>
+
+        {!campaign.businessId && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-4">
+            <input
+              type="checkbox"
+              checked={form.isFeatured}
+              onChange={(e) => patch({ isFeatured: e.target.checked })}
+              className="mt-0.5 rounded text-primary-600"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">
+                Feature on the homepage
+              </span>
+              <span className="block text-xs text-gray-500">
+                Pins this campaign to the top of the homepage featured carousel.
+              </span>
+            </span>
+          </label>
+        )}
 
         <div className="flex items-center justify-end gap-3 border-t pt-4">
           <Link

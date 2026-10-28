@@ -62,10 +62,31 @@ export function AdminLocationDetailPage() {
 
   const handleSave = async () => {
     if (!id || !location) return;
+
+    // Client-side validation mirrors the API DTO so admins get immediate feedback.
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      alert("Location name must be between 2 and 100 characters.");
+      return;
+    }
+    if (!Number.isFinite(Number(targetAmount)) || Number(targetAmount) < 0) {
+      alert("Funding target must be a non-negative number.");
+      return;
+    }
+    for (const [label, value] of [
+      ["Primary image URL", primaryImage],
+      ["Secondary image URL", secondaryImage],
+    ] as const) {
+      if (value && !/^https?:\/\//i.test(value)) {
+        alert(`${label} must start with http:// or https://.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await adminApi.updateLocation(id, {
-        name,
+        name: trimmedName,
         description,
         heroHeadline,
         isPublic,

@@ -22,6 +22,8 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { LeaderboardModule } from "./modules/leaderboard/leaderboard.module";
 import { FoundingModule } from "./modules/founding/founding.module";
 import { SupportModule } from "./modules/support/support.module";
+import { RecommendationsModule } from "./modules/recommendations/recommendations.module";
+import { ActivationModule } from "./modules/activation/activation.module";
 
 @Module({
   imports: [
@@ -55,6 +57,8 @@ import { SupportModule } from "./modules/support/support.module";
     LeaderboardModule,
     FoundingModule,
     SupportModule,
+    RecommendationsModule,
+    ActivationModule,
   ],
   controllers: [AppController],
   providers: [

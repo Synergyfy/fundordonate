@@ -1,8 +1,10 @@
 // =============================================================================
 // Location Recommendations Service
-// Manages community high street recommendations and admin approval flow.
+// Community high street / local area recommendations and the admin review flow.
+// Backed by the API (public submit + admin review endpoints).
 // =============================================================================
 
+import api from "@/services/api";
 import { adminApi } from "@/services/admin";
 
 export type RecommendationStatus = "pending" | "approved" | "rejected";
@@ -13,6 +15,7 @@ export interface LocationRecommendation {
   id: string;
   kind: RecommendationKind;
   name: string;
+  slug?: string;
   citySlug: string;
   cityName: string;
   areaSlug: string;
@@ -24,129 +27,134 @@ export interface LocationRecommendation {
   status: RecommendationStatus;
   createdAt: string;
   reviewedAt?: string;
+  createdLocationId?: string | null;
 }
 
-export interface SubmitRecommendationInput {
+export interface RecommendationCounts {
+  pending: number;
+  approved: number;
+  rejected: number;
+  total: number;
+}
+
+export interface RecommendationListResult {
+  items: LocationRecommendation[];
+  counts: RecommendationCounts;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** Public projection returned to the Add City wizard (no recommender identity). */
+export interface CommunityRecommendation {
+  id: string;
   kind: RecommendationKind;
   name: string;
   citySlug: string;
   cityName: string;
   areaSlug: string;
   areaName: string;
+  postcodes: string[];
+  status: RecommendationStatus;
+  createdAt: string;
+}
+
+export interface SubmitRecommendationInput {
+  kind: RecommendationKind;
+  name: string;
+  citySlug: string;
+  cityName?: string;
+  areaSlug: string;
+  areaName?: string;
   postcodes?: string[];
   suggestedBy?: string;
   submittedByRole: RecommendationAudience;
   note?: string;
 }
 
-const STORAGE_KEY = "fundordonate_location_recommendations";
+function extractApiError(err: unknown, fallback: string): string {
+  const error = err as {
+    response?: { data?: { message?: string | string[] } };
+    message?: string;
+  };
+  const message = error?.response?.data?.message;
+  if (Array.isArray(message)) return message.join(", ");
+  if (typeof message === "string" && message.trim()) return message;
+  return error?.message || fallback;
+}
 
-function getStoredRecommendations(): LocationRecommendation[] {
+export async function submitLocationRecommendation(
+  input: SubmitRecommendationInput,
+): Promise<LocationRecommendation> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    return await api.post<LocationRecommendation>("/hub/recommendations", {
+      kind: input.kind === "local_area" ? "LOCAL_AREA" : "HIGH_STREET",
+      name: input.name.trim(),
+      citySlug: input.citySlug,
+      areaSlug: input.areaSlug,
+      postcodes: input.postcodes ?? [],
+      suggestedBy: input.suggestedBy,
+      submittedByRole: input.submittedByRole,
+      note: input.note,
+    });
+  } catch (err) {
+    throw new Error(extractApiError(err, "Could not submit your recommendation."));
+  }
+}
+
+export async function listLocationRecommendations(filter?: {
+  status?: RecommendationStatus;
+}): Promise<RecommendationListResult> {
+  try {
+    const result = await adminApi.getLocationRecommendations({
+      status: filter?.status?.toUpperCase(),
+      limit: 100,
+    });
+    return result as RecommendationListResult;
+  } catch (err) {
+    throw new Error(extractApiError(err, "Could not load recommendations."));
+  }
+}
+
+export async function getLocationRecommendationCounts(): Promise<RecommendationCounts> {
+  try {
+    return (await adminApi.getLocationRecommendationCounts()) as RecommendationCounts;
+  } catch {
+    return { pending: 0, approved: 0, rejected: 0, total: 0 };
+  }
+}
+
+/** Used by the city wizard's High Streets step. */
+export async function getCommunityRecommendations(
+  citySlug?: string,
+): Promise<CommunityRecommendation[]> {
+  try {
+    const result = await api.get<{ items: CommunityRecommendation[] }>("/hub/recommendations", {
+      params: citySlug ? { citySlug } : undefined,
+    });
+    return result?.items ?? [];
   } catch {
     return [];
   }
 }
 
-function saveRecommendations(list: LocationRecommendation[]) {
+export async function approveLocationRecommendation(id: string): Promise<{
+  recommendation: LocationRecommendation;
+  location?: { id: string; name: string; slug: string; type: string };
+  reusedExistingLocation?: boolean;
+}> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // Ignore storage quota errors
-  }
-}
-
-export async function submitLocationRecommendation(
-  input: SubmitRecommendationInput
-): Promise<LocationRecommendation> {
-  const item: LocationRecommendation = {
-    id: `rec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    kind: input.kind,
-    name: input.name.trim(),
-    citySlug: input.citySlug,
-    cityName: input.cityName,
-    areaSlug: input.areaSlug,
-    areaName: input.areaName,
-    postcodes: input.postcodes || [],
-    suggestedBy: input.suggestedBy || "",
-    submittedByRole: input.submittedByRole,
-    note: input.note || "",
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  };
-
-  const current = getStoredRecommendations();
-  current.unshift(item);
-  saveRecommendations(current);
-  return item;
-}
-
-export async function listLocationRecommendations(filter?: {
-  status?: RecommendationStatus;
-}): Promise<LocationRecommendation[]> {
-  const current = getStoredRecommendations();
-  if (filter?.status) {
-    return current.filter((r) => r.status === filter.status);
-  }
-  return current;
-}
-
-export function getLocationRecommendationCounts(): {
-  pending: number;
-  approved: number;
-  rejected: number;
-  total: number;
-} {
-  const current = getStoredRecommendations();
-  return {
-    pending: current.filter((r) => r.status === "pending").length,
-    approved: current.filter((r) => r.status === "approved").length,
-    rejected: current.filter((r) => r.status === "rejected").length,
-    total: current.length,
-  };
-}
-
-export function getCommunityRecommendations(citySlug?: string): LocationRecommendation[] {
-  const current = getStoredRecommendations();
-  if (citySlug) {
-    return current.filter((r) => r.citySlug === citySlug);
-  }
-  return current;
-}
-
-export async function approveLocationRecommendation(id: string): Promise<boolean> {
-  const current = getStoredRecommendations();
-  const rec = current.find((r) => r.id === id);
-  if (!rec) return false;
-
-  rec.status = "approved";
-  rec.reviewedAt = new Date().toISOString();
-  saveRecommendations(current);
-
-  // Create real location in database via adminApi
-  try {
-    await adminApi.createLocation({
-      name: rec.name,
-      type: rec.kind === "high_street" ? "HIGH_STREET" : "LOCAL_AREA",
-      activationStatus: "ACTIVE",
-    });
+    return await adminApi.approveLocationRecommendation(id);
   } catch (err) {
-    console.warn("Could not sync recommended location to admin API:", err);
+    throw new Error(extractApiError(err, "Could not approve the recommendation."));
   }
-
-  return true;
 }
 
-export async function rejectLocationRecommendation(id: string): Promise<boolean> {
-  const current = getStoredRecommendations();
-  const rec = current.find((r) => r.id === id);
-  if (!rec) return false;
-
-  rec.status = "rejected";
-  rec.reviewedAt = new Date().toISOString();
-  saveRecommendations(current);
-  return true;
+export async function rejectLocationRecommendation(id: string): Promise<LocationRecommendation> {
+  try {
+    return await adminApi.rejectLocationRecommendation(id);
+  } catch (err) {
+    throw new Error(extractApiError(err, "Could not reject the recommendation."));
+  }
 }
