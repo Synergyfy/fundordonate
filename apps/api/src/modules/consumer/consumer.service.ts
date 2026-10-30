@@ -1,13 +1,24 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@/prisma/prisma.service";
+import {
+  buildRewardInstructions,
+  fulfilmentKindLabel,
+  fulfilmentSummary,
+  rewardWebUrls,
+} from "@/modules/rewards/reward-fulfilment.util";
 
 @Injectable()
 export class ConsumerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getDashboardStats(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -52,12 +63,23 @@ export class ConsumerService {
         avatar: true,
         role: true,
         userType: true,
+        profileType: true,
+        isAffiliate: true,
+        jobTitle: true,
+        phone: true,
+        address: true,
+        postcode: true,
+        country: true,
+        mcomProfile: true,
         emailVerified: true,
         createdAt: true,
         membershipLevel: true,
         membershipPlanName: true,
         membershipStatus: true,
         membershipTier: true,
+        mcomUserId: true,
+        mcomBusinessId: true,
+        lastSsoSyncAt: true,
         subscription: {
           select: {
             status: true,
@@ -74,40 +96,33 @@ export class ConsumerService {
 
     // Flatten the cached MCOM subscription snapshot into the fields the
     // consumer membership page renders.
-    const { subscription, ...profile } = user;
+    const { subscription, mcomUserId, mcomProfile, ...profile } = user;
     return {
       ...profile,
+      fullName:
+        [profile.firstName, profile.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || null,
+      profile: mcomProfile ?? null,
+      centralHubLinked: Boolean(mcomUserId),
       membershipStartDate: subscription?.createdAt ?? null,
       membershipEndDate: subscription?.expiresAt ?? null,
       membershipAutoRenew: subscription?.isActive ?? false,
     };
   }
 
+  /**
+   * Profile details are owned by MCOM Central Hub. FundOrDonate only mirrors
+   * them for display, so local edits are rejected.
+   */
   async updateProfile(
-    userId: string,
-    data: { firstName?: string; lastName?: string; username?: string; avatar?: string },
-  ) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        username: data.username,
-        avatar: data.avatar,
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        avatar: true,
-        role: true,
-        userType: true,
-        emailVerified: true,
-        createdAt: true,
-      },
-    });
+    _userId: string,
+    _data: { firstName?: string; lastName?: string; username?: string; avatar?: string },
+  ): Promise<never> {
+    throw new ForbiddenException(
+      "Profile details are managed by MCOM Central Hub. Please edit your details there.",
+    );
   }
 
   /**
@@ -205,7 +220,13 @@ export class ConsumerService {
               title: issuance.rewardTitle ?? "Reward",
               status: issuance.status,
               code: issuance.code,
-              value: issuance.value,
+              value:
+                Number(issuance.value) ||
+                Number(
+                  (issuance.metadata as Record<string, any> | null)?.fulfilment
+                    ?.amount,
+                ) ||
+                0,
               expiresAt: issuance.expiresAt,
               issuedAt: issuance.createdAt,
             }
@@ -375,6 +396,19 @@ export class ConsumerService {
       externalIssuanceId: string;
       externalRef: string | null;
       metadata: unknown;
+      fulfilmentProvider: string | null;
+      fulfilmentKind: string | null;
+      fulfilmentStatus: string | null;
+      fulfilmentRef: string | null;
+      fulfilmentCode: string | null;
+      fulfilmentError: string | null;
+      centralReference: string | null;
+      deepLink: string | null;
+      businessId: string | null;
+      businessName: string | null;
+      scope: unknown;
+      instructions: unknown;
+      fulfilledAt: Date | null;
       expiresAt: Date | null;
       redeemedAt: Date | null;
       revokedAt: Date | null;
@@ -402,6 +436,32 @@ export class ConsumerService {
 
     return rows.map((r) => {
       const campaign = r.campaignId ? campaignMap.get(r.campaignId) : undefined;
+      // A code is only usable once delivery succeeded. Failed/pending rewards
+      // must never surface a redeemable-looking code.
+      const notDelivered = isRewardNotDelivered(r);
+      const code = notDelivered ? null : r.fulfilmentCode ?? r.code;
+      const persistedInstructions =
+        r.instructions && typeof r.instructions === "object"
+          ? (r.instructions as { headline?: string })
+          : null;
+      const instructions =
+        persistedInstructions?.headline
+          ? r.instructions
+          : buildRewardInstructions({
+              fulfilmentProvider: r.fulfilmentProvider,
+              fulfilmentKind: r.fulfilmentKind,
+              fulfilmentStatus: r.fulfilmentStatus,
+              fulfilmentError: r.fulfilmentError,
+              code,
+              deepLink: r.deepLink,
+              scope: (r.scope as never) ?? null,
+              businessId: r.businessId,
+              businessName: r.businessName,
+              centralReference: r.centralReference,
+              expiresAt: r.expiresAt?.toISOString() ?? null,
+              metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+              ...rewardWebUrls(this.config),
+            });
       return {
         id: r.id,
         externalIssuanceId: r.externalIssuanceId,
@@ -414,10 +474,34 @@ export class ConsumerService {
         rewardType: r.rewardType,
         source: r.rewardType === "local" ? "fundordonate" : "mcom",
         status: r.status,
-        code: r.code,
-        value: r.value,
+        code,
+        value:
+          Number(r.value) ||
+          Number(
+            (r.metadata as Record<string, any> | null)?.fulfilment?.amount,
+          ) ||
+          0,
         quantity: r.quantity,
         metadata: r.metadata ?? null,
+        fulfilmentProvider: r.fulfilmentProvider,
+        fulfilmentKind: r.fulfilmentKind,
+        fulfilmentLabel: r.fulfilmentKind
+          ? fulfilmentKindLabel(r.fulfilmentKind)
+          : null,
+        fulfilmentSummary: r.fulfilmentKind
+          ? fulfilmentSummary(r.fulfilmentKind)
+          : null,
+        fulfilmentStatus: r.fulfilmentStatus,
+        fulfilmentRef: r.fulfilmentRef,
+        fulfilmentCode: notDelivered ? null : r.fulfilmentCode ?? r.code,
+        fulfilmentError: r.fulfilmentError,
+        centralReference: r.centralReference,
+        deepLink: notDelivered ? null : r.deepLink,
+        businessId: r.businessId,
+        businessName: r.businessName,
+        scope: r.scope ?? null,
+        instructions,
+        fulfilledAt: r.fulfilledAt,
         expiresAt: r.expiresAt,
         redeemedAt: r.redeemedAt,
         revokedAt: r.revokedAt,
@@ -501,4 +585,19 @@ export class ConsumerService {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }
+}
+
+function isRewardNotDelivered(row: {
+  status: string;
+  fulfilmentStatus: string | null;
+}): boolean {
+  const status = (row.status ?? "").toUpperCase();
+  const fulfilment = (row.fulfilmentStatus ?? "").toUpperCase();
+  if (status === "FAILED" || status === "PENDING") return true;
+  return [
+    "FAILED",
+    "PENDING",
+    "PENDING_IDENTITY",
+    "PENDING_CONFLICT",
+  ].includes(fulfilment);
 }

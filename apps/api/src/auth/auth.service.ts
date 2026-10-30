@@ -112,7 +112,12 @@ export class AuthService {
   }
 
   async me(userId: string): Promise<AuthUserDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    // Pick up profile edits made in Central Hub without forcing a re-login.
+    // Falls back to the local cache when Central is unreachable.
+    const refreshed = await this.entitlements.refreshIdentityFromCentral(userId);
+    const user =
+      refreshed ??
+      (await this.prisma.user.findUnique({ where: { id: userId } }));
     if (!user) {
       throw new UnauthorizedException("User no longer exists");
     }
@@ -167,14 +172,25 @@ export class AuthService {
       username: user.username,
       role: user.role,
       userType: user.userType,
+      profileType: user.profileType,
+      isAffiliate: user.isAffiliate,
       firstName: user.firstName,
       lastName: user.lastName,
+      fullName:
+        [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || null,
+      jobTitle: user.jobTitle,
       avatar: user.avatar,
+      phone: user.phone,
+      address: user.address,
+      postcode: user.postcode,
+      country: user.country,
       emailVerified: user.emailVerified,
       businessId: user.mcomBusinessId,
       membershipLevel: user.membershipLevel,
+      membershipTier: user.membershipTier,
       membershipPlanName: user.membershipPlanName,
       membershipStatus: user.membershipStatus,
+      profile: (user.mcomProfile as Record<string, unknown> | null) ?? null,
       subscription,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

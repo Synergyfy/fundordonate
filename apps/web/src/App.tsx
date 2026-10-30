@@ -10,6 +10,7 @@ import { BusinessOwnerLayout } from "@/components/layout/BusinessOwnerLayout";
 import { ConsumerLayout } from "@/components/layout/ConsumerLayout";
 import { SessionExpiredMessage } from "@/components/ui/SessionExpiredMessage";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { CapabilityPage } from "@/components/plans/CapabilityPage";
 import { SkipToContent } from "@/components/ui/SkipToContent";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import "@/styles/print.css";
@@ -45,6 +46,8 @@ import {
   PledgeCheckoutPage,
   TerminalDonationPage,
   MembershipPurchasePage,
+  PlansPage,
+  PlanReturnPage,
   ContributorProfilePage,
   // Consumer Contribution Flow
   CampaignBrowsePage,
@@ -126,6 +129,9 @@ import {
   AdminFoundingMembersPage,
   AdminFoundingPage,
   AdminMembershipPage,
+  AdminPlansPage,
+  AdminPlanFormPage,
+  AdminAccessPassFormPage,
   // Business Owner Journey
   BusinessOnboardingPage,
   AdminBusinessOwnerDetailPage,
@@ -142,6 +148,7 @@ import {
   BusinessOwnerSettingsPage,
   BusinessCampaignCentrePage,
   BusinessCampaignSetupPage,
+  BusinessPlanPage,
   BusinessMyCampaignDetailPage,
   // Businesses & Community
   BusinessCampaignsPage,
@@ -355,6 +362,8 @@ function App() {
           <Route path="/business/:citySlug/season" element={<SeasonContextPage />} />
           <Route path="/business/:citySlug/participation" element={<ParticipationChoicePage />} />
           <Route path="/business/:citySlug/membership" element={<MembershipSelectionPage />} />
+          <Route path="/plans" element={<PlansPage />} />
+          <Route path="/plans/return" element={<PlanReturnPage />} />
           <Route path="/donate" element={<DonatePage />} />
           <Route path="/donate/checkout" element={<DonationCheckoutPage />} />
           <Route path="/pledge" element={<PledgeCheckoutPage />} />
@@ -475,6 +484,14 @@ function App() {
           <Route path="/admin/founding-members" element={<AdminFoundingMembersPage />} />
           <Route path="/admin/founding-programmes" element={<AdminFoundingPage />} />
           <Route path="/admin/membership" element={<AdminMembershipPage />} />
+          <Route path="/admin/membership/plans" element={<AdminPlansPage />} />
+          <Route path="/admin/membership/plans/new" element={<AdminPlanFormPage />} />
+          <Route path="/admin/membership/plans/:id/edit" element={<AdminPlanFormPage />} />
+          <Route path="/admin/membership/access-passes" element={<AdminPlansPage />} />
+          <Route path="/admin/membership/access-passes/new" element={<AdminAccessPassFormPage />} />
+          <Route path="/admin/membership/access-passes/:id/edit" element={<AdminAccessPassFormPage />} />
+          <Route path="/admin/membership/features" element={<AdminPlansPage />} />
+          <Route path="/admin/membership/orders" element={<AdminPlansPage />} />
           <Route path="/admin/donors" element={<AdminDonorsPage />} />
 
           {/* Businesses & Community */}
@@ -547,7 +564,7 @@ function App() {
             is redirected to the dashboard that matches their role.
             ═══════════════════════════════════════════════════════════════════ */}
         <Route element={<ProtectedRoute><DashboardEntry /></ProtectedRoute>}>
-          <Route path="/dashboard" element={<BusinessOwnerOverviewPage />} />
+          <Route path="/dashboard" element={<CapabilityPage feature="analytics.insights" title="Performance insights are not in your plan"><BusinessOwnerOverviewPage /></CapabilityPage>} />
         </Route>
 
         {/* ═══════════════════════════════════════════════════════════════════
@@ -558,10 +575,11 @@ function App() {
           <Route path="/dashboard/campaign-centre" element={<BusinessCampaignCentrePage />} />
           <Route path="/dashboard/campaign-setup/:templateId" element={<BusinessCampaignSetupPage />} />
           <Route path="/dashboard/my-campaigns/:campaignId" element={<BusinessMyCampaignDetailPage />} />
+          <Route path="/dashboard/plan" element={<BusinessPlanPage />} />
           <Route path="/dashboard/campaigns" element={<BusinessOwnerCampaignsPage />} />
-          <Route path="/dashboard/contributions" element={<BusinessOwnerContributionsPage />} />
+          <Route path="/dashboard/contributions" element={<CapabilityPage feature="contributions.ledger" title="The contributions ledger is not in your plan"><BusinessOwnerContributionsPage /></CapabilityPage>} />
           <Route path="/dashboard/my-contributions" element={<BusinessOwnerMyContributionsPage />} />
-          <Route path="/dashboard/leaderboard" element={<BusinessOwnerLeaderboardPage />} />
+          <Route path="/dashboard/leaderboard" element={<CapabilityPage anyOf={["leaderboard.city", "leaderboard.local", "leaderboard.national"]} title="Leaderboards are not in your plan"><BusinessOwnerLeaderboardPage /></CapabilityPage>} />
           <Route path="/dashboard/rewards" element={<BusinessOwnerRewardsPage />} />
           <Route path="/dashboard/my-business" element={<MyBusinessPage />} />
           <Route path="/dashboard/settings" element={<BusinessOwnerSettingsPage />} />

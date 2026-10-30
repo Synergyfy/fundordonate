@@ -3,39 +3,28 @@
 // Account and notification settings, wired to live backend API.
 // =============================================================================
 
-import { useState, useEffect } from "react";
-import { Bell, Lock, User, AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
+import { Bell, Lock, AlertCircle, ExternalLink, RefreshCw, Store } from "lucide-react";
 import {
   useBusinessSettings,
   useUpdateBusinessSettings,
   useBusinessProfile,
-  useUpdateBusinessProfile,
 } from "@/services/business/hook";
+import { useAuthStore } from "@/stores/auth.store";
+import { getCentralProfileUrl } from "@/lib/central-hub";
+import { usePlanCapabilities } from "@/hooks/usePlanCapabilities";
 
 export default function BusinessOwnerSettingsPage() {
+  const plan = usePlanCapabilities();
+  const canAlerts = plan.can("notifications.alerts");
+  const canWeeklyDigest = plan.can("notifications.weekly_digest");
   const { data: settings, isLoading: settingsLoading, error: settingsError, refetch: refetchSettings } = useBusinessSettings();
   const updateSettingsMutation = useUpdateBusinessSettings();
 
   const { data: profile, isLoading: profileLoading } = useBusinessProfile();
-  const updateProfileMutation = useUpdateBusinessProfile();
-
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [profileSaved, setProfileSaved] = useState(false);
-
-  useEffect(() => {
-    if (profile) {
-      setDisplayName(profile.name || "");
-      setEmail(profile.email || "");
-    }
-  }, [profile]);
-
-  const handleProfileSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateProfileMutation.mutateAsync({ name: displayName, email });
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 3000);
-  };
+  const authUser = useAuthStore((s) => s.user);
+  const editProfileUrl = getCentralProfileUrl(
+    authUser ?? { userType: "business", role: "business" },
+  );
 
   const handleToggle = (key: "emailAlerts" | "campaignUpdates" | "leaderboardChanges" | "rewardsEarned" | "newBackers" | "weeklyDigest") => {
     if (!settings) return;
@@ -85,48 +74,48 @@ export default function BusinessOwnerSettingsPage() {
         <p className="text-sm text-gray-500">Manage your business account and notification preferences.</p>
       </div>
 
-      {/* Profile */}
+      {/* Business identity — synced from Central Hub, read-only here */}
       <div className="rounded-xl bg-white p-5 shadow-sm border">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="h-5 w-5 text-gray-600" />
-          <h2 className="text-sm font-bold text-gray-900">Business Contact Profile</h2>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Store className="h-5 w-5 text-gray-600" />
+            <h2 className="text-sm font-bold text-gray-900">Business Identity</h2>
+          </div>
+          <a
+            href={editProfileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Edit on Central Hub <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         </div>
-        <form onSubmit={handleProfileSave} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Display Name</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Contact Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-              required
-            />
-          </div>
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              type="submit"
-              disabled={updateProfileMutation.isPending}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
-            >
-              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
-            </button>
-            {profileSaved && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-green-600">
-                <CheckCircle className="h-4 w-4" /> Changes saved
+        <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+          Your business name, contact email, phone, address and other business
+          details are managed by MCOM Central Hub. They sync here automatically
+          each time you sign in.
+        </p>
+        <div className="divide-y divide-gray-50">
+          {[
+            ["Business name", profile?.name],
+            ["Contact email", profile?.email],
+            ["Phone", profile?.phone],
+            ["Address", [profile?.address, profile?.postcode, profile?.country].filter(Boolean).join(", ")],
+            ["Business type", profile?.businessType],
+            ["Industry", profile?.industry],
+            ["Category", profile?.category],
+            ["Website", profile?.website],
+            ["Opening hours", profile?.openingHours],
+            ["Social media", profile?.socialMedia],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-4 py-2.5">
+              <span className="text-sm text-gray-500">{label}</span>
+              <span className="max-w-[60%] break-words text-right text-sm font-medium text-gray-900">
+                {value || "Not provided"}
               </span>
-            )}
-          </div>
-        </form>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Notifications */}
@@ -143,13 +132,26 @@ export default function BusinessOwnerSettingsPage() {
         <div className="space-y-3">
           {notificationOptions.map(({ key, label }) => {
             const isEnabled = !!settings[key];
+            const locked =
+              (key === "weeklyDigest" && !canWeeklyDigest) ||
+              (["leaderboardChanges", "rewardsEarned", "newBackers"].includes(key) &&
+                !canAlerts);
             return (
               <div key={key} className="flex items-center justify-between py-2 border-b last:border-0">
-                <span className="text-sm text-gray-700">{label}</span>
+                <span className={`text-sm ${locked ? "text-gray-400" : "text-gray-700"}`}>
+                  {label}
+                  {locked && (
+                    <span className="ml-2 text-[10px] font-semibold uppercase text-amber-600">
+                      Plan upgrade required
+                    </span>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleToggle(key)}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                  disabled={locked}
+                  title={locked ? "This alert is not included in your current plan" : undefined}
+                  className={`relative h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                     isEnabled ? "bg-primary-600" : "bg-gray-300"
                   }`}
                 >

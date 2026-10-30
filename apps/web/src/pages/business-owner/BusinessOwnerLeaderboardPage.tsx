@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { ArrowUp, ArrowDown, Minus, AlertCircle, RefreshCw } from "lucide-react";
 import { useLeaderboard } from "@/services/leaderboard/hook";
+import { usePlanCapabilities } from "@/hooks/usePlanCapabilities";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
@@ -21,12 +22,26 @@ const TIER_COLORS: Record<string, string> = {
   Bronze: "text-amber-600",
 };
 
+const SCOPES = [
+  { id: "city" as const, label: "City", feature: "leaderboard.city" },
+  { id: "local_area" as const, label: "Local Area", feature: "leaderboard.local" },
+  { id: "national" as const, label: "National", feature: "leaderboard.national" },
+];
+
 export default function BusinessOwnerLeaderboardPage() {
   const [scope, setScope] = useState<"city" | "local_area" | "national">("city");
-  const { data, isLoading, error, refetch } = useLeaderboard({ scope });
+  const plan = usePlanCapabilities();
+  const allowedScopes = SCOPES.filter((item) => plan.can(item.feature));
+  const effectiveScope = allowedScopes.some((item) => item.id === scope)
+    ? scope
+    : allowedScopes[0]?.id ?? "city";
+  const { data, isLoading, error, refetch } = useLeaderboard({
+    scope: effectiveScope,
+  });
 
   const currentRank = data?.currentRank;
   const entries = data?.entries || [];
+  const canTrackRank = plan.can("leaderboard.rank_tracking");
 
   return (
     <div className="space-y-6">
@@ -36,32 +51,21 @@ export default function BusinessOwnerLeaderboardPage() {
           <p className="text-sm text-gray-500">See how your business ranks against others this season.</p>
         </div>
 
-        {/* Scope selector */}
+        {/* Scope selector — only scopes included in the plan are shown */}
         <div className="flex rounded-lg border bg-gray-50 p-1 text-xs font-semibold">
-          <button
-            onClick={() => setScope("city")}
-            className={`rounded-md px-3 py-1.5 transition-colors ${
-              scope === "city" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            City
-          </button>
-          <button
-            onClick={() => setScope("local_area")}
-            className={`rounded-md px-3 py-1.5 transition-colors ${
-              scope === "local_area" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            Local Area
-          </button>
-          <button
-            onClick={() => setScope("national")}
-            className={`rounded-md px-3 py-1.5 transition-colors ${
-              scope === "national" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            National
-          </button>
+          {allowedScopes.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setScope(item.id)}
+              className={`rounded-md px-3 py-1.5 transition-colors ${
+                effectiveScope === item.id
+                  ? "bg-white text-gray-900 shadow-xs"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -88,7 +92,7 @@ export default function BusinessOwnerLeaderboardPage() {
       )}
 
       {/* Your Rank Card */}
-      {!isLoading && !error && currentRank && (
+      {!isLoading && !error && currentRank && canTrackRank && (
         <div className="rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 p-5 text-white shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -123,7 +127,7 @@ export default function BusinessOwnerLeaderboardPage() {
                   <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Location</th>
                   <th className="px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Tier</th>
                   <th className="px-4 py-3 font-medium text-gray-500">Contributed</th>
-                  <th className="px-4 py-3 font-medium text-gray-500 w-20">Change</th>
+                  {canTrackRank && <th className="px-4 py-3 font-medium text-gray-500 w-20">Change</th>}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -155,6 +159,7 @@ export default function BusinessOwnerLeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 font-semibold text-gray-900">{fmt(entry.totalContributed)}</td>
+                      {canTrackRank && (
                       <td className="px-4 py-3">
                         <span className={`flex items-center gap-1 text-xs font-bold ${
                           entry.change > 0 ? "text-green-600" : entry.change < 0 ? "text-red-600" : "text-gray-400"
@@ -169,6 +174,7 @@ export default function BusinessOwnerLeaderboardPage() {
                           {Math.abs(entry.change) || "—"}
                         </span>
                       </td>
+                      )}
                     </tr>
                   );
                 })}

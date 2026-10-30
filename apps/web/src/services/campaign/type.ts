@@ -28,6 +28,9 @@ export interface TemplateRewardBlueprint {
   name: string;
   category: string;
   rule: string;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  audience?: string | null;
 }
 
 export interface TemplateAssetBlueprint {
@@ -65,6 +68,10 @@ export interface BusinessTemplateView {
   rewards: TemplateRewardBlueprint[];
   mcomAssets: TemplateAssetBlueprint[];
   businessRewardsMode?: string;
+  audience?: string;
+  premium?: boolean;
+  requiredFeature?: string | null;
+  featureUnlocked?: boolean;
 }
 
 export interface MyCampaignItem {
@@ -144,6 +151,7 @@ export interface CampaignDetailData {
     rewards: TemplateRewardBlueprint[];
     mcomAssets: TemplateAssetBlueprint[];
     businessRewardsMode?: string;
+    audience?: string;
   };
   answers: CampaignFieldAnswerItem[];
   changes: CampaignRequestedChangeItem[];
@@ -171,6 +179,10 @@ export interface McomBusinessReward {
   status?: string;
   quantity?: number | null;
   remainingQuantity?: number | null;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
 }
 
 export interface RewardConditionDto {
@@ -189,6 +201,11 @@ export interface CampaignRewardAttachment {
   description?: string | null;
   image?: string | null;
   rewardType?: string | null;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  audience?: string | null;
+  businessId?: string | null;
+  businessName?: string | null;
   conditions: RewardConditionDto[];
   qualificationMode: string;
   enabled: boolean;

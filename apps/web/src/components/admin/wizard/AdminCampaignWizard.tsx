@@ -15,12 +15,16 @@ import {
   validateStep,
   type CampaignWizardData,
   type CampaignReward,
-  type CampaignRewardItem,
   type ContributionType,
   type StepId,
   type StretchTarget,
   type LeaderboardPrize,
 } from "@/types/campaign-wizard";
+import {
+  fulfilmentKindLabel,
+  isCentralFulfilmentKind,
+} from "@/types/rewards";
+import type { McomCatalogueReward } from "@/services/admin/type";
 import {
   Search,
   CheckCircle,
@@ -2914,155 +2918,114 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
   const hasRewards = formData.hasRewards || false;
   const qualificationMode = formData.qualificationMode || "highest";
   const rewards = formData.rewards || [];
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [libraryRewards, setLibraryRewards] = useState<CampaignReward[]>([]);
-  const [loadingLibrary, setLoadingLibrary] = useState(false);
-  const [librarySearch, setLibrarySearch] = useState("");
+  const campaignAudience = formData.audience || "both";
+  const consumerOnlyCampaign = campaignAudience === "consumer";
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadRewards() {
-      setLoadingLibrary(true);
-      try {
-        const res = await adminApi.getRewards();
-        if (!mounted) return;
-        const mapped: CampaignReward[] = (res || []).map((r: any, idx: number) => ({
-          id: r.id || `lib-${idx}`,
-          title: r.title || r.name || "Community Reward",
-          description: r.description || "",
-          order: idx,
-          audience: (r.audience === "consumer" || r.audience === "business") ? r.audience : "both",
-          triggerType: "contribution",
-          triggerConfig: { mode: "min", min: Number(r.thresholdAmount) || 10 },
-          quantityType: r.quantityLimit ? "limited" : "unlimited",
-          quantityLimit: r.quantityLimit || null,
-          claimDeadlineDays: 30,
-          fulfilmentType: r.fulfilmentType || "external_link",
-          fulfilmentConfig: {},
-          qualificationPeriod: "",
-          expiryDays: 0,
-          items: (r.items || []).map((it: any, iIdx: number) => ({
-            id: it.id || `li-${iIdx}`,
-            title: it.title || r.title || "Reward Item",
-            description: it.description || "",
-            physicalType: it.physicalType || "digital",
-            value: String(it.value || ""),
-            currency: "GBP",
-            assetType: it.assetType || "url",
-            assetUrl: it.assetUrl || "",
-            order: iIdx,
-            fulfilmentType: it.fulfilmentType || "external_link",
-            fulfilmentConfig: {},
-          })),
-        }));
-        setLibraryRewards(mapped);
-      } catch (err) {
-        console.error("Failed to load rewards library", err);
-      } finally {
-        if (mounted) setLoadingLibrary(false);
-      }
+  const [showPicker, setShowPicker] = useState(false);
+  const [catalogue, setCatalogue] = useState<McomCatalogueReward[]>([]);
+  const [loadingCatalogue, setLoadingCatalogue] = useState(false);
+  const [catalogueError, setCatalogueError] = useState("");
+  const [catalogueSearch, setCatalogueSearch] = useState("");
+
+  const loadCatalogue = useCallback(async () => {
+    setLoadingCatalogue(true);
+    setCatalogueError("");
+    try {
+      const res = await adminApi.getMcomRewards({ limit: 100, source: "mcom vault" });
+      setCatalogue(res?.data ?? []);
+    } catch (err) {
+      setCatalogueError(
+        err instanceof Error ? err.message : "Failed to load MCOM Rewards",
+      );
+    } finally {
+      setLoadingCatalogue(false);
     }
-    loadRewards();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
-  const filteredLibrary = libraryRewards.filter((r) =>
-    r.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
-    r.description.toLowerCase().includes(librarySearch.toLowerCase())
-  );
+  useEffect(() => {
+    if (showPicker) void loadCatalogue();
+  }, [showPicker, loadCatalogue]);
 
-  const addReward = () => {
-    const newReward: CampaignReward = {
-      id: `rw-${Date.now()}`,
-      title: "",
-      description: "",
-      order: rewards.length,
-      audience: "both",
-      triggerType: "contribution",
-      triggerConfig: { mode: "min" },
-      quantityType: "unlimited",
-      quantityLimit: null,
-      claimDeadlineDays: 0,
-      fulfilmentType: "",
-      fulfilmentConfig: {},
-      qualificationPeriod: "",
-      expiryDays: 0,
-      items: [],
-    };
-    onUpdate({ rewards: [...rewards, newReward] });
+  const rewardAudience = (item: McomCatalogueReward): "business" | "consumer" | "both" => {
+    if (isCentralFulfilmentKind(item.fulfilmentKind) || item.consumerEligible === false) {
+      return "business";
+    }
+    if (item.businessEligible === false) return "consumer";
+    return "both";
   };
 
-  const addFromLibrary = (libraryReward: CampaignReward) => {
-    const newReward: CampaignReward = {
-      ...libraryReward,
-      id: `rw-${Date.now()}`,
-      order: rewards.length,
-      items: libraryReward.items.map((item) => ({ ...item, id: `ri-${Date.now()}-${Math.random().toString(36).slice(2)}` })),
-    };
-    onUpdate({ rewards: [...rewards, newReward] });
-    setShowLibrary(false);
+  const isDisallowedForCampaign = (item: {
+    fulfilmentKind?: string | null;
+    consumerEligible?: boolean | null;
+  }) =>
+    consumerOnlyCampaign &&
+    (isCentralFulfilmentKind(item.fulfilmentKind) || item.consumerEligible === false);
+
+  const toCampaignReward = (item: McomCatalogueReward): CampaignReward => ({
+    id: `rw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: item.title,
+    description: item.description ?? "",
+    order: rewards.length,
+    audience: rewardAudience(item),
+    source: "mcom",
+    mcomRewardId: item.id,
+    mcomSource: item.source || "mcom vault",
+    fulfilmentProvider: item.fulfilmentProvider ?? null,
+    fulfilmentKind: item.fulfilmentKind ?? null,
+    consumerEligible: item.consumerEligible ?? null,
+    businessEligible: item.businessEligible ?? null,
+    triggerType: "contribution",
+    triggerConfig: { mode: "min" },
+    quantityType: "unlimited",
+    quantityLimit: null,
+    claimDeadlineDays: 0,
+    fulfilmentType: "mcom_asset",
+    fulfilmentConfig: {},
+    qualificationPeriod: "",
+    expiryDays: 0,
+    items: [],
+  });
+
+  const addFromCatalogue = (item: McomCatalogueReward) => {
+    if (isDisallowedForCampaign(item)) return;
+    if (rewards.some((r) => r.mcomRewardId === item.id)) return;
+    onUpdate({ rewards: [...rewards, toCampaignReward(item)] });
   };
 
   const updateReward = (index: number, field: keyof CampaignReward, value: unknown) => {
-    const updated = rewards.map((r, i) =>
-      i === index ? { ...r, [field]: value } : r,
-    );
-    onUpdate({ rewards: updated });
+    onUpdate({
+      rewards: rewards.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
+    });
+  };
+
+  const updateTrigger = (index: number, patch: Partial<CampaignReward["triggerConfig"]>) => {
+    onUpdate({
+      rewards: rewards.map((r, i) =>
+        i === index ? { ...r, triggerConfig: { ...r.triggerConfig, ...patch } } : r,
+      ),
+    });
   };
 
   const removeReward = (index: number) => {
     onUpdate({ rewards: rewards.filter((_, i) => i !== index) });
   };
 
-  const addItemToReward = (rewardIndex: number) => {
-    const newItem: CampaignRewardItem = {
-      id: `ri-${Date.now()}`,
-      title: "",
-      description: "",
-      physicalType: "digital",
-      value: "",
-      currency: "GBP",
-      assetType: "",
-      assetUrl: "",
-      order: 0,
-      fulfilmentType: "",
-      fulfilmentConfig: {},
-    };
-    const updated = rewards.map((r, i) =>
-      i === rewardIndex ? { ...r, items: [...r.items, newItem] } : r,
+  const filteredCatalogue = catalogue.filter((item) => {
+    const term = catalogueSearch.toLowerCase();
+    return (
+      !term ||
+      item.title.toLowerCase().includes(term) ||
+      (item.description ?? "").toLowerCase().includes(term)
     );
-    onUpdate({ rewards: updated });
-  };
-
-  const updateRewardItem = (rewardIndex: number, itemIndex: number, field: keyof CampaignRewardItem, value: string) => {
-    const updated = rewards.map((r, i) => {
-      if (i !== rewardIndex) return r;
-      return {
-        ...r,
-        items: r.items.map((item, j) =>
-          j === itemIndex ? { ...item, [field]: value } : item,
-        ),
-      };
-    });
-    onUpdate({ rewards: updated });
-  };
-
-  const removeRewardItem = (rewardIndex: number, itemIndex: number) => {
-    const updated = rewards.map((r, i) => {
-      if (i !== rewardIndex) return r;
-      return { ...r, items: r.items.filter((_, j) => j !== itemIndex) };
-    });
-    onUpdate({ rewards: updated });
-  };
+  });
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Rewards</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Configure rewards that contributors can earn based on their participation.
+          Campaign rewards are selected from the MCOM Rewards admin catalogue. FundOrDonate does not
+          create or store its own reward catalogue for campaigns.
         </p>
       </div>
 
@@ -3147,93 +3110,88 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Rewards</h3>
+                <h3 className="text-sm font-semibold text-gray-900">MCOM Rewards</h3>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  Pull existing rewards from the library or create new ones.
+                  Rewards are fulfilled by MCOM Rewards (Mall or Central). Consumers cannot win
+                  Central membership, access pass or Central coupon rewards.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLibrary(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100"
-                >
-                  <Award className="h-4 w-4" />
-                  Use Existing Reward
-                </button>
-                <button
-                  type="button"
-                  onClick={addReward}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create New Reward
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100"
+              >
+                <Award className="h-4 w-4" />
+                Select MCOM Reward
+              </button>
             </div>
 
             {rewards.length === 0 ? (
               <div className="rounded-lg bg-gray-50 p-6 text-center">
                 <Award className="mx-auto h-8 w-8 text-gray-400" />
                 <p className="mt-2 text-sm text-gray-500">No rewards configured yet.</p>
-                <div className="mt-3 flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowLibrary(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
-                  >
-                    <Award className="h-4 w-4" />
-                    Use Existing Reward
-                  </button>
-                  <button
-                    type="button"
-                    onClick={addReward}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create New Reward
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
+                >
+                  <Award className="h-4 w-4" />
+                  Select MCOM Reward
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
-                {rewards.map((reward, rIndex) => (
-                  <div key={reward.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
-                        {rIndex + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeReward(rIndex)}
-                        className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <RequiredLabel label="Reward Title" name={`reward_${rIndex}_title`} fieldErrors={fieldErrors} />
-                        <input
-                          type="text"
-                          value={reward.title}
-                          onChange={(e) => updateReward(rIndex, "title", e.target.value)}
-                          placeholder="e.g. Bronze Supporter"
-                          className={`w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 ${fieldErrorClass(`reward_${rIndex}_title`, fieldErrors)}`}
-                        />
-                        <FieldError name={`reward_${rIndex}_title`} fieldErrors={fieldErrors} />
+                {rewards.map((reward, rIndex) => {
+                  const disallowed = isDisallowedForCampaign(reward);
+                  return (
+                    <div key={reward.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="text-sm font-semibold text-gray-900">{reward.title}</h4>
+                            <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
+                              {reward.fulfilmentProvider === "CENTRAL" || isCentralFulfilmentKind(reward.fulfilmentKind)
+                                ? "Central"
+                                : reward.fulfilmentProvider === "MALL"
+                                  ? "Mall"
+                                  : "MCOM"}
+                            </span>
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                              {reward.audience === "consumer"
+                                ? "Consumer"
+                                : reward.audience === "business"
+                                  ? "Business"
+                                  : "Both"}
+                            </span>
+                            {reward.fulfilmentKind && (
+                              <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
+                                {fulfilmentKindLabel(reward.fulfilmentKind)}
+                              </span>
+                            )}
+                          </div>
+                          {reward.description && (
+                            <p className="mt-1 text-xs text-gray-500">{reward.description}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeReward(rIndex)}
+                          className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                          aria-label="Remove reward"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                        <textarea
-                          value={reward.description}
-                          onChange={(e) => updateReward(rIndex, "description", e.target.value)}
-                          rows={2}
-                          placeholder="Describe this reward..."
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
+
+                      {disallowed && (
+                        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          This is a business-only Central reward and cannot be used on a consumer-only
+                          campaign. Remove it or change the campaign audience.
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Trigger Type</label>
                           <select
@@ -3242,19 +3200,48 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
                             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                           >
                             <option value="contribution">Contribution</option>
+                            <option value="backer">Backer</option>
                             <option value="membership">Membership</option>
                             <option value="founding_monthly">Founding Monthly</option>
-                            <option value="backer">Backer</option>
                             <option value="first_n">First N</option>
                             <option value="top_n">Top N</option>
                             <option value="leaderboard">Leaderboard</option>
                           </select>
                         </div>
                         <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Qualifies when</label>
+                          <select
+                            value={reward.triggerConfig.mode}
+                            onChange={(e) =>
+                              updateTrigger(rIndex, {
+                                mode: e.target.value as "min" | "range" | "exact",
+                              })
+                            }
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                          >
+                            <option value="min">Contribution at least</option>
+                            <option value="range">Contribution between</option>
+                            <option value="exact">Contribution exactly</option>
+                          </select>
+                        </div>
+                        <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Quantity Type</label>
                           <select
                             value={reward.quantityType}
-                            onChange={(e) => updateReward(rIndex, "quantityType", e.target.value)}
+                            onChange={(e) => {
+                              const quantityType = e.target.value as "unlimited" | "limited";
+                              onUpdate({
+                                rewards: rewards.map((r, i) =>
+                                  i === rIndex
+                                    ? {
+                                        ...r,
+                                        quantityType,
+                                        quantityLimit: quantityType === "limited" ? r.quantityLimit : null,
+                                      }
+                                    : r,
+                                ),
+                              });
+                            }}
                             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                           >
                             <option value="unlimited">Unlimited</option>
@@ -3263,72 +3250,107 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
                         </div>
                       </div>
 
-                      {/* Reward Items */}
-                      <div className={`border-t pt-3 ${fieldErrorClass(`reward_${rIndex}_items`, fieldErrors)}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <RequiredLabel label="Reward Items" name={`reward_${rIndex}_items`} fieldErrors={fieldErrors} />
-                          <button
-                            type="button"
-                            onClick={() => addItemToReward(rIndex)}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Add Item
-                          </button>
-                        </div>
-                        {reward.items.length > 0 ? (
-                          <div className="space-y-2">
-                            {reward.items.map((item, iIndex) => (
-                              <div key={item.id} className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={item.title}
-                                  onChange={(e) => updateRewardItem(rIndex, iIndex, "title", e.target.value)}
-                                  placeholder="Item title"
-                                  className={`flex-1 rounded-lg border bg-white px-3 py-1.5 text-xs focus:border-primary-500 focus:ring-1 focus:ring-primary-500 ${fieldErrorClass(`reward_${rIndex}_items`, fieldErrors)}`}
-                                />
-                                <select
-                                  value={item.physicalType}
-                                  onChange={(e) => updateRewardItem(rIndex, iIndex, "physicalType", e.target.value)}
-                                  className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                                >
-                                  <option value="digital">Digital</option>
-                                  <option value="physical">Physical</option>
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => removeRewardItem(rIndex, iIndex)}
-                                  className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                        {reward.triggerConfig.mode !== "range" && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              {reward.triggerConfig.mode === "exact" ? "Exact (£)" : "Minimum (£)"}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={reward.triggerConfig[reward.triggerConfig.mode] ?? ""}
+                              onChange={(e) =>
+                                updateTrigger(rIndex, {
+                                  [reward.triggerConfig.mode]: e.target.value === "" ? undefined : Number(e.target.value),
+                                })
+                              }
+                              placeholder="Any amount"
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                            />
                           </div>
-                        ) : (
-                          <p className="text-xs text-gray-400 italic">No items added</p>
                         )}
-                        <FieldError name={`reward_${rIndex}_items`} fieldErrors={fieldErrors} />
+                        {reward.triggerConfig.mode === "range" && (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Min (£)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={reward.triggerConfig.min ?? ""}
+                                onChange={(e) =>
+                                  updateTrigger(rIndex, {
+                                    min: e.target.value === "" ? undefined : Number(e.target.value),
+                                  })
+                                }
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Max (£)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={reward.triggerConfig.max ?? ""}
+                                onChange={(e) =>
+                                  updateTrigger(rIndex, {
+                                    max: e.target.value === "" ? undefined : Number(e.target.value),
+                                  })
+                                }
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                          </>
+                        )}
+                        {reward.quantityType === "limited" && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity cap</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={reward.quantityLimit ?? ""}
+                              onChange={(e) =>
+                                updateReward(
+                                  rIndex,
+                                  "quantityLimit",
+                                  e.target.value === "" ? null : Math.max(1, Math.floor(Number(e.target.value))),
+                                )
+                              }
+                              placeholder="e.g. 50"
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+                        )}
                       </div>
+                      <p className="mt-2 text-[11px] text-gray-400">
+                        The quantity cap is enforced server-side before any provider call. Provider stock
+                        remains authoritative and is an additional limit.
+                      </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* Reward Library Picker Modal */}
-      {showLibrary && (
+      {/* MCOM catalogue picker */}
+      {showPicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Reward Library</h3>
-                <p className="text-sm text-gray-500">Select existing rewards to add to this campaign</p>
+                <h3 className="text-lg font-bold text-gray-900">MCOM admin rewards</h3>
+                <p className="text-sm text-gray-500">
+                  Admin-created rewards from the MCOM Rewards vault (source = &quot;mcom vault&quot;).
+                </p>
               </div>
-              <button onClick={() => setShowLibrary(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+              <button onClick={() => setShowPicker(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -3337,44 +3359,80 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  value={librarySearch}
-                  onChange={(e) => setLibrarySearch(e.target.value)}
-                  placeholder="Search rewards..."
+                  value={catalogueSearch}
+                  onChange={(e) => setCatalogueSearch(e.target.value)}
+                  placeholder="Search MCOM rewards..."
                   className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                 />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              {filteredLibrary.length === 0 ? (
-                <div className="py-8 text-center text-sm text-gray-500">No rewards found</div>
+              {catalogueError && (
+                <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  <span>{catalogueError}</span>
+                  <button type="button" onClick={() => void loadCatalogue()} className="font-semibold underline">
+                    Retry
+                  </button>
+                </div>
+              )}
+              {loadingCatalogue ? (
+                <div className="py-8 text-center text-sm text-gray-500">Loading MCOM Rewards…</div>
+              ) : filteredCatalogue.length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-500">
+                  No MCOM admin rewards found. Ask the MCOM Rewards team to publish rewards to the
+                  &quot;mcom vault&quot; source.
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredLibrary.map((libReward) => {
-                    const alreadyAdded = rewards.some((r) => r.title === libReward.title);
+                  {filteredCatalogue.map((item) => {
+                    const alreadyAdded = rewards.some((r) => r.mcomRewardId === item.id);
+                    const disallowed = isDisallowedForCampaign(item);
+                    const disabled = alreadyAdded || disallowed;
                     return (
-                      <div key={libReward.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <div key={item.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-gray-900">{libReward.title}</h4>
-                            <p className="mt-0.5 text-xs text-gray-500">{libReward.description}</p>
+                            <h4 className="text-sm font-semibold text-gray-900">{item.title}</h4>
+                            <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
-                                {libReward.triggerConfig.mode === "min" ? `Min £${libReward.triggerConfig.min}` : libReward.triggerConfig.mode === "range" ? `£${libReward.triggerConfig.min}-£${libReward.triggerConfig.max}` : `Exact £${libReward.triggerConfig.exact}`}
+                              <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">
+                                {item.fulfilmentProvider === "CENTRAL" || isCentralFulfilmentKind(item.fulfilmentKind)
+                                  ? "Central"
+                                  : item.fulfilmentProvider === "MALL"
+                                    ? "Mall"
+                                    : "MCOM"}
                               </span>
                               <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                                {libReward.audience}
+                                {rewardAudience(item) === "business"
+                                  ? "Business only"
+                                  : rewardAudience(item) === "consumer"
+                                    ? "Consumer only"
+                                    : "Consumer & business"}
                               </span>
-                              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                                {libReward.items.length} item(s)
-                              </span>
+                              {item.fulfilmentKind && (
+                                <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
+                                  {fulfilmentKindLabel(item.fulfilmentKind)}
+                                </span>
+                              )}
+                              {typeof item.quantity === "number" && item.quantity > 0 && (
+                                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                  {item.quantity} in stock
+                                </span>
+                              )}
                             </div>
+                            {disallowed && (
+                              <p className="mt-2 text-xs font-medium text-amber-700">
+                                Business-only Central rewards are not available on consumer-only
+                                campaigns.
+                              </p>
+                            )}
                           </div>
                           <button
                             type="button"
-                            onClick={() => addFromLibrary(libReward)}
-                            disabled={alreadyAdded}
+                            onClick={() => addFromCatalogue(item)}
+                            disabled={disabled}
                             className={`ml-3 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium ${
-                              alreadyAdded
+                              disabled
                                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                                 : "bg-primary-600 text-white hover:bg-primary-700"
                             }`}
@@ -3394,6 +3452,7 @@ function StepRewards({ formData, onUpdate, fieldErrors }: StepProps) {
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 18 — Leaderboard

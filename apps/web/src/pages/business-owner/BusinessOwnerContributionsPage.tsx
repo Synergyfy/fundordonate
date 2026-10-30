@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useContributions } from "@/services/contribution/hook";
 import type { ContributionItem } from "@/services/contribution/type";
+import { usePlanCapabilities } from "@/hooks/usePlanCapabilities";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
@@ -66,6 +67,8 @@ type TypeFilter = "" | "IN_STORE" | "ONLINE" | "FUNDING_SPLIT" | "SELF_FUNDING";
 const PAGE_SIZE = 20;
 
 export default function BusinessOwnerContributionsPage() {
+  const plan = usePlanCapabilities();
+  const canFilter = plan.can("contributions.filters");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -126,7 +129,8 @@ export default function BusinessOwnerContributionsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — plan-gated */}
+      {canFilter && (
       <div className="flex flex-wrap gap-2">
         {(["", "IN_STORE", "ONLINE", "FUNDING_SPLIT", "SELF_FUNDING"] as TypeFilter[]).map((t) => (
           <button
@@ -140,6 +144,7 @@ export default function BusinessOwnerContributionsPage() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (
@@ -308,7 +313,8 @@ export default function BusinessOwnerContributionsPage() {
                                   <div>
                                     <p className="text-sm font-semibold text-gray-900">{c.campaign}</p>
                                     <p className="text-xs text-gray-500">
-                                      Contribution {c.reference} · {formatDateTime(c.createdAt)}
+                                      {canFilter ? `Contribution ${c.reference} · ` : ""}
+                                      {formatDateTime(c.createdAt)}
                                     </p>
                                   </div>
                                   <Link
@@ -327,12 +333,14 @@ export default function BusinessOwnerContributionsPage() {
                                     icon={<Hash className="h-3.5 w-3.5" aria-hidden="true" />}
                                     mono
                                   />
-                                  <DetailItem
-                                    label="Reference"
-                                    value={c.reference}
-                                    icon={<Hash className="h-3.5 w-3.5" aria-hidden="true" />}
-                                    mono
-                                  />
+                                  {canFilter && (
+                                    <DetailItem
+                                      label="Reference"
+                                      value={c.reference}
+                                      icon={<Hash className="h-3.5 w-3.5" aria-hidden="true" />}
+                                      mono
+                                    />
+                                  )}
                                   <DetailItem
                                     label="Payment gateway"
                                     value={c.gateway ? formatGateway(c.gateway) : "Not recorded"}

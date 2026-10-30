@@ -15,6 +15,13 @@ import {
 } from "@/modules/rewards/reward-config.util";
 import type { AttachCampaignRewardDto } from "../dto/attach-campaign-reward.dto";
 import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
+import {
+  consumerCanWin,
+  fulfilmentKindLabel,
+  isCentralFulfilmentKind,
+} from "@/modules/rewards/reward-fulfilment.util";
 
 /**
  * Friendly labels for the reward types stored on an issuance. Covers both the
@@ -67,6 +74,20 @@ export interface BusinessRewardItem {
   /** When the reward was revoked (ISO string). */
   revokedAt?: string | null;
 
+  // ── Provider fulfilment (what the owner does with the reward) ────────────
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  /** Human "what you get" label derived from `fulfilmentKind`. */
+  fulfilmentLabel?: string | null;
+  fulfilmentStatus?: string | null;
+  fulfilmentCode?: string | null;
+  businessId?: string | null;
+  businessName?: string | null;
+  deepLink?: string | null;
+  centralReference?: string | null;
+  scope?: unknown;
+  instructions?: unknown;
+
   // ── Provenance: what earned this reward ──────────────────────────────────
   /** The campaign the qualifying contribution was made to. */
   campaignId?: string | null;
@@ -104,6 +125,7 @@ export class BusinessRewardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewardsClient: RewardsClient,
+    private readonly capabilities: CapabilityService,
   ) {}
 
   async getRewards(businessId: string): Promise<{
@@ -120,7 +142,6 @@ export class BusinessRewardService {
       },
     });
     if (!business) throw new NotFoundException("Business not found");
-
     // Rewards belong to the person who earned them, not to the campaign they
     // were earned on. Scope to the owner's identity so (a) a contributor's
     // reward on one of this business's campaigns is never attributed to the
@@ -206,6 +227,9 @@ export class BusinessRewardService {
       const attachment = i.rewardConfigId
         ? attachmentMap.get(i.rewardConfigId)
         : undefined;
+      const failed =
+        i.status === "FAILED" ||
+        (i.fulfilmentStatus ?? "").toUpperCase() === "FAILED";
 
       return {
         id: i.id,
@@ -219,11 +243,24 @@ export class BusinessRewardService {
         status: i.status,
         rewardType: i.rewardType,
         value: i.value,
-        code: i.code,
+        code: failed ? null : i.code,
         quantity: i.quantity,
         expiresAt: i.expiresAt?.toISOString() ?? null,
         redeemedAt: i.redeemedAt?.toISOString() ?? null,
         revokedAt: i.revokedAt?.toISOString() ?? null,
+        fulfilmentProvider: i.fulfilmentProvider,
+        fulfilmentKind: i.fulfilmentKind,
+        fulfilmentLabel: i.fulfilmentKind
+          ? fulfilmentKindLabel(i.fulfilmentKind)
+          : null,
+        fulfilmentStatus: i.fulfilmentStatus,
+        fulfilmentCode: failed ? null : i.fulfilmentCode,
+        businessId: i.businessId,
+        businessName: i.businessName,
+        deepLink: i.deepLink,
+        centralReference: i.centralReference,
+        scope: i.scope,
+        instructions: i.instructions,
         campaignId: campaignId ?? null,
         campaignTitle: campaign?.title ?? null,
         campaignImage:
@@ -257,8 +294,14 @@ export class BusinessRewardService {
     businessId: string,
     query: ListAvailableRewardsQuery = {},
   ) {
-    const identity = await this.resolveBusinessIdentity(businessId);
-    return this.rewardsClient.listBusinessRewards({
+    const [identity, business] = await Promise.all([
+      this.resolveBusinessIdentity(businessId),
+      this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: { ownerId: true },
+      }),
+    ]);
+    const result = await this.rewardsClient.listBusinessRewards({
       ...identity,
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 20,
@@ -266,6 +309,33 @@ export class BusinessRewardService {
       ...(query.status ? { status: query.status as "active" | "draft" } : {}),
       ...(query.rewardType ? { rewardType: query.rewardType } : {}),
     });
+
+    // Exclusive/high-value catalogue rewards are hidden unless the plan
+    // includes the premium reward library capability.
+    const premiumUnlocked = business
+      ? await this.capabilities.isEnabled(
+          business.ownerId,
+          FEATURES.REWARDS_PREMIUM_LIBRARY,
+        )
+      : false;
+    if (!premiumUnlocked && Array.isArray(result.data)) {
+      const filtered = result.data.filter(
+        (reward) => !this.isPremiumReward(reward),
+      );
+      return {
+        ...result,
+        data: filtered,
+        total: Math.max(0, result.total - (result.data.length - filtered.length)),
+        premiumLocked: true,
+      };
+    }
+    return { ...result, premiumLocked: !premiumUnlocked };
+  }
+
+  /** Heuristic marker used by the MCOM catalogue for vault/premium rewards. */
+  private isPremiumReward(reward: McomBusinessReward): boolean {
+    const marker = `${reward.source ?? ""} ${reward.rewardType ?? ""}`.toLowerCase();
+    return marker.includes("vault") || marker.includes("premium") || marker.includes("exclusive");
   }
 
   /** List the business-owned rewards currently attached to a campaign. */
@@ -298,7 +368,9 @@ export class BusinessRewardService {
   ) {
     const campaign = await this.prisma.businessCampaign.findFirst({
       where: { id: campaignId, businessId },
-      include: { template: { select: { businessRewardsMode: true } } },
+      include: {
+        template: { select: { businessRewardsMode: true, audience: true } },
+      },
     });
     if (!campaign) throw new NotFoundException("Campaign not found");
 
@@ -308,11 +380,56 @@ export class BusinessRewardService {
       );
     }
 
+    const owner = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { ownerId: true },
+    });
+    if (!owner) throw new NotFoundException("Business not found");
+
+    // Attaching rewards is a plan capability with an optional numeric quota
+    // (e.g. 3 attached rewards, or unlimited).
+    await this.capabilities.assertFeature(owner.ownerId, FEATURES.REWARDS_ATTACH);
+    const existingAttachment =
+      await this.prisma.campaignRewardAttachment.findUnique({
+        where: {
+          campaignId_businessRewardId: {
+            campaignId,
+            businessRewardId: dto.businessRewardId,
+          },
+        },
+        select: { id: true },
+      });
+    if (!existingAttachment) {
+      const attachedCount = await this.prisma.campaignRewardAttachment.count({
+        where: { campaignId },
+      });
+      await this.capabilities.assertWithinLimit(
+        owner.ownerId,
+        FEATURES.REWARDS_ATTACH,
+        attachedCount,
+        "attached reward",
+      );
+    }
+
     // Enforce ownership: the reward must belong to this business.
     const reward = await this.fetchOwnedBusinessReward(
       businessId,
       dto.businessRewardId,
     );
+
+    // A consumer-facing campaign may only offer rewards a consumer is actually
+    // eligible for. Central membership/access pass/Central coupons are
+    // business-only and must never be attached to a consumer campaign.
+    if (this.isConsumerFacing(campaign) && !consumerCanWin(reward)) {
+      throw new ForbiddenException(
+        "This campaign is consumer-facing. Central membership, access pass and Central coupon rewards can only be attached to business-facing campaigns.",
+      );
+    }
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
 
     const conditions = dto.conditions ?? [];
     const snapshot = {
@@ -320,6 +437,11 @@ export class BusinessRewardService {
       description: reward.description ?? null,
       image: reward.image ?? null,
       rewardType: reward.rewardType ?? null,
+      fulfilmentProvider: reward.fulfilmentProvider ?? null,
+      fulfilmentKind: reward.fulfilmentKind ?? null,
+      audience: this.audienceForReward(reward),
+      businessId: reward.businessId ?? businessId,
+      businessName: business?.name ?? null,
     };
     const config = {
       conditions: conditions as never,
@@ -367,6 +489,30 @@ export class BusinessRewardService {
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
+
+  /** Whether the campaign's audience is consumers only. */
+  private isConsumerFacing(campaign: {
+    audience: string | null;
+    template: { audience: string } | null;
+  }): boolean {
+    const audience = campaign.audience ?? campaign.template?.audience ?? "BOTH";
+    return String(audience).toUpperCase() === "CONSUMER";
+  }
+
+  /**
+   * Derive the attachment audience from the provider descriptor. We never infer
+   * from the cosmetic reward type.
+   */
+  private audienceForReward(reward: McomBusinessReward): string {
+    if (
+      isCentralFulfilmentKind(reward.fulfilmentKind) ||
+      reward.consumerEligible === false
+    ) {
+      return "business";
+    }
+    if (reward.businessEligible === false) return "consumer";
+    return "both";
+  }
 
   /** The business's MCOM identity (owner's Central id preferred, else email). */
   private async resolveBusinessIdentity(businessId: string): Promise<{

@@ -12,7 +12,6 @@ import {
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
-  ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
@@ -90,6 +89,17 @@ export class SsoController {
   @ApiOperation({ summary: "Re-introspect the current user's entitlement" })
   refreshEntitlement(@CurrentUser("id") userId: string) {
     return this.sso.refreshEntitlement(userId);
+  }
+
+  @Post("refresh-profile")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Re-read the current user's identity from Central Hub",
+  })
+  refreshProfile(@CurrentUser("id") userId: string) {
+    return this.sso.refreshProfile(userId);
   }
 
   @Post("logout")

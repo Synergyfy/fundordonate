@@ -48,6 +48,8 @@ export const PledgeCheckoutPage = lazy(() => import("@/pages/PledgeCheckoutPage"
 
 export const TerminalDonationPage = lazy(() => import("@/pages/TerminalDonationPage"));
 export const MembershipPurchasePage = lazy(() => import("@/pages/MembershipPurchasePage"));
+export const PlansPage = lazy(() => import("@/pages/plans/PlansPage"));
+export const PlanReturnPage = lazy(() => import("@/pages/plans/PlanReturnPage"));
 export const ContributorProfilePage = lazy(() => import("@/pages/ContributorProfilePage"));
 
 // =============================================================================
@@ -156,6 +158,9 @@ export const BackerDashboardPage = lazy(() => import("@/pages/BackerDashboardPag
 export const FoundingMemberDashboardPage = lazy(() => import("@/pages/FoundingMemberDashboardPage"));
 export const AdminFoundingMembersPage = lazy(() => import("@/pages/admin/AdminFoundingMembersPage"));
 export const AdminMembershipPage = lazy(() => import("@/pages/admin/AdminMembershipPage"));
+export const AdminPlansPage = lazy(() => import("@/pages/admin/AdminPlansPage").then(m => ({ default: m.AdminPlansPage })));
+export const AdminPlanFormPage = lazy(() => import("@/pages/admin/plans/PlanFormPage"));
+export const AdminAccessPassFormPage = lazy(() => import("@/pages/admin/plans/AccessPassFormPage"));
 export const BusinessOnboardingPage = lazy(() => import("@/pages/BusinessOnboardingPage"));
 export const AdminBusinessOwnerDetailPage = lazy(() => import("@/pages/admin/AdminBusinessOwnerDetailPage"));
 export const MyBusinessPage = lazy(() => import("@/pages/MyBusinessPage"));
@@ -175,6 +180,7 @@ export const BusinessOwnerRewardsPage = lazy(() => import("@/pages/business-owne
 export const BusinessOwnerSettingsPage = lazy(() => import("@/pages/business-owner/BusinessOwnerSettingsPage"));
 export const BusinessCampaignCentrePage = lazy(() => import("@/pages/business-owner/BusinessCampaignCentrePage"));
 export const BusinessCampaignSetupPage = lazy(() => import("@/pages/business-owner/CampaignSetupPage"));
+export const BusinessPlanPage = lazy(() => import("@/pages/business-owner/BusinessPlanPage"));
 export const BusinessMyCampaignDetailPage = lazy(() => import("@/pages/business-owner/MyCampaignDetailPage"));
 
 export const FoundingMembersPage = lazy(() => import("@/pages/admin/AdminFoundingMembersPage"));

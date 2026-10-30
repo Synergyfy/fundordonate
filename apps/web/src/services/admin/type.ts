@@ -428,6 +428,8 @@ export interface AdminCampaignTemplate {
   selfFundingAmount: number;
   selfFundingRewardName?: string | null;
   businessRewardsMode?: string;
+  isPremium?: boolean;
+  requiredFeature?: string | null;
   fieldsConfig: any[];
   rewardsConfig: any[];
   mcomAssetsConfig: any[];
@@ -485,6 +487,13 @@ export interface McomCatalogueReward {
   quantity: number;
   expiresAt: string | null;
   updatedAt: string | null;
+  // ── Fulfilment descriptor (provider-dependent; may be absent) ────────────
+  fulfilmentProvider?: "MALL" | "CENTRAL" | string | null;
+  fulfilmentKind?: string | null;
+  fulfilmentConfig?: Record<string, unknown> | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
+  deepLink?: string | null;
 }
 
 export interface McomRewardCataloguePage {
@@ -513,6 +522,8 @@ export interface CreateCampaignTemplatePayload {
   selfFundingAmount?: number;
   selfFundingRewardName?: string;
   businessRewardsMode?: string;
+  isPremium?: boolean;
+  requiredFeature?: string | null;
   fieldsConfig?: any[];
   rewardsConfig?: any[];
   mcomAssetsConfig?: any[];
@@ -754,7 +765,14 @@ export interface AdminFulfilment {
   rewardId: string;
   userId?: string | null;
   businessId?: string | null;
+  campaignId?: string | null;
+  campaignTitle?: string | null;
   status: string;
+  retryPending?: boolean;
+  isDigital?: boolean;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  fulfilmentError?: string | null;
   recipientName?: string | null;
   recipientEmail?: string | null;
   shippingAddress?: Record<string, any> | null;

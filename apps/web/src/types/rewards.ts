@@ -152,6 +152,78 @@ export type RewardCategory =
 export type RewardAudience = "business" | "consumer" | "both";
 export type RewardSource = "mcom" | "fundordonate";
 
+/** Provider fulfilment descriptors. Never infer these from the reward type. */
+export type RewardFulfilmentProvider = "MALL" | "CENTRAL";
+export type RewardFulfilmentKind =
+  | "MALL_GIFT_CARD"
+  | "MALL_VOUCHER"
+  | "MALL_COUPON"
+  | "MALL_DISCOUNT"
+  | "CENTRAL_MEMBERSHIP"
+  | "CENTRAL_ACCESS_PASS"
+  | "CENTRAL_COUPON"
+  | string;
+
+export const CENTRAL_ONLY_FULFILMENT_KINDS = [
+  "CENTRAL_MEMBERSHIP",
+  "CENTRAL_ACCESS_PASS",
+  "CENTRAL_COUPON",
+] as const;
+
+export function isCentralFulfilmentKind(kind?: string | null): boolean {
+  return !!kind && CENTRAL_ONLY_FULFILMENT_KINDS.includes(kind.toUpperCase() as never);
+}
+
+export function fulfilmentKindLabel(kind?: string | null): string {
+  switch ((kind ?? "").toUpperCase()) {
+    case "MALL_GIFT_CARD":
+      return "Mall gift card";
+    case "MALL_VOUCHER":
+      return "Mall voucher";
+    case "MALL_COUPON":
+      return "Mall coupon";
+    case "MALL_DISCOUNT":
+      return "Mall discount";
+    case "CENTRAL_MEMBERSHIP":
+      return "MCOM membership";
+    case "CENTRAL_ACCESS_PASS":
+      return "MCOM access pass";
+    case "CENTRAL_COUPON":
+      return "MCOM Central coupon";
+    default:
+      return "Reward";
+  }
+}
+
+export function fulfilmentSummary(kind?: string | null): string {
+  switch ((kind ?? "").toUpperCase()) {
+    case "MALL_GIFT_CARD":
+      return "Spend this gift card on MCOM Mall.";
+    case "MALL_VOUCHER":
+      return "Use this voucher at MCOM Mall checkout.";
+    case "MALL_COUPON":
+      return "Use this coupon at MCOM Mall checkout.";
+    case "MALL_DISCOUNT":
+      return "Applied automatically at MCOM Mall checkout.";
+    case "CENTRAL_MEMBERSHIP":
+      return "Your MCOM membership will be activated.";
+    case "CENTRAL_ACCESS_PASS":
+      return "Redeem this access pass in MCOM Central.";
+    case "CENTRAL_COUPON":
+      return "Use this coupon in MCOM Central (not valid on Mall).";
+    default:
+      return "Reward issued by MCOM Rewards.";
+  }
+}
+
+export interface RewardInstructions {
+  headline: string;
+  body: string;
+  code?: string | null;
+  links: { label: string; url: string }[];
+  note?: string | null;
+}
+
 export type DeliveryMethod =
   | "digital_delivery"
   | "voucher_code"
@@ -180,6 +252,11 @@ export interface LibraryReward {
    * of the platform.
    */
   mcomSource?: string | null;
+  /** Provider fulfilment descriptor (MALL vs CENTRAL). */
+  fulfilmentProvider?: RewardFulfilmentProvider | string | null;
+  fulfilmentKind?: RewardFulfilmentKind | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
 }
 
 export const REWARD_CATEGORY_META: Record<RewardCategory, { label: string; color: string }> = {
@@ -268,6 +345,49 @@ export type IssuedRewardStatus =
   | "REVOKED"
   | "FAILED";
 
+export type IssuedRewardDeliveryState =
+  | "available"
+  | "processing"
+  | "failed"
+  | "redeemed"
+  | "expired"
+  | "revoked";
+
+/**
+ * Single source of truth for whether an issuance is deliverable.
+ *
+ * The issuance `status` and the provider `fulfilmentStatus` can disagree (for
+ * example `ISSUED` + `FAILED`), so both must be considered. Only
+ * `DELIVERED`/`NOT_REQUIRED` (or legacy rows with no fulfilment status) count
+ * as available.
+ */
+export function issuedRewardDeliveryState(
+  reward: Pick<IssuedReward, "status" | "fulfilmentStatus">,
+): IssuedRewardDeliveryState {
+  const status = (reward.status ?? "").toUpperCase();
+  if (status === "REDEEMED") return "redeemed";
+  if (status === "EXPIRED") return "expired";
+  if (status === "REVOKED") return "revoked";
+
+  const fulfilment = (reward.fulfilmentStatus ?? "").toUpperCase();
+  if (status === "FAILED" || fulfilment === "FAILED") return "failed";
+  if (
+    status === "PENDING" ||
+    fulfilment === "PENDING" ||
+    fulfilment === "PENDING_IDENTITY" ||
+    fulfilment === "PENDING_CONFLICT"
+  ) {
+    return "processing";
+  }
+  return "available";
+}
+
+export function issuedRewardIsRedeemable(
+  reward: Pick<IssuedReward, "status" | "fulfilmentStatus">,
+): boolean {
+  return issuedRewardDeliveryState(reward) === "available";
+}
+
 export interface IssuedReward {
   id: string;
   externalIssuanceId: string;
@@ -284,6 +404,23 @@ export interface IssuedReward {
   quantity: number;
   /** Reason metadata for FAILED issuances (needsActivation / businessNotEntitled / failureReason). */
   metadata?: Record<string, unknown> | null;
+  // ── Provider fulfilment mirror ──────────────────────────────────────────
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  fulfilmentLabel?: string | null;
+  fulfilmentSummary?: string | null;
+  fulfilmentStatus?: string | null;
+  fulfilmentRef?: string | null;
+  fulfilmentCode?: string | null;
+  fulfilmentError?: string | null;
+  centralReference?: string | null;
+  deepLink?: string | null;
+  businessId?: string | null;
+  businessName?: string | null;
+  scope?: unknown;
+  /** Persisted how-to-use panel (do not recompute in the UI). */
+  instructions?: RewardInstructions | null;
+  fulfilledAt?: string | null;
   expiresAt: string | null;
   redeemedAt: string | null;
   revokedAt: string | null;
@@ -303,6 +440,15 @@ export function issuedRewardGuidance(
   if (meta.businessNotEntitled) {
     return "This reward is temporarily unavailable — the campaign owner needs an active MCOM Rewards plan.";
   }
+  if (meta.ineligibleAudience) {
+    return "This reward is not available for your account type. Central membership, access passes and Central coupons are business-only.";
+  }
+  if (meta.outOfStock) {
+    return "This reward has sold out at the provider. No further codes are available.";
+  }
+  if (meta.invalidRewardConfig) {
+    return "The campaign's reward configuration is out of date. The campaign owner needs to update it.";
+  }
   return "We couldn't issue this reward automatically. Our team has been notified.";
 }
 
@@ -319,7 +465,16 @@ export interface RewardItem {
   quantityClaimed?: number;
   claimDeadlineDays?: number;
   fulfilmentType?: string;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean;
+  businessEligible?: boolean;
+  quantityRemaining?: number | null;
+  soldOut?: boolean;
   rewardType?: string;
+  /** Monetary value of the reward, in GBP (not pence). */
+  valueGbp?: number | null;
+  source?: string;
   items?: { title: string; physicalType?: string }[];
 }
 

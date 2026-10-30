@@ -12,6 +12,8 @@ import { ContributionQueryDto } from "../dto/contribution-query.dto";
 import { SelfFundDto } from "../dto/self-fund.dto";
 import { RewardIssueQueueService } from "@/modules/rewards/services/reward-issue-queue.service";
 import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
 
 @Injectable()
 export class BusinessContributionService {
@@ -19,7 +21,16 @@ export class BusinessContributionService {
     private readonly prisma: PrismaService,
     private readonly rewardIssuanceQueue: RewardIssueQueueService,
     private readonly eligibility: TemplateEligibilityService,
+    private readonly capabilities: CapabilityService,
   ) {}
+
+  private async ownerIdFor(businessId: string): Promise<string | null> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { ownerId: true },
+    });
+    return business?.ownerId ?? null;
+  }
 
   /**
    * Retrieves paginated contribution ledger and overall summary totals for the business.
@@ -37,6 +48,20 @@ export class BusinessContributionService {
     page: number;
     limit: number;
   }> {
+    const ownerId = await this.ownerIdFor(businessId);
+    if (ownerId) {
+      await this.capabilities.assertFeature(
+        ownerId,
+        FEATURES.CONTRIBUTIONS_LEDGER,
+      );
+      if (query.type || query.startDate || query.endDate) {
+        await this.capabilities.assertFeature(
+          ownerId,
+          FEATURES.CONTRIBUTIONS_FILTERS,
+        );
+      }
+    }
+
     const where: any = {
       businessId,
       status: ContributionStatus.COMPLETED,

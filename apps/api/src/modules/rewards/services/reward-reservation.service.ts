@@ -25,6 +25,10 @@ export interface ReserveBase {
   rewardTitle?: string | null;
   quantity?: number;
   metadata?: Record<string, unknown>;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  businessId?: string | null;
+  businessName?: string | null;
 }
 
 export interface ReserveParams {
@@ -114,6 +118,12 @@ export class RewardReservationService {
         recipientName: base.recipientName ?? existing?.recipientName ?? null,
         rewardTitle: base.rewardTitle ?? existing?.rewardTitle ?? null,
         metadata: (base.metadata ?? undefined) as never,
+        fulfilmentProvider:
+          base.fulfilmentProvider ?? existing?.fulfilmentProvider ?? null,
+        fulfilmentKind:
+          base.fulfilmentKind ?? existing?.fulfilmentKind ?? null,
+        businessId: base.businessId ?? existing?.businessId ?? null,
+        businessName: base.businessName ?? existing?.businessName ?? null,
       };
 
       // Re-attempt a FAILED row in place (keeps the same idempotency key).

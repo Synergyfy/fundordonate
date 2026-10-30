@@ -3,6 +3,8 @@ import { PrismaService } from "@/prisma/prisma.service";
 import { BusinessCampaignStatus, ContributionStatus } from "@prisma/client";
 import { BusinessLeaderboardService } from "./business-leaderboard.service";
 import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
 
 export interface DashboardOverviewResponse {
   stats: {
@@ -35,6 +37,7 @@ export class BusinessDashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly leaderboardService: BusinessLeaderboardService,
+    private readonly capabilities: CapabilityService,
   ) {}
 
   /**
@@ -55,6 +58,11 @@ export class BusinessDashboardService {
     if (!business) {
       throw new NotFoundException("Business not found");
     }
+
+    await this.capabilities.assertFeature(
+      business.owner.id,
+      FEATURES.ANALYTICS_INSIGHTS,
+    );
 
     // Execute queries in parallel at database engine level
     const [

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { seasonApi } from "@/services/season";
+import { usePlanCapabilities } from "@/hooks/usePlanCapabilities";
 import {
   User, Building, MapPin, Tag, Image, Settings, CheckCircle, ArrowRight,
   ArrowLeft, ChevronRight, Calendar, Award, FileText, Target,
@@ -96,6 +97,8 @@ const OWNER_ROLES = [
 ];
 
 export default function BusinessOwnerOnboardingPage() {
+  const plan = usePlanCapabilities();
+  const canEnhanceProfile = plan.can("profile.enhanced");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const citySlug = searchParams.get("city") || "manchester";
@@ -467,13 +470,20 @@ export default function BusinessOwnerOnboardingPage() {
               <p className="text-sm text-gray-500 mb-6">Add images and social links to complete your profile.</p>
 
               <div className="space-y-4">
+                {!canEnhanceProfile && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Enhanced profile images (logo and cover) are not included in
+                    your current plan. You can add them after upgrading.
+                  </p>
+                )}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Logo URL</label>
                   <input
                     type="url"
                     value={data.logoUrl}
                     onChange={(e) => updateData({ logoUrl: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    disabled={!canEnhanceProfile}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="https://example.com/logo.png"
                   />
                 </div>
@@ -484,7 +494,8 @@ export default function BusinessOwnerOnboardingPage() {
                     type="url"
                     value={data.coverImageUrl}
                     onChange={(e) => updateData({ coverImageUrl: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    disabled={!canEnhanceProfile}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="https://example.com/cover.jpg"
                   />
                 </div>

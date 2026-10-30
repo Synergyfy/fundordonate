@@ -116,6 +116,13 @@ export interface WizardReward {
   description?: string;
   order?: number;
   audience?: string;
+  source?: string;
+  mcomRewardId?: string | null;
+  mcomSource?: string | null;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
   triggerType?: string;
   triggerConfig?: WizardRewardTriggerConfig;
   quantityType?: "unlimited" | "limited";
@@ -199,7 +206,13 @@ export interface StoredCampaignRewardConfig {
   name: string;
   description?: string;
   rule?: string;
-  source: "fundordonate";
+  source: "fundordonate" | "mcom";
+  mcomRewardId?: string | null;
+  mcomSource?: string | null;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
   order: number;
   audience?: string;
   qualificationMode?: string;
@@ -258,6 +271,13 @@ function asNumber(value: unknown): number | undefined {
     const parsed = Number(value.replace(/[^0-9.-]/g, ""));
     return Number.isFinite(parsed) ? parsed : undefined;
   }
+  return undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
   return undefined;
 }
 
@@ -348,9 +368,6 @@ function normaliseReward(
   const items = Array.isArray(reward.items)
     ? (reward.items.filter((item) => item && typeof item === "object") as WizardRewardItem[])
     : [];
-  if (strict && items.length === 0) {
-    throw new BadRequestException(`Rewards[${index}]: add at least one reward item`);
-  }
 
   const trigger = asObject(reward.triggerConfig);
   const mode = asString(trigger.mode) ?? "min";
@@ -391,11 +408,39 @@ function normaliseReward(
     });
   }
 
+  const mcomRewardId = asString(reward.mcomRewardId);
+  const declaredSource = asString(reward.source);
+  if (strict && declaredSource === "mcom" && !mcomRewardId) {
+    throw new BadRequestException(
+      `Rewards[${index}]: select an MCOM Rewards reward (mcomRewardId is required)`,
+    );
+  }
+  const source: "fundordonate" | "mcom" =
+    mcomRewardId || declaredSource === "mcom" ? "mcom" : "fundordonate";
+  if (strict && source !== "mcom") {
+    throw new BadRequestException(
+      `Rewards[${index}]: campaign rewards must come from MCOM Rewards (select a reward from the mcom vault catalogue)`,
+    );
+  }
+  const mcomSource =
+    asString(reward.mcomSource) ?? (source === "mcom" ? "mcom vault" : undefined);
+  if (strict && source === "mcom" && mcomSource?.toLowerCase() !== "mcom vault") {
+    throw new BadRequestException(
+      `Rewards[${index}]: admin campaign rewards must use the "mcom vault" source`,
+    );
+  }
+
   return {
     id: asString(reward.id) ?? `reward-${index + 1}`,
     name: title,
     description: asString(reward.description),
-    source: "fundordonate",
+    source,
+    mcomRewardId: mcomRewardId ?? null,
+    mcomSource: mcomSource ?? null,
+    fulfilmentProvider: asString(reward.fulfilmentProvider)?.toUpperCase(),
+    fulfilmentKind: asString(reward.fulfilmentKind)?.toUpperCase(),
+    consumerEligible: asBoolean(reward.consumerEligible),
+    businessEligible: asBoolean(reward.businessEligible),
     order: asNumber(reward.order) ?? index,
     audience: asString(reward.audience),
     qualificationMode,

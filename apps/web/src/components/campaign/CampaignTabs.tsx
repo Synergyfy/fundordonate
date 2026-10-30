@@ -2,8 +2,14 @@ import { useState } from "react";
 import { PostList } from "./PostList";
 import { PostComposer } from "./PostComposer";
 import { Leaderboard } from "./Leaderboard";
-import { Gift, Clock, CheckCircle } from "lucide-react";
-import type { RewardItem } from "@/types/rewards";
+import { Gift, Clock, CheckCircle, Tag, Info } from "lucide-react";
+import {
+  REWARD_CATEGORY_META,
+  fulfilmentKindLabel,
+  fulfilmentSummary,
+  type RewardCategory,
+  type RewardItem,
+} from "@/types/rewards";
 
 interface Faq {
   question: string;
@@ -49,6 +55,62 @@ function getTriggerLabel(reward: RewardItem): string {
       return `Contribute exactly ${formatCurrency(tc.exact ?? 0)}`;
     default:
       return "Any contribution";
+  }
+}
+
+/** Reward categories stored by the wizard use `snake_case`; MCOM may send `"gift card"`. */
+const REWARD_TYPE_ALIASES: Record<string, RewardCategory> = {
+  "gift card": "gift_card",
+  "gift-card": "gift_card",
+  giftcard: "gift_card",
+  "e-gift card": "egift_card",
+  "e gift card": "egift_card",
+  egift: "egift_card",
+  ecard: "egift_card",
+  "e-card": "egift_card",
+  discount: "deal",
+  membership_access: "membership",
+  access: "membership",
+};
+
+function getRewardTypeMeta(reward: RewardItem): { label: string; color: string } | null {
+  const raw = (reward.rewardType ?? "").trim().toLowerCase();
+  const normalized = raw.replace(/[\s-]+/g, "_");
+  const category = (Object.prototype.hasOwnProperty.call(REWARD_CATEGORY_META, normalized)
+    ? normalized
+    : REWARD_TYPE_ALIASES[raw]) as RewardCategory | undefined;
+
+  if (category && REWARD_CATEGORY_META[category]) {
+    return REWARD_CATEGORY_META[category];
+  }
+
+  // Fall back to the provider fulfilment descriptor when no category is set.
+  const kindLabel = fulfilmentKindLabel(reward.fulfilmentKind);
+  if (kindLabel !== "Reward") {
+    return { label: kindLabel, color: "bg-teal-100 text-teal-700" };
+  }
+
+  return null;
+}
+
+/** `valueGbp` is stored in pounds (not pence). */
+function formatRewardValue(value: number): string {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value);
+}
+
+function physicalTypeLabel(physicalType?: string): string | null {
+  if (!physicalType) return null;
+  switch (physicalType.toLowerCase()) {
+    case "physical":
+      return "Physical";
+    case "digital":
+      return "Digital";
+    default:
+      return physicalType.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
   }
 }
 
@@ -126,91 +188,165 @@ export function CampaignTabs({
 
         {/* ═══════════════ REWARDS TAB ═══════════════ */}
         {activeTab === "rewards" && (
-          <div className="space-y-4">
+          <div>
             {rewards.length === 0 ? (
               <p className="text-gray-500 italic">No rewards available for this campaign.</p>
             ) : (
-              rewards
-                .slice()
-                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                .map((reward) => {
-                  const claimed = reward.quantityClaimed ?? 0;
-                  const limit = reward.quantityLimit ?? 0;
-                  const isSoldOut = reward.quantityType === "limited" &&
-                    reward.quantityLimit !== null &&
-                    reward.quantityLimit !== undefined &&
-                    claimed >= limit;
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {rewards
+                  .slice()
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map((reward) => {
+                    const claimed = reward.quantityClaimed ?? 0;
+                    const isLimited =
+                      reward.quantityType === "limited" &&
+                      reward.quantityLimit !== null &&
+                      reward.quantityLimit !== undefined;
+                    const limit = reward.quantityLimit ?? 0;
+                    const isSoldOut =
+                      Boolean(reward.soldOut) || (isLimited && claimed >= limit);
 
-                  return (
-                    <div key={reward.id} className={`rounded-xl border p-5 ${isSoldOut ? "border-gray-200 bg-gray-50 opacity-60" : "border-gray-200"}`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Gift className="h-4 w-4 text-primary-600" />
-                            <h4 className="text-lg font-bold text-gray-900">{reward.title}</h4>
+                    const typeMeta = getRewardTypeMeta(reward);
+                    const valueLabel =
+                      reward.valueGbp !== null &&
+                      reward.valueGbp !== undefined &&
+                      Number.isFinite(reward.valueGbp) &&
+                      reward.valueGbp > 0
+                        ? formatRewardValue(reward.valueGbp)
+                        : null;
+                    const fulfilmentNote = reward.fulfilmentKind
+                      ? fulfilmentSummary(reward.fulfilmentKind)
+                      : null;
+                    const items = reward.items ?? [];
+                    const hasDetails =
+                      items.length > 0 || Boolean(valueLabel) || Boolean(fulfilmentNote);
+                    const showTypeOnly = !hasDetails && Boolean(typeMeta);
+
+                    return (
+                      <article
+                        key={reward.id}
+                        className={`flex h-full flex-col rounded-xl border bg-white p-5 ${
+                          isSoldOut ? "border-gray-200 bg-gray-50 opacity-60" : "border-gray-200"
+                        }`}
+                      >
+                        {/* Type + availability */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {typeMeta && (
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${typeMeta.color}`}
+                              >
+                                {typeMeta.label}
+                              </span>
+                            )}
                             {isSoldOut && (
                               <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
                                 Sold Out
                               </span>
                             )}
                           </div>
-                          {/* Trigger Label */}
-                          <p className="mt-1 text-sm font-semibold text-primary-600">
-                            {getTriggerLabel(reward)}
+                          {isLimited && (
+                            <span className="whitespace-nowrap rounded-full bg-yellow-100 px-2.5 py-1 text-[11px] font-medium text-yellow-700">
+                              {claimed}/{limit} claimed
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex items-start gap-2">
+                          <Gift className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary-600" />
+                          <h4 className="text-base font-bold leading-snug text-gray-900">
+                            {reward.title}
+                          </h4>
+                        </div>
+
+                        <p className="mt-1 text-sm font-semibold text-primary-600">
+                          {getTriggerLabel(reward)}
+                        </p>
+
+                        {reward.description && (
+                          <p className="mt-2 whitespace-pre-line text-sm text-gray-600">
+                            {reward.description}
                           </p>
+                        )}
+
+                        {(hasDetails || showTypeOnly) && (
+                          <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                              What you get
+                            </p>
+                            <ul className="mt-2 space-y-1.5">
+                              {showTypeOnly && typeMeta && (
+                                <li className="flex items-start gap-2 text-sm text-gray-700">
+                                  <Gift className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-600" />
+                                  <span>{typeMeta.label}</span>
+                                </li>
+                              )}
+                              {items.map((item, i) => {
+                                const physicalType = physicalTypeLabel(item.physicalType);
+                                return (
+                                  <li
+                                    key={i}
+                                    className="flex items-start gap-2 text-sm text-gray-700"
+                                  >
+                                    <CheckCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-green-500" />
+                                    <span>
+                                      {item.title}
+                                      {physicalType && (
+                                        <span className="ml-1 text-[10px] uppercase text-gray-400">
+                                          ({physicalType})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                              {valueLabel && (
+                                <li className="flex items-start gap-2 text-sm text-gray-700">
+                                  <Tag className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-600" />
+                                  <span>{valueLabel} reward value</span>
+                                </li>
+                              )}
+                              {fulfilmentNote && (
+                                <li className="flex items-start gap-2 text-sm text-gray-700">
+                                  <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-600" />
+                                  <span>{fulfilmentNote}</span>
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="mt-auto pt-3">
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-400">
+                            {Boolean(reward.claimDeadlineDays && reward.claimDeadlineDays > 0) && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Claim within {reward.claimDeadlineDays} days
+                              </span>
+                            )}
+                            {reward.audience && reward.audience !== "both" && (
+                              <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold text-pink-700">
+                                {reward.audience === "business"
+                                  ? "Business Only"
+                                  : "Consumer Only"}
+                              </span>
+                            )}
+                          </div>
+
+                          {!isSoldOut && canContribute && onSelectReward && (
+                            <button
+                              type="button"
+                              onClick={() => onSelectReward(reward.id)}
+                              className="btn-primary mt-3 w-full"
+                            >
+                              Select This Reward
+                            </button>
+                          )}
                         </div>
-                        {reward.quantityType === "limited" && reward.quantityLimit !== null && reward.quantityLimit !== undefined && (
-                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700">
-                            {claimed}/{limit} claimed
-                          </span>
-                        )}
-                      </div>
-
-                      {reward.description && (
-                        <p className="mt-3 text-sm text-gray-600">{reward.description}</p>
-                      )}
-
-                      {reward.items && reward.items.length > 0 && (
-                        <div className="mt-4 border-t border-gray-100 pt-3">
-                          <p className="text-xs font-bold text-gray-500 uppercase mb-2">Includes</p>
-                          <ul className="space-y-1">
-                            {reward.items.map((item, i) => (
-                              <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
-                                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                                <span>{item.title}</span>
-                                <span className="text-[10px] text-gray-400 uppercase">({item.physicalType})</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex items-center gap-3 text-[11px] text-gray-400">
-                        {Boolean(reward.claimDeadlineDays && reward.claimDeadlineDays > 0) && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Claim within {reward.claimDeadlineDays} days
-                          </span>
-                        )}
-                        {reward.audience !== "both" && (
-                          <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold text-pink-700">
-                            {reward.audience === "business" ? "Business Only" : "Consumer Only"}
-                          </span>
-                        )}
-                      </div>
-
-                      {!isSoldOut && canContribute && onSelectReward && (
-                        <button
-                          type="button"
-                          onClick={() => onSelectReward(reward.id)}
-                          className="btn-primary mt-4 w-full"
-                        >
-                          Select This Reward
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
+                      </article>
+                    );
+                  })}
+              </div>
             )}
           </div>
         )}

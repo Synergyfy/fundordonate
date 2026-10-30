@@ -28,6 +28,7 @@ import {
   getCampaignWizardSettings,
 } from "@/modules/campaigns/campaign-wizard-settings";
 import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
+import { PlanEntitlementService } from "@/modules/plans/services/plan-entitlement.service";
 
 /**
  * Placeholder MCOM ids written by an older auto-link routine (`mcom_<localId>`)
@@ -51,6 +52,7 @@ export class PaymentsService {
     private readonly rewardRevokeQueue: RewardRevokeQueueService,
     private readonly config: ConfigService,
     private readonly eligibility: TemplateEligibilityService,
+    private readonly planEntitlements: PlanEntitlementService,
   ) {}
 
   /**
@@ -430,6 +432,17 @@ export class PaymentsService {
     }
 
     this.logger.log(`Received MCOM webhook event: ${payload.event} for charge ${payload.data.chargeId}`);
+
+    // Membership / access-pass orders are settled by the plans module. It is
+    // idempotent and returns handled=false when the reference is not a plan.
+    const planEvent = await this.planEntitlements.handleChargeEvent({
+      chargeId: payload.data.chargeId,
+      reference: payload.data.reference,
+      status: payload.event === "payment.refunded" ? "refunded" : "paid",
+    });
+    if (planEvent.handled) {
+      return { received: true };
+    }
 
     if (payload.event === "payment.succeeded") {
       const chargeData = payload.data;

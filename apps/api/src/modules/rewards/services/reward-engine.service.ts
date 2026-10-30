@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { RewardIssuance } from "@prisma/client";
 import { PrismaService } from "@/prisma/prisma.service";
 import {
@@ -11,8 +12,25 @@ import {
   RewardReservationService,
   type ReserveBase,
 } from "./reward-reservation.service";
+import {
+  buildRewardInstructions,
+  extractIssuanceFulfilment,
+  rewardWebUrls,
+} from "../reward-fulfilment.util";
 
-export interface IssueRewardInput {
+/** Provider fulfilment descriptor passed through the issuance pipeline. */
+export interface FulfilmentContextInput {
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  /** consumer | business | both — used for eligibility, not persistence. */
+  audience?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
+  businessId?: string | null;
+  businessName?: string | null;
+}
+
+export interface IssueRewardInput extends FulfilmentContextInput {
   mcomRewardId: string;
   recipient: { email?: string; mcomUserId?: string; name?: string };
   /**
@@ -55,7 +73,7 @@ export interface IssueLocalRewardInput {
  * entitlement + stock — is derived by the provider from the reward id, so no
  * `business` field is sent.
  */
-export interface IssueBusinessRewardInput {
+export interface IssueBusinessRewardInput extends FulfilmentContextInput {
   /** MCOM business-reward id (from `/partner/business-rewards`). */
   businessRewardId: string;
   rewardTitle?: string;
@@ -78,7 +96,7 @@ export interface IssueBusinessRewardInput {
  * platform sponsor from the app-level token (scope `rewards:gift`). The
  * recipient must resolve to an existing MCOM participant account.
  */
-export interface IssuePlatformGiftInput {
+export interface IssuePlatformGiftInput extends FulfilmentContextInput {
   /** MCOM catalogue reward id (an admin/MCOM-created "mcom vault" reward). */
   mcomRewardId: string;
   rewardTitle?: string;
@@ -96,7 +114,7 @@ export interface IssuePlatformGiftInput {
 }
 
 /** The subset of an issuance input needed to record a failure / settle a row. */
-interface IssueRecord {
+interface IssueRecord extends FulfilmentContextInput {
   mcomRewardId: string;
   businessRewardId?: string | null;
   rewardTitle?: string | null;
@@ -126,6 +144,7 @@ export class RewardEngineService {
     private readonly rewardsClient: RewardsClient,
     private readonly prisma: PrismaService,
     private readonly reservation: RewardReservationService,
+    private readonly config: ConfigService,
   ) {}
 
   buildIdempotencyKey(input: {
@@ -183,7 +202,7 @@ export class RewardEngineService {
 
       const issuance = await this.rewardsClient.issueReward(input.mcomRewardId, {
         business,
-        recipient: input.recipient,
+        recipient: this.providerRecipient(input.recipient),
         quantity: input.quantity ?? 1,
         idempotencyKey,
         externalRef: input.campaignId,
@@ -254,6 +273,10 @@ export class RewardEngineService {
         rewardTitle: input.rewardTitle ?? null,
         quantity: input.quantity,
         metadata: input.metadata,
+        fulfilmentProvider: input.fulfilmentProvider ?? null,
+        fulfilmentKind: input.fulfilmentKind ?? null,
+        businessId: input.businessId ?? null,
+        businessName: input.businessName ?? null,
       },
     });
 
@@ -264,7 +287,7 @@ export class RewardEngineService {
       const issuance = await this.rewardsClient.issueBusinessReward(
         input.businessRewardId,
         {
-          recipient: input.recipient,
+          recipient: this.providerRecipient(input.recipient),
           quantity: input.quantity ?? 1,
           idempotencyKey,
           externalRef: input.campaignId,
@@ -281,6 +304,10 @@ export class RewardEngineService {
         quantity: input.quantity,
         metadata: input.metadata,
         rewardTitle: input.rewardTitle ?? null,
+        fulfilmentProvider: input.fulfilmentProvider,
+        fulfilmentKind: input.fulfilmentKind,
+        businessId: input.businessId,
+        businessName: input.businessName,
       });
     } catch (err) {
       if (err instanceof McomRewardsError && !err.retryable) {
@@ -296,6 +323,10 @@ export class RewardEngineService {
             rewardConfigId: input.rewardConfigId,
             quantity: input.quantity,
             metadata: input.metadata,
+            fulfilmentProvider: input.fulfilmentProvider,
+            fulfilmentKind: input.fulfilmentKind,
+            businessId: input.businessId,
+            businessName: input.businessName,
           },
           idempotencyKey,
           err,
@@ -353,6 +384,10 @@ export class RewardEngineService {
         rewardTitle: input.rewardTitle ?? null,
         quantity: input.quantity,
         metadata: input.metadata,
+        fulfilmentProvider: input.fulfilmentProvider ?? null,
+        fulfilmentKind: input.fulfilmentKind ?? null,
+        businessId: input.businessId ?? null,
+        businessName: input.businessName ?? null,
       },
     });
 
@@ -361,7 +396,7 @@ export class RewardEngineService {
 
     try {
       const issuance = await this.rewardsClient.giftReward(input.mcomRewardId, {
-        recipient: input.recipient,
+        recipient: this.providerRecipient(input.recipient),
         quantity: input.quantity ?? 1,
         idempotencyKey,
         externalRef: input.campaignId,
@@ -378,6 +413,10 @@ export class RewardEngineService {
         quantity: input.quantity,
         metadata: input.metadata,
         rewardTitle: input.rewardTitle ?? null,
+        fulfilmentProvider: input.fulfilmentProvider,
+        fulfilmentKind: input.fulfilmentKind,
+        businessId: input.businessId,
+        businessName: input.businessName,
       });
     } catch (err) {
       if (err instanceof McomRewardsError && !err.retryable) {
@@ -392,6 +431,10 @@ export class RewardEngineService {
             rewardConfigId: input.rewardConfigId,
             quantity: input.quantity,
             metadata: input.metadata,
+            fulfilmentProvider: input.fulfilmentProvider,
+            fulfilmentKind: input.fulfilmentKind,
+            businessId: input.businessId,
+            businessName: input.businessName,
           },
           idempotencyKey,
           err,
@@ -477,6 +520,23 @@ export class RewardEngineService {
     }
   }
 
+  /**
+   * Only send the three recipient fields the provider contract accepts. The
+   * trigger engine carries internal hints (`userId`, `isBusiness`) that must
+   * never leak into the provider request body.
+   */
+  private providerRecipient(recipient: {
+    email?: string;
+    mcomUserId?: string;
+    name?: string;
+  }): { email?: string; mcomUserId?: string; name?: string } {
+    return {
+      ...(recipient.email ? { email: recipient.email } : {}),
+      ...(recipient.mcomUserId ? { mcomUserId: recipient.mcomUserId } : {}),
+      ...(recipient.name ? { name: recipient.name } : {}),
+    };
+  }
+
   private reserveBase(input: IssueRewardInput): ReserveBase {
     return {
       mcomRewardId: input.mcomRewardId,
@@ -492,6 +552,10 @@ export class RewardEngineService {
           : null,
       quantity: input.quantity,
       metadata: input.metadata,
+      fulfilmentProvider: input.fulfilmentProvider ?? null,
+      fulfilmentKind: input.fulfilmentKind ?? null,
+      businessId: input.businessId ?? null,
+      businessName: input.businessName ?? null,
     };
   }
 
@@ -543,10 +607,22 @@ export class RewardEngineService {
       ...(input.metadata ?? {}),
       needsActivation: err.isRecipientUnresolved,
       businessNotEntitled: err.isBusinessNotEntitled,
+      ineligibleAudience: err.isRecipientNotABusiness,
+      outOfStock: err.isOutOfStock,
+      invalidRewardConfig: err.isRewardConfigInvalid,
       httpStatus: err.httpStatus,
       code: err.code,
       failureReason: err.message,
     };
+    const instructions = buildRewardInstructions({
+      fulfilmentProvider: input.fulfilmentProvider,
+      fulfilmentKind: input.fulfilmentKind,
+      fulfilmentStatus: "FAILED",
+      fulfilmentError: err.message,
+      businessId: input.businessId,
+      businessName: input.businessName,
+      ...rewardWebUrls(this.config),
+    });
 
     this.logger.warn(
       `Reward issuance failed (campaign=${input.campaignId ?? "n/a"}, reward=${input.mcomRewardId}) — ` +
@@ -565,6 +641,30 @@ export class RewardEngineService {
         data: {
           status: "FAILED",
           externalIssuanceId: `failed:${idempotencyKey}`,
+          rewardTitle:
+            existing.rewardTitle ??
+            input.rewardTitle ??
+            (typeof input.metadata?.rewardName === "string"
+              ? input.metadata.rewardName
+              : null),
+          recipientEmail:
+            existing.recipientEmail ?? input.recipient.email ?? null,
+          recipientName:
+            existing.recipientName ?? input.recipient.name ?? null,
+          mcomUserId:
+            existing.mcomUserId ?? input.recipient.mcomUserId ?? null,
+          fulfilmentStatus: "FAILED",
+          fulfilmentError: err.message,
+          ...(input.fulfilmentProvider
+            ? { fulfilmentProvider: input.fulfilmentProvider }
+            : {}),
+          ...(input.fulfilmentKind
+            ? { fulfilmentKind: input.fulfilmentKind }
+            : {}),
+          ...(input.businessId ? { businessId: input.businessId } : {}),
+          ...(input.businessName ? { businessName: input.businessName } : {}),
+          instructions: instructions as never,
+          lastSyncedAt: new Date(),
           metadata: metadata as never,
         },
       });
@@ -593,6 +693,14 @@ export class RewardEngineService {
         recipientName: input.recipient.name ?? null,
         status: "FAILED",
         quantity: input.quantity ?? 1,
+        fulfilmentProvider: input.fulfilmentProvider ?? null,
+        fulfilmentKind: input.fulfilmentKind ?? null,
+        fulfilmentStatus: "FAILED",
+        fulfilmentError: err.message,
+        businessId: input.businessId ?? null,
+        businessName: input.businessName ?? null,
+        instructions: instructions as never,
+        lastSyncedAt: new Date(),
         metadata: metadata as never,
       },
     });
@@ -625,7 +733,11 @@ export class RewardEngineService {
           });
           await this.prisma.rewardIssuance.update({
             where: { id: row.id },
-            data: { status: result.status ?? "REVOKED", revokedAt: new Date() },
+            data: {
+              status: result.status ?? "REVOKED",
+              revokedAt: new Date(),
+              fulfilmentStatus: "REVOKED",
+            },
           });
         } catch (err) {
           if (err instanceof McomRewardsError && !err.retryable) {
@@ -635,7 +747,11 @@ export class RewardEngineService {
             );
             await this.prisma.rewardIssuance.update({
               where: { id: row.id },
-              data: { status: "REVOKED", revokedAt: new Date() },
+              data: {
+                status: "REVOKED",
+                revokedAt: new Date(),
+                fulfilmentStatus: "REVOKED",
+              },
             });
           } else {
             // Retryable (provider down) — let the queue retry the whole job.
@@ -645,7 +761,11 @@ export class RewardEngineService {
       } else {
         await this.prisma.rewardIssuance.update({
           where: { id: row.id },
-          data: { status: "REVOKED", revokedAt: new Date() },
+          data: {
+            status: "REVOKED",
+            revokedAt: new Date(),
+            fulfilmentStatus: "REVOKED",
+          },
         });
       }
       revoked += 1;
@@ -662,17 +782,42 @@ export class RewardEngineService {
       quantity?: number;
       metadata?: Record<string, unknown>;
       rewardTitle?: string | null;
+      fulfilmentProvider?: string | null;
+      fulfilmentKind?: string | null;
+      businessId?: string | null;
+      businessName?: string | null;
     } = {},
   ): Promise<RewardIssuance> {
     const expiresAt = issuance.expiresAt ? new Date(issuance.expiresAt) : null;
     const redeemedAt = issuance.redeemedAt ? new Date(issuance.redeemedAt) : null;
     const revokedAt = issuance.revokedAt ? new Date(issuance.revokedAt) : null;
 
+    // Persist every provider-authored fulfilment field. Never infer Central vs
+    // Mall from `rewardType` — the provider descriptor is authoritative.
+    const fulfilment = extractIssuanceFulfilment(issuance);
+    const provider = fulfilment.fulfilmentProvider ?? opts.fulfilmentProvider ?? null;
+    const kind = fulfilment.fulfilmentKind ?? opts.fulfilmentKind ?? null;
+    const businessId = fulfilment.businessId ?? opts.businessId ?? null;
+    const businessName = fulfilment.businessName ?? opts.businessName ?? null;
+    const instructions = buildRewardInstructions({
+      ...fulfilment,
+      fulfilmentProvider: provider,
+      fulfilmentKind: kind,
+      businessId,
+      businessName,
+      scope: fulfilment.scope ?? undefined,
+      metadata: issuance.metadata ?? opts.metadata ?? null,
+      ...rewardWebUrls(this.config),
+    });
+
     return this.prisma.rewardIssuance.update({
       where: { idempotencyKey },
       data: {
         externalIssuanceId: issuance.id,
-        status: issuance.status,
+        // `PENDING_IDENTITY` / `PENDING_CONFLICT` must not become FAILED. The
+        // provider tells us the issuance status independently of the fulfilment
+        // status, so keep whatever it returned (default ISSUED).
+        status: issuance.status ?? "ISSUED",
         code: issuance.code ?? null,
         rewardTitle:
           issuance.rewardTitle ??
@@ -684,6 +829,22 @@ export class RewardEngineService {
         value: issuance.value ?? null,
         quantity: issuance.quantity ?? opts.quantity ?? 1,
         metadata: (issuance.metadata ?? undefined) as never,
+        fulfilmentProvider: provider,
+        fulfilmentKind: kind,
+        fulfilmentStatus: fulfilment.fulfilmentStatus,
+        fulfilmentRef: fulfilment.fulfilmentRef,
+        fulfilmentCode: fulfilment.fulfilmentCode,
+        fulfilmentError: fulfilment.fulfilmentError,
+        centralReference: fulfilment.centralReference,
+        deepLink: fulfilment.deepLink,
+        businessId,
+        businessName,
+        scope: (fulfilment.scope ?? undefined) as never,
+        instructions: instructions as never,
+        fulfilledAt: fulfilment.fulfilledAt
+          ? new Date(fulfilment.fulfilledAt)
+          : null,
+        lastSyncedAt: new Date(),
         expiresAt,
         redeemedAt,
         revokedAt,

@@ -11,10 +11,261 @@ import {
   PrismaClient,
   TemplateApprovalMode,
   TemplateOrigin,
+  PlanAccessLevel,
+  PlanAudience,
 } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+
+const FEATURE_KEYS = [
+  "campaign.creation",
+  "campaign.claim_limit",
+  "campaign.active_slots",
+  "templates.premium",
+  "rewards.attach",
+  "rewards.premium_library",
+  "contributions.ledger",
+  "contributions.filters",
+  "leaderboard.city",
+  "leaderboard.local",
+  "leaderboard.national",
+  "leaderboard.rank_tracking",
+  "profile.enhanced",
+  "profile.featured",
+  "analytics.insights",
+  "analytics.advanced",
+  "notifications.weekly_digest",
+  "notifications.alerts",
+  "support.priority",
+  "profile.badges",
+  "campaign.promotion",
+] as const;
+
+type SeedCapabilities = Record<
+  string,
+  { enabled: boolean; limit: number | null; unlimited: boolean }
+>;
+
+/**
+ * Build a full capability map. Disabled features are still stored so admins
+ * see every switch when editing a variant.
+ */
+function buildCapabilities(
+  enabled: string[],
+  limits: Record<string, number | "unlimited"> = {},
+): SeedCapabilities {
+  return Object.fromEntries(
+    FEATURE_KEYS.map((key) => {
+      const on = enabled.includes(key);
+      const limit = limits[key];
+      return [
+        key,
+        {
+          enabled: on,
+          limit:
+            typeof limit === "number"
+              ? limit
+              : limit === "unlimited"
+                ? null
+                : null,
+          unlimited: limit === "unlimited",
+        },
+      ];
+    }),
+  );
+}
+
+const CORE_FEATURES = [
+  "campaign.creation",
+  "campaign.claim_limit",
+  "campaign.active_slots",
+  "rewards.attach",
+  "contributions.ledger",
+  "leaderboard.city",
+  "leaderboard.local",
+  "analytics.insights",
+  "notifications.alerts",
+];
+
+const PRO_FEATURES = [
+  ...CORE_FEATURES,
+  "templates.premium",
+  "rewards.premium_library",
+  "contributions.filters",
+  "leaderboard.national",
+  "leaderboard.rank_tracking",
+  "analytics.advanced",
+  "notifications.weekly_digest",
+  "profile.badges",
+];
+
+const PRO_PLUS_FEATURES = [
+  ...PRO_FEATURES,
+  "profile.enhanced",
+  "profile.featured",
+  "support.priority",
+  "campaign.promotion",
+];
+
+const PLAN_SEEDS: Array<{
+  name: string;
+  slug: string;
+  audience: PlanAudience;
+  badge?: string;
+  color: string;
+  sortOrder: number;
+  variants: Array<{
+    accessLevel: PlanAccessLevel;
+    name: string;
+    durationDays: number;
+    priceMinor: number;
+    capabilities: SeedCapabilities;
+  }>;
+}> = [
+  {
+    name: "Bronze",
+    slug: "bronze",
+    audience: PlanAudience.BUSINESS,
+    color: "#B87333",
+    sortOrder: 10,
+    variants: [
+      { accessLevel: PlanAccessLevel.STANDARD, name: "Bronze Standard", durationDays: 90, priceMinor: 5000, capabilities: buildCapabilities(CORE_FEATURES, { "campaign.claim_limit": 2, "campaign.active_slots": 1, "rewards.attach": 3, "templates.premium": 1 }) },
+      { accessLevel: PlanAccessLevel.PRO, name: "Bronze Pro", durationDays: 180, priceMinor: 7500, capabilities: buildCapabilities(PRO_FEATURES, { "campaign.claim_limit": 5, "campaign.active_slots": 2, "rewards.attach": 5, "templates.premium": 2 }) },
+      { accessLevel: PlanAccessLevel.PRO_PLUS, name: "Bronze Pro+", durationDays: 365, priceMinor: 12000, capabilities: buildCapabilities(PRO_PLUS_FEATURES, { "campaign.claim_limit": "unlimited", "campaign.active_slots": "unlimited", "rewards.attach": "unlimited", "templates.premium": "unlimited" }) },
+    ],
+  },
+  {
+    name: "Silver",
+    slug: "silver",
+    audience: PlanAudience.BUSINESS,
+    badge: "Popular",
+    color: "#8C8C8C",
+    sortOrder: 20,
+    variants: [
+      { accessLevel: PlanAccessLevel.STANDARD, name: "Silver Standard", durationDays: 90, priceMinor: 10000, capabilities: buildCapabilities([...CORE_FEATURES, "contributions.filters"], { "campaign.claim_limit": 2, "campaign.active_slots": 1, "rewards.attach": 3, "templates.premium": 1 }) },
+      { accessLevel: PlanAccessLevel.PRO, name: "Silver Pro", durationDays: 180, priceMinor: 15000, capabilities: buildCapabilities(PRO_FEATURES, { "campaign.claim_limit": 5, "campaign.active_slots": 3, "rewards.attach": 5, "templates.premium": 2 }) },
+      { accessLevel: PlanAccessLevel.PRO_PLUS, name: "Silver Pro+", durationDays: 365, priceMinor: 24000, capabilities: buildCapabilities(PRO_PLUS_FEATURES, { "campaign.claim_limit": "unlimited", "campaign.active_slots": "unlimited", "rewards.attach": "unlimited", "templates.premium": "unlimited" }) },
+    ],
+  },
+  {
+    name: "Gold",
+    slug: "gold",
+    audience: PlanAudience.BUSINESS,
+    badge: "Most popular",
+    color: "#D4AF37",
+    sortOrder: 30,
+    variants: [
+      { accessLevel: PlanAccessLevel.STANDARD, name: "Gold Standard", durationDays: 90, priceMinor: 15000, capabilities: buildCapabilities([...CORE_FEATURES, "contributions.filters", "leaderboard.national"], { "campaign.claim_limit": 3, "campaign.active_slots": 2, "rewards.attach": 3, "templates.premium": 1 }) },
+      { accessLevel: PlanAccessLevel.PRO, name: "Gold Pro", durationDays: 180, priceMinor: 22500, capabilities: buildCapabilities([...PRO_FEATURES, "profile.enhanced"], { "campaign.claim_limit": 6, "campaign.active_slots": 4, "rewards.attach": 5, "templates.premium": 3 }) },
+      { accessLevel: PlanAccessLevel.PRO_PLUS, name: "Gold Pro+", durationDays: 365, priceMinor: 36000, capabilities: buildCapabilities(PRO_PLUS_FEATURES, { "campaign.claim_limit": "unlimited", "campaign.active_slots": "unlimited", "rewards.attach": "unlimited", "templates.premium": "unlimited" }) },
+    ],
+  },
+];
+
+const ACCESS_PASS_SEEDS: Array<{
+  name: string;
+  slug: string;
+  description: string;
+  durationDays: number;
+  priceMinor: number;
+  codeValidityDays: number;
+  capabilities: SeedCapabilities;
+  sortOrder: number;
+}> = [
+  {
+    name: "30-Day Campaign Pass",
+    slug: "30-day-campaign-pass",
+    description: "A short burst of campaign, rewards and leaderboard access.",
+    durationDays: 30,
+    priceMinor: 2900,
+    codeValidityDays: 365,
+    capabilities: buildCapabilities(CORE_FEATURES, { "campaign.claim_limit": 2, "campaign.active_slots": 2, "rewards.attach": 3, "templates.premium": 1 }),
+    sortOrder: 10,
+  },
+  {
+    name: "90-Day Growth Pass",
+    slug: "90-day-growth-pass",
+    description: "Premium templates, advanced analytics and national ranking for a season.",
+    durationDays: 90,
+    priceMinor: 7900,
+    codeValidityDays: 365,
+    capabilities: buildCapabilities(PRO_FEATURES, { "campaign.claim_limit": 5, "campaign.active_slots": 4, "rewards.attach": 6, "templates.premium": 2 }),
+    sortOrder: 20,
+  },
+  {
+    name: "Season Access Pass",
+    slug: "season-access-pass",
+    description: "A full year of every platform capability, including featured placement and priority support.",
+    durationDays: 365,
+    priceMinor: 19900,
+    codeValidityDays: 365,
+    capabilities: buildCapabilities(PRO_PLUS_FEATURES, { "campaign.claim_limit": "unlimited", "campaign.active_slots": "unlimited", "rewards.attach": "unlimited", "templates.premium": "unlimited" }),
+    sortOrder: 30,
+  },
+];
+
+async function seedPlans(): Promise<void> {
+  for (const planSeed of PLAN_SEEDS) {
+    const existing = await prisma.membershipPlan.findUnique({
+      where: { slug: planSeed.slug },
+    });
+    const plan =
+      existing ??
+      (await prisma.membershipPlan.create({
+        data: {
+          name: planSeed.name,
+          slug: planSeed.slug,
+          description: `${planSeed.name} plan with Standard, Pro and Pro+ access.`,
+          audience: planSeed.audience,
+          badge: planSeed.badge,
+          color: planSeed.color,
+          sortOrder: planSeed.sortOrder,
+        },
+      }));
+
+    for (const [index, variant] of planSeed.variants.entries()) {
+      await prisma.membershipPlanVariant.upsert({
+        where: {
+          planId_accessLevel: {
+            planId: plan.id,
+            accessLevel: variant.accessLevel,
+          },
+        },
+        update: {},
+        create: {
+          planId: plan.id,
+          accessLevel: variant.accessLevel,
+          name: variant.name,
+          durationDays: variant.durationDays,
+          priceMinor: variant.priceMinor,
+          capabilities: variant.capabilities,
+          sortOrder: index * 10,
+        },
+      });
+    }
+  }
+  console.log(`Seeded ${PLAN_SEEDS.length} membership plans.`);
+
+  for (const pass of ACCESS_PASS_SEEDS) {
+    await prisma.accessPass.upsert({
+      where: { slug: pass.slug },
+      update: {},
+      create: {
+        name: pass.name,
+        slug: pass.slug,
+        description: pass.description,
+        durationDays: pass.durationDays,
+        priceMinor: pass.priceMinor,
+        codeValidityDays: pass.codeValidityDays,
+        capabilities: pass.capabilities,
+        sortOrder: pass.sortOrder,
+      },
+    });
+  }
+  console.log(`Seeded ${ACCESS_PASS_SEEDS.length} access passes.`);
+}
+
 
 async function main() {
   console.log("Starting database seed with live nationwide data...");
@@ -1179,10 +1430,20 @@ async function main() {
 
   console.log(`Seeded founding programmes for ${cities.length} cities.`);
 
+  await seedPlans();
+
   console.log("Database seed completed successfully with rich live data! 🚀");
 }
 
-main()
+async function run() {
+  if (process.env.SEED_ONLY === "plans") {
+    await seedPlans();
+    return;
+  }
+  await main();
+}
+
+run()
   .catch((error) => {
     console.error("Seed failed:", error);
     process.exit(1);

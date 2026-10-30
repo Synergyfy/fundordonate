@@ -7,17 +7,19 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  BadgeCheck, Gift, KeyRound, Sparkles, Target, Wallet, AlertCircle,
+  BadgeCheck, Gift, KeyRound, Sparkles, Target, Wallet, AlertCircle, Trash2,
 } from "lucide-react";
 import {
   useBusinessTemplates,
   useClaimTemplate,
   useBusinessCampaigns,
+  useDeleteCampaign,
 } from "@/services/campaign/hook";
 import { useBusinessAuditStatus } from "@/services/audit/hook";
 import { BusinessTemplateCard } from "@/components/business/BusinessTemplateCard";
 import { BusinessAuditCard } from "@/components/business/BusinessAuditCard";
 import { PaymentCheckoutModal } from "@/components/business/PaymentCheckoutModal";
+import { FeatureGate } from "@/components/plans/FeatureGate";
 
 const fmt = (p: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(p / 100);
@@ -47,7 +49,9 @@ export default function BusinessCampaignCentrePage() {
   const { data: templates = [], isLoading: templatesLoading, error: templatesError, refetch: refetchTemplates } = useBusinessTemplates();
   const { data: campaignsData, isLoading: campaignsLoading, error: campaignsError, refetch: refetchCampaigns } = useBusinessCampaigns();
   const claimMutation = useClaimTemplate();
+  const deleteMutation = useDeleteCampaign();
   const { data: auditStatus } = useBusinessAuditStatus();
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
 
   const campaigns = campaignsData?.items || [];
 
@@ -69,6 +73,24 @@ export default function BusinessCampaignCentrePage() {
   const [preparing, setPreparing] = useState<{ templateId: string; step: number } | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [checkoutCampaignId, setCheckoutCampaignId] = useState<string | null>(null);
+
+  const handleDeleteDraft = async (campaign: { id: string; title: string }) => {
+    if (!window.confirm(`Delete the draft campaign "${campaign.title}"? This cannot be undone.`)) {
+      return;
+    }
+    setClaimError(null);
+    setDeleteBusyId(campaign.id);
+    try {
+      await deleteMutation.mutateAsync(campaign.id);
+      await refetchCampaigns();
+    } catch (err: any) {
+      setClaimError(
+        err?.response?.data?.message || err?.message || "Could not delete this draft campaign",
+      );
+    } finally {
+      setDeleteBusyId(null);
+    }
+  };
 
   const available = templates.filter((t) => t.status === "available");
   const locked = templates.filter((t) => t.status === "locked");
@@ -242,56 +264,77 @@ export default function BusinessCampaignCentrePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {campaigns.map((c) => (
-                <Link
-                  key={c.id}
-                  to={`/dashboard/my-campaigns/${c.id}`}
-                  className="rounded-xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <h3 className="font-bold text-gray-900">{c.title}</h3>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        c.status === "ACTIVE" || c.status === "active"
-                          ? "bg-green-100 text-green-700"
-                          : c.status === "CHANGES_REQUESTED" || c.status === "changes_requested"
-                          ? "bg-orange-100 text-orange-700"
-                          : c.status === "PENDING_REVIEW" || c.status === "pending_review"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
+              {campaigns.map((c) => {
+                const isDraft = String(c.status).toUpperCase() === "DRAFT";
+                return (
+                  <div
+                    key={c.id}
+                    className="rounded-xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                  >
+                    <Link
+                      to={`/dashboard/my-campaigns/${c.id}`}
+                      className="block"
                     >
-                      {c.status.replace("_", " ")}
-                    </span>
-                  </div>
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <h3 className="font-bold text-gray-900">{c.title}</h3>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            c.status === "ACTIVE" || c.status === "active"
+                              ? "bg-green-100 text-green-700"
+                              : c.status === "CHANGES_REQUESTED" || c.status === "changes_requested"
+                              ? "bg-orange-100 text-orange-700"
+                              : c.status === "PENDING_REVIEW" || c.status === "pending_review"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {c.status.replace("_", " ")}
+                        </span>
+                      </div>
 
-                  <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-gray-50 p-2">
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">Target</p>
-                      <p className="text-sm font-bold text-gray-900">{fmt(c.target)}</p>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 p-2">
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">Raised</p>
-                      <p className="text-sm font-bold text-gray-900">{fmt(c.raised)}</p>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 p-2">
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">Yours</p>
-                      <p className="text-sm font-bold text-gray-900">{fmt(c.businessContribution)}</p>
-                    </div>
-                  </div>
+                      <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-lg bg-gray-50 p-2">
+                          <p className="text-[10px] uppercase tracking-wide text-gray-500">Target</p>
+                          <p className="text-sm font-bold text-gray-900">{fmt(c.target)}</p>
+                        </div>
+                        <div className="rounded-lg bg-gray-50 p-2">
+                          <p className="text-[10px] uppercase tracking-wide text-gray-500">Raised</p>
+                          <p className="text-sm font-bold text-gray-900">{fmt(c.raised)}</p>
+                        </div>
+                        <div className="rounded-lg bg-gray-50 p-2">
+                          <p className="text-[10px] uppercase tracking-wide text-gray-500">Yours</p>
+                          <p className="text-sm font-bold text-gray-900">{fmt(c.businessContribution)}</p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Target className="h-3 w-3" /> Updated {c.createdAt.split("T")[0]}
-                    </span>
-                    {c.rewardTriggered && (
-                      <span className="flex items-center gap-1 font-semibold text-green-700">
-                        <Sparkles className="h-3 w-3" /> {c.rewardTriggered} triggered
-                      </span>
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Target className="h-3 w-3" /> Updated {c.createdAt.split("T")[0]}
+                        </span>
+                        {c.rewardTriggered && (
+                          <span className="flex items-center gap-1 font-semibold text-green-700">
+                            <Sparkles className="h-3 w-3" /> {c.rewardTriggered} triggered
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+
+                    {isDraft && (
+                      <div className="mt-4 flex items-center justify-end border-t border-gray-100 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteDraft(c)}
+                          disabled={deleteBusyId === c.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {deleteBusyId === c.id ? "Deleting…" : "Delete draft"}
+                        </button>
+                      </div>
                     )}
                   </div>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -299,6 +342,7 @@ export default function BusinessCampaignCentrePage() {
 
       {/* Tab: Available / Locked Templates */}
       {!templatesLoading && !campaignsLoading && tab !== "campaigns" && (
+        <FeatureGate feature="campaign.creation" label="Campaign creation">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {(tab === "available" ? available : locked).map((t) => (
             <BusinessTemplateCard
@@ -323,6 +367,7 @@ export default function BusinessCampaignCentrePage() {
             </div>
           )}
         </div>
+        </FeatureGate>
       )}
 
       {/* Preparing Your Campaign overlay */}

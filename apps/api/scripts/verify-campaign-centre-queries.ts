@@ -87,6 +87,11 @@ async function loadFor(businessId: string, templateCount: number) {
     auditData,
     new TemplateEligibilityService(),
     { assertShallowSafeValue: () => undefined } as any,
+    {
+      resolve: async () => ({ capabilities: {} }),
+      assertWithinLimit: async () => undefined,
+      assertFeature: async () => undefined,
+    } as any,
   );
 
   const templates = await service.getTemplates(businessId);

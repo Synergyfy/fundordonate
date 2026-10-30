@@ -5,7 +5,7 @@
 
 import { ReactNode } from "react";
 import {
-  Calendar, Target, Wallet, Gift, MapPin, Users, BarChart3, Settings,
+  Calendar, Target, Wallet, Gift, MapPin, Users, BarChart3, Settings, Crown,
 } from "lucide-react";
 
 // =============================================================================
@@ -42,7 +42,20 @@ export function getAdminNavGroups(): AdminNavGroup[] {
         { label: "All Seasons", path: "/admin/seasons", icon: <span className="text-xs">📋</span>, exact: true, implemented: true },
         { label: "Current Season", path: "/admin/seasons/current", icon: <span className="text-xs">🔄</span>, implemented: true },
         { label: "Season Review", path: "/admin/seasons/review", icon: <span className="text-xs">📊</span>, implemented: true },
-        { label: "Membership", path: "/admin/membership", icon: <span className="text-xs">🎫</span>, implemented: true },
+      ],
+    },
+
+    // ─── Plans & Access ───────────────────────────────────────────────────
+    {
+      id: "membership-plans",
+      label: "Plans & Access",
+      icon: <Crown className="w-[18px] h-[18px]" />,
+      items: [
+        { label: "Plan Overview", path: "/admin/membership", icon: <span className="text-xs">🎫</span>, exact: true, implemented: true },
+        { label: "Plans & Variants", path: "/admin/membership/plans", icon: <span className="text-xs">💳</span>, implemented: true },
+        { label: "Access Passes", path: "/admin/membership/access-passes", icon: <span className="text-xs">🎟️</span>, implemented: true },
+        { label: "Feature Defaults", path: "/admin/membership/features", icon: <span className="text-xs">🧩</span>, implemented: true },
+        { label: "Plan Orders", path: "/admin/membership/orders", icon: <span className="text-xs">🧾</span>, implemented: true },
       ],
     },
 

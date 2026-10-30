@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, ExternalLink, ShieldCheck } from "lucide-react";
 import {
   getConsumerSettings,
   updateSettingsSection,
   type ConsumerSettings,
 } from "@/services/settings";
 import { useAuthStore } from "@/stores/auth.store";
+import { getCentralProfileUrl } from "@/lib/central-hub";
 
 function Toggle({
   checked,
@@ -145,6 +146,7 @@ export function ConsumerSettingsPage() {
     .filter(Boolean)
     .join(" ");
   const name = displayName || user?.username || "Consumer";
+  const editProfileUrl = getCentralProfileUrl(user);
 
   const update = <K extends keyof ConsumerSettings>(
     section: K,
@@ -185,14 +187,39 @@ export function ConsumerSettingsPage() {
               {user?.username || "—"}
             </p>
           </div>
+          {user?.phone && (
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <p className="text-sm text-gray-500">Phone</p>
+              <p className="text-sm font-medium text-gray-900">{user.phone}</p>
+            </div>
+          )}
+          {user?.address && (
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
+              <p className="text-sm text-gray-500">Address</p>
+              <p className="max-w-[60%] text-right text-sm font-medium text-gray-900">
+                {[user.address, user.postcode, user.country]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            </div>
+          )}
         </div>
         <Link
           to="/consumer/you/profile"
           className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
         >
-          Manage profile
+          View profile
           <ArrowRight className="h-4 w-4" />
         </Link>
+        <a
+          href={editProfileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+        >
+          Edit details on Central Hub
+          <ExternalLink className="h-4 w-4" />
+        </a>
       </Card>
 
       <Card title="Notifications">

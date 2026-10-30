@@ -14,6 +14,7 @@ import {
   Unlock,
   Wallet,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { BusinessTemplateView } from "@/services/campaign/type";
 import { normalizeBusinessRewardsMode } from "@/services/templates";
 
@@ -94,19 +95,24 @@ export function BusinessTemplateCard({
   const needsAudit = unmet.some(
     (r: any) => r.action === "audit" || r.id === "pre_audit",
   );
+  const needsPlan = unmet.some(
+    (r: any) => r.action === "plan" || r.id === "plan_feature",
+  );
 
-  // Only the audit requirement has a self-serve action today; everything else
+  // Audit and plan upgrades both have self-serve destinations; everything else
   // is an Admin/funds/membership gate the business cannot click through.
-  const hasActionableRequirement = needsAudit;
-  const blockedReason = unmet.some((r: any) => r.id === "admin_assigned")
-    ? "Invite only — ask an Admin"
-    : unmet.some((r: any) => r.id === "min_contribution")
-      ? "Funds-raised threshold not met"
-      : unmet.some(
-            (r: any) => r.action === "membership" || r.id === "campaign_eligibility",
-          )
-        ? "Membership tier required"
-        : "Locked by an eligibility rule";
+  const hasActionableRequirement = needsAudit || needsPlan;
+  const blockedReason = needsPlan
+    ? "Upgrade required"
+    : unmet.some((r: any) => r.id === "admin_assigned")
+      ? "Invite only — ask an Admin"
+      : unmet.some((r: any) => r.id === "min_contribution")
+        ? "Funds-raised threshold not met"
+        : unmet.some(
+              (r: any) => r.action === "membership" || r.id === "campaign_eligibility",
+            )
+          ? "Membership tier required"
+          : "Locked by an eligibility rule";
 
   const accessLabel =
     ACCESS_TYPE_LABELS[t.accessType as string] ?? t.accessType ?? "Open";
@@ -120,6 +126,11 @@ export function BusinessTemplateCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="truncate font-bold text-gray-900">{t.name}</h3>
+            {t.premium && (
+              <span className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-bold text-purple-700">
+                PREMIUM
+              </span>
+            )}
             {complete ? (
               <Unlock className="h-4 w-4 shrink-0 text-green-500" />
             ) : (
@@ -228,6 +239,14 @@ export function BusinessTemplateCard({
           <PlayCircle className="h-4 w-4" />
           {isClaiming ? "Preparing…" : "Claim Campaign"}
         </button>
+      ) : needsPlan ? (
+        <Link
+          to="/plans"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+        >
+          <KeyRound className="h-4 w-4" />
+          View plans & upgrade
+        </Link>
       ) : (
         <button
           onClick={onCompleteRequirement}

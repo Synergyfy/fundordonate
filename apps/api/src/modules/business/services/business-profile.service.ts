@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -8,10 +9,15 @@ import { Business, BusinessStatus } from "@prisma/client";
 import { BusinessOnboardingDto } from "../dto/business-onboarding.dto";
 import { UpdateBusinessProfileDto } from "../dto/update-business-profile.dto";
 import { businessRewardOwnershipWhere } from "../business-reward-ownership.util";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
 
 @Injectable()
 export class BusinessProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilityService,
+  ) {}
 
   /**
    * Generates a URL-friendly unique slug from a business name.
@@ -86,13 +92,39 @@ export class BusinessProfileService {
   }
 
   /**
-   * Updates business profile fields with strict ownership check at query level.
+   * Updates FundOrDonate-specific business fields with strict ownership check
+   * at query level.
+   *
+   * Identity/contact fields (name, email, phone, address, business type,
+   * category, website, logo, description) are owned by MCOM Central Hub and
+   * cannot be edited here — Central is the source of truth.
    */
   async updateProfile(
     businessId: string,
     ownerId: string,
     dto: UpdateBusinessProfileDto,
   ): Promise<Business> {
+    const centralOwned: Array<[string, unknown]> = [
+      ["name", dto.name],
+      ["businessType", dto.businessType],
+      ["registrationNumber", dto.registrationNumber],
+      ["description", dto.description],
+      ["email", dto.email],
+      ["phone", dto.phone],
+      ["website", dto.website],
+      ["logoUrl", dto.logoUrl],
+      ["category", dto.category],
+    ];
+    const attempted = centralOwned
+      .filter(([, value]) => value !== undefined)
+      .map(([field]) => field);
+
+    if (attempted.length > 0) {
+      throw new ForbiddenException(
+        `Business details (${attempted.join(", ")}) are managed by MCOM Central Hub. Please edit them there.`,
+      );
+    }
+
     const existing = await this.prisma.business.findFirst({
       where: { id: businessId, ownerId },
     });
@@ -101,19 +133,17 @@ export class BusinessProfileService {
       throw new NotFoundException("Business not found");
     }
 
+    if (dto.coverImageUrl) {
+      await this.capabilities.assertFeature(
+        ownerId,
+        FEATURES.PROFILE_ENHANCED,
+      );
+    }
+
     return this.prisma.business.update({
       where: { id: existing.id },
       data: {
-        name: dto.name,
-        businessType: dto.businessType,
-        registrationNumber: dto.registrationNumber,
-        description: dto.description,
-        email: dto.email,
-        phone: dto.phone,
-        website: dto.website,
-        logoUrl: dto.logoUrl,
         coverImageUrl: dto.coverImageUrl,
-        category: dto.category,
         subcategories: dto.subcategories,
         preferredAudience: dto.preferredAudience,
         campaignGoal: dto.campaignGoal,

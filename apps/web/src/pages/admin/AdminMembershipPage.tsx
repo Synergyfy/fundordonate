@@ -1,9 +1,10 @@
 // =============================================================================
-// Admin Membership Page
-// Membership plan management: tiers, levels, pricing, subscribers, revenue.
+// Admin Plan Overview
+// Plan tier overview: levels, pricing, subscribers and revenue.
 // =============================================================================
 
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { adminApi } from "@/services/admin";
 import { MEMBERSHIP_TIERS } from "@/constants/membershipTiers";
 import {
@@ -98,8 +99,14 @@ export default function AdminMembershipPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Membership Management</h1>
-        <p className="text-sm text-gray-500">Live overview of business membership tiers, subscribers, and pricing.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Plan Overview</h1>
+        <p className="text-sm text-gray-500">Live overview of business plan tiers, subscribers, and pricing.</p>
+        <Link
+          to="/admin/membership/plans"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-xs font-bold text-white hover:bg-primary-700"
+        >
+          Manage plans, variants & access passes →
+        </Link>
       </div>
 
       {/* KPI Overview */}

@@ -1,3 +1,19 @@
+/**
+ * Ecosystem web links must never leak a production URL into a local/staging
+ * run. In production the configured value is mandatory (validated on boot); in
+ * every other environment we fall back to the local dev server.
+ */
+function resolveEcosystemWebUrl(
+  configured: string | undefined,
+  localDefault: string,
+  productionDefault: string,
+): string {
+  if (configured && configured.trim()) return configured.trim();
+  return process.env.NODE_ENV === "production"
+    ? productionDefault
+    : localDefault;
+}
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parseInt(process.env.PORT ?? "5024", 10),
@@ -75,6 +91,20 @@ export default () => ({
     reconcileIntervalMs: parseInt(
       process.env.REWARDS_RECONCILE_INTERVAL_MS ?? "900000",
       10,
+    ),
+    // When true (the default), campaign rewards are issued through MCOM Rewards
+    // only. The legacy FundOrDonate-local issuance path stays available behind
+    // this flag for migration only.
+    mcomOnly: (process.env.REWARDS_MCOM_ONLY ?? "true") === "true",
+    mallWebUrl: resolveEcosystemWebUrl(
+      process.env.MALL_WEB_URL,
+      "http://localhost:3003",
+      "https://mall.mcom.com",
+    ),
+    centralWebUrl: resolveEcosystemWebUrl(
+      process.env.CENTRAL_WEB_URL,
+      "http://localhost:3000",
+      "https://auth.mcomsolutions.com",
     ),
   },
 });

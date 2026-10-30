@@ -1,6 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import type { McomRewardIssuance } from "./rewards-client.service";
+import {
+  buildRewardInstructions,
+  extractIssuanceFulfilment,
+  rewardWebUrls,
+} from "@/modules/rewards/reward-fulfilment.util";
 
 export type McomRewardEvent =
   | "reward.issued"
@@ -22,7 +28,10 @@ export type McomRewardEvent =
 export class McomRewardsWebhookService {
   private readonly logger = new Logger(McomRewardsWebhookService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * Apply an issuance lifecycle event to the local mirror. Idempotent — the
@@ -51,6 +60,7 @@ export class McomRewardsWebhookService {
   async upsertMirror(
     data: McomRewardIssuance,
     statusOverride?: string,
+    businessContext?: { businessId?: string | null; businessName?: string | null },
   ): Promise<void> {
     if (!data?.id) return;
 
@@ -58,11 +68,33 @@ export class McomRewardsWebhookService {
     const expiresAt = this.parseDate(data.expiresAt);
     const redeemedAt = this.parseDate(data.redeemedAt);
     const revokedAt = this.parseDate(data.revokedAt);
+    const fulfilledAt = this.parseDate(data.fulfilledAt);
 
     // A business-owned issuance may carry a null catalogue `rewardId`; it is
     // identified by `businessRewardId`. Keep `mcomRewardId` non-null.
     const businessRewardId = data.businessRewardId ?? null;
     const metadataValue = (data.metadata ?? undefined) as never;
+
+    // Provider-authored fulfilment. Missing fields are left undefined on update
+    // so a lifecycle webhook (e.g. redeemed) never wipes the descriptor.
+    const fulfilment = extractIssuanceFulfilment(data);
+    const businessId = fulfilment.businessId ?? businessContext?.businessId ?? null;
+    const businessName =
+      fulfilment.businessName ?? businessContext?.businessName ?? null;
+    const urls = rewardWebUrls(this.config);
+    // Only rebuild the persisted panel when we know the fulfilment kind. A
+    // lifecycle-only event must never replace specific instructions with a
+    // generic guess.
+    const instructions = fulfilment.fulfilmentKind
+      ? buildRewardInstructions({
+          ...fulfilment,
+          scope: fulfilment.scope ?? undefined,
+          businessId,
+          businessName,
+          metadata: data.metadata,
+          ...urls,
+        })
+      : null;
 
     const update = {
       externalIssuanceId: data.id,
@@ -70,10 +102,26 @@ export class McomRewardsWebhookService {
       code: data.code ?? undefined,
       rewardTitle: data.rewardTitle ?? undefined,
       ...(businessRewardId ? { businessRewardId } : {}),
-      expiresAt,
-      redeemedAt,
-      revokedAt,
+      expiresAt: data.expiresAt ? expiresAt : undefined,
+      redeemedAt: data.redeemedAt ? redeemedAt : undefined,
+      revokedAt: data.revokedAt ? revokedAt : undefined,
       metadata: metadataValue,
+      fulfilmentProvider: fulfilment.fulfilmentProvider ?? undefined,
+      fulfilmentKind: fulfilment.fulfilmentKind ?? undefined,
+      fulfilmentStatus: fulfilment.fulfilmentStatus ?? undefined,
+      fulfilmentRef: fulfilment.fulfilmentRef ?? undefined,
+      // Copy nulls too: a recovered issuance must clear stale errors/codes.
+      fulfilmentCode: fulfilment.fulfilmentCode,
+      fulfilmentError: fulfilment.fulfilmentError,
+      centralReference: fulfilment.centralReference,
+      deepLink: fulfilment.deepLink,
+      businessId: businessId ?? undefined,
+      businessName: businessName ?? undefined,
+      scope: (fulfilment.scope ?? undefined) as never,
+      ...(instructions ? { instructions: instructions as never } : {}),
+      // Always mirror the provider's delivered timestamp (null clears it).
+      fulfilledAt,
+      lastSyncedAt: new Date(),
     };
     const create = {
       externalIssuanceId: data.id,
@@ -92,6 +140,20 @@ export class McomRewardsWebhookService {
       value: data.value ?? null,
       quantity: data.quantity ?? 1,
       metadata: metadataValue,
+      fulfilmentProvider: fulfilment.fulfilmentProvider,
+      fulfilmentKind: fulfilment.fulfilmentKind,
+      fulfilmentStatus: fulfilment.fulfilmentStatus,
+      fulfilmentRef: fulfilment.fulfilmentRef,
+      fulfilmentCode: fulfilment.fulfilmentCode,
+      fulfilmentError: fulfilment.fulfilmentError,
+      centralReference: fulfilment.centralReference,
+      deepLink: fulfilment.deepLink,
+      businessId,
+      businessName,
+      scope: (fulfilment.scope ?? undefined) as never,
+      instructions: instructions as never,
+      fulfilledAt,
+      lastSyncedAt: new Date(),
       expiresAt,
       redeemedAt,
       revokedAt,

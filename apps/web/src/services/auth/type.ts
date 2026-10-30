@@ -9,16 +9,26 @@ export interface User {
   id: string;
   email: string;
   username: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  avatar?: string | null;
   role: string;
   userType: string;
+  profileType?: string | null;
+  isAffiliate?: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName?: string | null;
+  jobTitle?: string | null;
+  avatar?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  postcode?: string | null;
+  country?: string | null;
   businessId?: string | null;
   emailVerified: boolean;
   membershipLevel?: string | null;
+  membershipTier?: string | null;
   membershipPlanName?: string | null;
   membershipStatus?: string | null;
+  profile?: Record<string, unknown> | null;
   subscription?: LocalEntitlement | null;
 }
 

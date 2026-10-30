@@ -24,6 +24,7 @@ import { FoundingModule } from "./modules/founding/founding.module";
 import { SupportModule } from "./modules/support/support.module";
 import { RecommendationsModule } from "./modules/recommendations/recommendations.module";
 import { ActivationModule } from "./modules/activation/activation.module";
+import { PlansModule } from "./modules/plans/plans.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ActivationModule } from "./modules/activation/activation.module";
     SupportModule,
     RecommendationsModule,
     ActivationModule,
+    PlansModule,
   ],
   controllers: [AppController],
   providers: [

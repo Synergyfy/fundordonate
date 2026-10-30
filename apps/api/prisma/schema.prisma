@@ -36,6 +36,19 @@ model User {
   mcomLinkedAt       DateTime?
   lastSsoSyncAt      DateTime?
 
+  // ── Cached MCOM identity snapshot (Central is the source of truth) ──
+  profileType String? // BUSINESS | CUSTOMER | AGENT | CONSULTANT | ACCOUNT_MANAGER | PARTNER
+  isAffiliate Boolean @default(false)
+  jobTitle    String?
+  phone       String?
+  address     String?
+  postcode    String?
+  country     String?
+  /**
+   * Role-specific profile object from Central (customer/agent/consultant/AM).
+   */
+  mcomProfile Json?
+
   // ── Cached MCOM membership / entitlement snapshot ──
   membershipLevel        String?
   membershipPlanName     String?
@@ -88,11 +101,20 @@ model Subscription {
 
   planId   String?
   planName String?
-  source   String? // membership | trial | direct
+  source   String? // membership | access_pass | trial | direct
   status   String   @default("inactive")
   quotas   Json     @default("{}")
   limits   Json     @default("{}")
   features String[] @default([])
+  /**
+   * Effective capability map for the user's active entitlement:
+   * `{ [featureKey]: { enabled: boolean, limit: number | null, unlimited: boolean } }`.
+   * Written by the plans module on activation and read by the API guards and
+   * the web/mobile clients.
+   */
+  capabilities Json   @default("{}")
+  /// "membership" | "access_pass" — null for MCOM Central entitlements.
+  entitlementKind String?
 
   isTrial            Boolean   @default(false)
   tasksToComplete    Json      @default("[]")
@@ -267,9 +289,15 @@ model Business {
   owner              User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   name               String
   slug               String            @unique
+  /**
+   * Central Hub business profile id — Central is the source of truth.
+   */
+  mcomBusinessId     String?           @unique
   registrationNumber String?
   businessType       String // "Restaurant & Cafe", "Retail & Shop", etc.
+  industry           String?
   category           String // e.g. "Food & Drink"
+  subCategory        String?
   subcategories      String[]          @default([])
   description        String?           @db.Text
   email              String
@@ -277,6 +305,8 @@ model Business {
   website            String?
   logoUrl            String?
   coverImageUrl      String?
+  openingHours       String?
+  socialMedia        String?
   status             BusinessStatus    @default(ACTIVE)
   membershipTier     MembershipTier    @default(BRONZE)
   membershipExpiry   DateTime?
@@ -308,6 +338,7 @@ model Business {
   highStreet String
   address    String?
   postcode   String
+  country    String?
 
   // Relations
   campaigns     BusinessCampaign[]
@@ -442,6 +473,10 @@ model CampaignTemplate {
 
   isActive    Boolean  @default(true)
   version     Int      @default(1)
+  /// Premium templates are only claimable by plans with the matching feature.
+  isPremium   Boolean  @default(false)
+  /// Capability key required to claim this template (defaults to `templates.premium`).
+  requiredFeature String?
   createdById String?
   updatedById String?
   createdAt   DateTime @default(now())
@@ -799,6 +834,24 @@ model RewardIssuance {
   value              Int?
   quantity           Int       @default(1)
   metadata           Json?
+  // ── Fulfilment mirror (provider-authored; never inferred locally) ────────
+  fulfilmentProvider String?
+  fulfilmentKind     String?
+  // PENDING | DELIVERED | FAILED | REVOKED | NOT_REQUIRED |
+  // PENDING_IDENTITY | PENDING_CONFLICT
+  fulfilmentStatus   String?
+  fulfilmentRef      String?
+  fulfilmentCode     String?
+  fulfilmentError    String?
+  centralReference   String?
+  deepLink           String?
+  businessId         String?
+  businessName       String?
+  scope              Json?
+  /** Persisted { headline, body, code, links, note } for the consumer UI. */
+  instructions       Json?
+  fulfilledAt        DateTime?
+  lastSyncedAt       DateTime?
   expiresAt          DateTime?
   redeemedAt         DateTime?
   revokedAt          DateTime?
@@ -812,6 +865,7 @@ model RewardIssuance {
   @@index([mcomRewardId])
   @@index([businessRewardId])
   @@index([status])
+  @@index([fulfilmentStatus])
   @@map("reward_issuances")
 }
 
@@ -830,6 +884,14 @@ model CampaignRewardAttachment {
   description       String?
   image             String?
   rewardType        String?
+  /// Provider fulfilment descriptor (MALL vs CENTRAL). Never inferred from
+  /// the cosmetic reward type.
+  fulfilmentProvider String?
+  fulfilmentKind     String?
+  /// consumer | business | both — whose winners this attachment is valid for.
+  audience          String?
+  businessId        String?
+  businessName      String?
   /// Eligibility conditions: [{ id, mode, minPence, maxPence, exactPence }].
   conditions        Json             @default("[]")
   /// Evaluation mode for this attachment: "independent" | "cumulative".
@@ -942,6 +1004,239 @@ model FoundingMembership {
   @@index([userId])
   @@index([status])
   @@map("founding_memberships")
+}
+
+// =============================================================================
+// MEMBERSHIP PLANS, ACCESS PASSES & CAPABILITIES
+//
+// Admin-authored product catalogue. A membership plan is a product family
+// (e.g. "Gold") with exactly three duration variants (Standard / Pro / Pro+).
+// An access pass is a standalone, single-duration product. Both carry a
+// capability map (`{ [featureKey]: { enabled, limit, unlimited } }`) that is
+// snapshotted onto the user's entitlement at activation time.
+// =============================================================================
+
+enum PlanAccessLevel {
+  STANDARD
+  PRO
+  PRO_PLUS
+}
+
+enum PlanAudience {
+  BUSINESS
+  CONSUMER
+  BOTH
+}
+
+enum PlanOrderKind {
+  PLAN
+  ACCESS_PASS
+}
+
+enum PlanOrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PlanEntitlementKind {
+  PLAN
+  ACCESS_PASS
+}
+
+enum PlanEntitlementStatus {
+  ACTIVE
+  EXPIRED
+  FORFEITED
+  CANCELLED
+}
+
+enum AccessPassCodeStatus {
+  AVAILABLE
+  ACTIVE
+  USED
+  EXPIRED
+  REVOKED
+}
+
+/// Global capability catalogue. Seeded with the platform's billable features;
+/// admins may edit defaults and labels but not the stable `key`.
+model PlanFeature {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  name           String
+  description    String?
+  category       String   @default("general")
+  sortOrder      Int      @default(0)
+  /// Whether the feature is available to users with no active entitlement.
+  defaultEnabled Boolean  @default(false)
+  /// Whether the capability carries a numeric quota (e.g. max campaigns).
+  supportsLimit  Boolean  @default(false)
+  /// Default quota used when no active entitlement applies (null = unlimited).
+  defaultLimit   Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@map("plan_features")
+}
+
+model MembershipPlan {
+  id          String        @id @default(uuid())
+  name        String
+  slug        String        @unique
+  description String?       @db.Text
+  audience    PlanAudience  @default(BOTH)
+  badge       String?
+  color       String?
+  isActive    Boolean       @default(true)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  variants MembershipPlanVariant[]
+
+  @@index([isActive, sortOrder])
+  @@map("membership_plans")
+}
+
+model MembershipPlanVariant {
+  id           String          @id @default(uuid())
+  planId       String
+  plan         MembershipPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  accessLevel  PlanAccessLevel
+  name         String
+  description  String?         @db.Text
+  durationDays Int
+  priceMinor   Int
+  currency     String          @default("GBP")
+  isActive     Boolean         @default(true)
+  /// Capability map for this variant (see PlanFeature.key).
+  capabilities Json            @default("{}")
+  /// Display bullet points shown on the public plan card.
+  features     String[]        @default([])
+  sortOrder    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  orders       PlanOrder[]
+  entitlements UserEntitlement[]
+
+  @@unique([planId, accessLevel])
+  @@index([isActive])
+  @@map("membership_plan_variants")
+}
+
+model AccessPass {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique
+  description      String?  @db.Text
+  durationDays     Int
+  priceMinor       Int
+  currency         String   @default("GBP")
+  /// Capability map granted while the pass is active.
+  capabilities     Json     @default("{}")
+  /// Display bullet points shown on the public access pass card.
+  features         String[] @default([])
+  /// How long a purchased, unredeemed code stays valid (null = never expires).
+  codeValidityDays Int?
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  codes         AccessPassCode[]
+  orders        PlanOrder[]
+  entitlements  UserEntitlement[]
+
+  @@index([isActive, sortOrder])
+  @@map("access_passes")
+}
+
+model AccessPassCode {
+  id                  String              @id @default(uuid())
+  accessPassId        String
+  accessPass          AccessPass          @relation(fields: [accessPassId], references: [id], onDelete: Cascade)
+  code                String              @unique
+  status              AccessPassCodeStatus @default(AVAILABLE)
+  /// Purchaser; codes may be redeemed by their owner.
+  ownerId             String?
+  orderId             String?             @unique
+  /// When the unredeemed code itself stops being redeemable.
+  expiresAt           DateTime?
+  activatedAt         DateTime?
+  /// When the activated entitlement ends.
+  entitlementExpiresAt DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([ownerId, status])
+  @@index([accessPassId])
+  @@index([status, expiresAt])
+  @@map("access_pass_codes")
+}
+
+model PlanOrder {
+  id                String           @id @default(uuid())
+  userId            String
+  kind              PlanOrderKind
+  status            PlanOrderStatus  @default(PENDING)
+  planVariantId     String?
+  planVariant       MembershipPlanVariant? @relation(fields: [planVariantId], references: [id], onDelete: SetNull)
+  accessPassId      String?
+  accessPass        AccessPass?      @relation(fields: [accessPassId], references: [id], onDelete: SetNull)
+  amountMinor       Int
+  currency          String           @default("GBP")
+  reference         String           @unique
+  mcomChargeId      String?          @unique
+  paymentMethod     String?
+  /// "immediate" (activate on payment) | "save_code" (access passes only).
+  activationMode    String           @default("immediate")
+  activatedAt       DateTime?
+  entitlementExpiresAt DateTime?
+  accessPassCodeId  String?
+  metadata          Json             @default("{}")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([kind])
+  @@map("plan_orders")
+}
+
+/// One row per activation, retained for audit. A user has at most one ACTIVE
+/// row at a time: activating a membership forfeits an active access pass and
+/// vice versa.
+model UserEntitlement {
+  id            String                @id @default(uuid())
+  userId        String
+  kind          PlanEntitlementKind
+  status        PlanEntitlementStatus @default(ACTIVE)
+  planVariantId String?
+  planVariant   MembershipPlanVariant? @relation(fields: [planVariantId], references: [id], onDelete: SetNull)
+  accessPassId  String?
+  accessPass    AccessPass?           @relation(fields: [accessPassId], references: [id], onDelete: SetNull)
+  orderId       String?
+  source        String                @default("purchase") // purchase | code_redeem | admin
+  planName      String?
+  accessLevel   String?
+  /// Snapshot of the capability map at activation time.
+  capabilities  Json                  @default("{}")
+  startedAt     DateTime              @default(now())
+  expiresAt     DateTime
+  forfeitedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([userId, status, expiresAt])
+  @@index([kind])
+  @@map("user_entitlements")
 }
 
 // =============================================================================

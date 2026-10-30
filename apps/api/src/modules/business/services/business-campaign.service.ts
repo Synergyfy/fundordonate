@@ -24,6 +24,8 @@ import {
   TemplateEligibilityService,
   type TemplateRequirementCheck,
 } from "@/modules/eligibility/template-eligibility.service";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
 
 export type { TemplateRequirementCheck };
 
@@ -59,6 +61,11 @@ export interface BusinessTemplateView {
   rewards: any[];
   mcomAssets: any[];
   businessRewardsMode: string;
+  audience?: string;
+  /** Premium templates require the `templates.premium` capability. */
+  premium: boolean;
+  requiredFeature: string | null;
+  featureUnlocked: boolean;
 }
 
 @Injectable()
@@ -68,6 +75,7 @@ export class BusinessCampaignService {
     private readonly auditData: AuditDataService,
     private readonly eligibility: TemplateEligibilityService,
     private readonly media: BusinessMediaService,
+    private readonly capabilities: CapabilityService,
   ) {}
 
   /**
@@ -274,6 +282,7 @@ export class BusinessCampaignService {
 
     const contributedPence = contributionAgg._sum.amount ?? 0;
     const preAuditMet = auditStatus.linkStatus === AuditLinkStatus.AVAILABLE;
+    const effective = await this.capabilities.resolve(business.ownerId);
 
     // Admin-assigned templates stay visible but locked for businesses that were
     // not picked, with an explicit "Assigned by an Admin" requirement — the
@@ -286,6 +295,24 @@ export class BusinessCampaignService {
         preAuditMet,
       });
 
+      const requiredFeature = tpl.isPremium
+        ? tpl.requiredFeature ?? FEATURES.TEMPLATES_PREMIUM
+        : tpl.requiredFeature ?? null;
+      const featureUnlocked =
+        !requiredFeature || Boolean(effective.capabilities[requiredFeature]?.enabled);
+      const requirements = featureUnlocked
+        ? access.requirements
+        : [
+            ...access.requirements,
+            {
+              id: "plan_feature",
+              label: "Plan upgrade required",
+              hint: "This is a premium template. Upgrade your membership or activate an access pass to unlock it.",
+              met: false,
+              action: "plan" as const,
+            },
+          ];
+
       return {
         id: tpl.id,
         name: tpl.name,
@@ -293,7 +320,8 @@ export class BusinessCampaignService {
         season: tpl.seasonId ?? "Current Season",
         origin: tpl.origin.toLowerCase(),
         approval: tpl.approvalMode.toLowerCase(),
-        status: access.allMet ? "available" : "locked",
+        status:
+          access.allMet && featureUnlocked ? "available" : "locked",
         accessType: access.accessType,
         contributionRequirement: {
           required: access.contributionRequiredPence > 0,
@@ -302,7 +330,7 @@ export class BusinessCampaignService {
         // Shown as an informational note: the donation is collected during
         // setup and never prevents the business from claiming the template.
         requiredCampaign: this.eligibility.requiredCampaign(tpl),
-        requirements: access.requirements,
+        requirements,
         selfFunding: {
           enabled: tpl.selfFundingEnabled,
           mode: tpl.selfFundingMode,
@@ -310,9 +338,13 @@ export class BusinessCampaignService {
           rewardName: tpl.selfFundingRewardName,
         },
         businessRewardsMode: normalizeBusinessRewardsMode(tpl.businessRewardsMode),
+        audience: tpl.audience,
         fields: this.fieldBlueprints(tpl.fieldsConfig, { business, template: tpl }),
         rewards: (tpl.rewardsConfig as any[]) || [],
         mcomAssets: (tpl.mcomAssetsConfig as any[]) || [],
+        premium: tpl.isPremium,
+        requiredFeature,
+        featureUnlocked,
       };
     });
   }
@@ -341,6 +373,63 @@ export class BusinessCampaignService {
     if (!template || !template.isActive) {
       throw new NotFoundException("Campaign template not found or inactive");
     }
+
+    // Plan gates: campaign creation, a free slot, and premium templates.
+    await this.capabilities.assertFeature(
+      business.ownerId,
+      FEATURES.CAMPAIGN_CREATION,
+    );
+    const [claimedCampaigns, runningCampaigns, premiumCampaigns] =
+      await Promise.all([
+        this.prisma.businessCampaign.count({ where: { businessId } }),
+        this.prisma.businessCampaign.count({
+          where: {
+            businessId,
+            status: {
+              in: [
+                BusinessCampaignStatus.APPROVED,
+                BusinessCampaignStatus.ACTIVE,
+                BusinessCampaignStatus.PENDING_REVIEW,
+                BusinessCampaignStatus.CHANGES_REQUESTED,
+              ],
+            },
+          },
+        }),
+        this.prisma.businessCampaign.count({
+          where: { businessId, template: { isPremium: true } },
+        }),
+      ]);
+
+    await this.capabilities.assertWithinLimit(
+      business.ownerId,
+      FEATURES.CAMPAIGN_CLAIM_LIMIT,
+      claimedCampaigns,
+      "campaign claim",
+    );
+
+    if (template.isPremium) {
+      const premiumKey =
+        template.requiredFeature ?? FEATURES.TEMPLATES_PREMIUM;
+      await this.capabilities.assertFeature(business.ownerId, premiumKey);
+      await this.capabilities.assertWithinLimit(
+        business.ownerId,
+        premiumKey,
+        premiumCampaigns,
+        "premium template",
+      );
+    } else if (template.requiredFeature) {
+      await this.capabilities.assertFeature(
+        business.ownerId,
+        template.requiredFeature,
+      );
+    }
+
+    await this.capabilities.assertWithinLimit(
+      business.ownerId,
+      FEATURES.CAMPAIGN_ACTIVE_SLOTS,
+      runningCampaigns,
+      "active campaign",
+    );
 
     // Enforce the template's access rules server-side (the UI hides the claim
     // button when locked, but the API must not be bypassable).
@@ -502,6 +591,50 @@ export class BusinessCampaignService {
   }
 
   /**
+   * Permanently delete a campaign that the business has not submitted. Only
+   * DRAFT campaigns with no contributions or issued rewards may be removed.
+   */
+  async deleteDraftCampaign(
+    businessId: string,
+    campaignId: string,
+  ): Promise<{ success: true; deletedId: string }> {
+    const campaign = await this.prisma.businessCampaign.findFirst({
+      where: { id: campaignId, businessId },
+      select: {
+        id: true,
+        status: true,
+        _count: { select: { contributions: true } },
+      },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException("Campaign not found");
+    }
+    if (campaign.status !== BusinessCampaignStatus.DRAFT) {
+      throw new BadRequestException(
+        "Only draft campaigns can be deleted. Submitted campaigns must be archived or cancelled instead.",
+      );
+    }
+    if (campaign._count.contributions > 0) {
+      throw new BadRequestException(
+        "This draft has contributions and cannot be deleted.",
+      );
+    }
+
+    const issuedRewards = await this.prisma.rewardIssuance.count({
+      where: { campaignId },
+    });
+    if (issuedRewards > 0) {
+      throw new BadRequestException(
+        "This draft has issued rewards and cannot be deleted.",
+      );
+    }
+
+    await this.prisma.businessCampaign.delete({ where: { id: campaignId } });
+    return { success: true, deletedId: campaignId };
+  }
+
+  /**
    * Retrieves comprehensive details of a specific campaign for wizard setup or management.
    */
   async getCampaignDetail(
@@ -599,6 +732,7 @@ export class BusinessCampaignService {
         businessRewardsMode: normalizeBusinessRewardsMode(
           campaign.template.businessRewardsMode,
         ),
+        audience: campaign.audience ?? campaign.template.audience,
         fields: this.fieldBlueprints(campaign.template.fieldsConfig, {
           answers: answerMap,
           campaign,
@@ -745,6 +879,41 @@ export class BusinessCampaignService {
       throw new ForbiddenException(
         "This campaign is not managed through the business campaign workflow.",
       );
+    }
+
+    const owner = campaign.businessId
+      ? await this.prisma.business.findUnique({
+          where: { id: campaign.businessId },
+          select: { ownerId: true },
+        })
+      : null;
+    if (owner) {
+      const runningCampaigns = await this.prisma.businessCampaign.count({
+        where: {
+          businessId,
+          id: { not: campaignId },
+          status: {
+            in: [
+              BusinessCampaignStatus.APPROVED,
+              BusinessCampaignStatus.ACTIVE,
+              BusinessCampaignStatus.PENDING_REVIEW,
+              BusinessCampaignStatus.CHANGES_REQUESTED,
+            ],
+          },
+        },
+      });
+      await this.capabilities.assertWithinLimit(
+        owner.ownerId,
+        FEATURES.CAMPAIGN_ACTIVE_SLOTS,
+        runningCampaigns,
+        "active campaign",
+      );
+      if (campaign.template.isPremium || campaign.template.requiredFeature) {
+        await this.capabilities.assertFeature(
+          owner.ownerId,
+          campaign.template.requiredFeature ?? FEATURES.TEMPLATES_PREMIUM,
+        );
+      }
     }
 
     const templateFields = (campaign.template.fieldsConfig as any[]) || [];

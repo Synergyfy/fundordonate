@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { userDashboardService } from "./index";
 
 export const userDashboardKeys = {
@@ -28,16 +28,5 @@ export function useUserDashboardProfile() {
   return useQuery({
     queryKey: userDashboardKeys.profile(),
     queryFn: () => userDashboardService.getProfile(),
-  });
-}
-
-export function useUpdateUserDashboardProfile() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Parameters<typeof userDashboardService.updateProfile>[0]) =>
-      userDashboardService.updateProfile(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: userDashboardKeys.profile() });
-    },
   });
 }

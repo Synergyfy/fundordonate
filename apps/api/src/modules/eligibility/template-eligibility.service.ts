@@ -53,7 +53,7 @@ export interface TemplateRequirementCheck {
    * Which surface the business must action to satisfy the requirement — lets
    * the UI render the right call-to-action (e.g. the 247GBS Audit deep link).
    */
-  action?: "audit" | "membership" | "contribution" | "account" | "donation" | null;
+  action?: "audit" | "membership" | "contribution" | "account" | "donation" | "plan" | null;
   /** The campaign to donate to when `action` is `donation`. */
   campaignId?: string;
   /** Minimum donation (pence) for the campaign requirement. */
