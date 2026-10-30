@@ -46,10 +46,9 @@ export function signCloudinaryParams(
 /**
  * Storage abstraction for validated campaign media.
  *
- * The upload pipeline (MIME allowlist, magic bytes, streamed AV scan, image
- * rebuild) always runs first; this service only decides where the clean bytes
- * live. Everything is file/stream based so a large upload never has to sit in
- * the Node heap.
+ * The upload pipeline (MIME allowlist and magic-byte sniffing) always runs
+ * first; this service only decides where the validated bytes live. Everything
+ * is file/stream based so a large upload never has to sit in the Node heap.
  */
 @Injectable()
 export class MediaStorageService implements OnModuleInit {
