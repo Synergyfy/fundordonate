@@ -1,0 +1,33 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "dev",
+    "feat/business-reward-redemption-details",
+    "feat/founding-support-and-admin-sections",
+    "feat/uk-hub-location-ownership-and-campaign-settings",
+    "fix/admin-e2e-and-campaign-runner",
+    "fix/mcom-wallet-balance-checkout",
+    "fix/sso-donor-names-and-settings",
+    "main"
+  ],
+  "parent": {
+    "dev": "main",
+    "feat/business-reward-redemption-details": "main",
+    "feat/founding-support-and-admin-sections": "main",
+    "feat/uk-hub-location-ownership-and-campaign-settings": "main",
+    "fix/admin-e2e-and-campaign-runner": "main",
+    "fix/mcom-wallet-balance-checkout": "main",
+    "fix/sso-donor-names-and-settings": "main",
+    "main": null
+  },
+  "order": [
+    "main",
+    "dev",
+    "feat/business-reward-redemption-details",
+    "feat/founding-support-and-admin-sections",
+    "feat/uk-hub-location-ownership-and-campaign-settings",
+    "fix/admin-e2e-and-campaign-runner",
+    "fix/mcom-wallet-balance-checkout",
+    "fix/sso-donor-names-and-settings"
+  ]
+}
