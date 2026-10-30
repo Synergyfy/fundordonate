@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter @fundordonate/api dev",
-    "dev": "concurrently -n \"web,api\" -c \"cyan,magenta\" \"pnpm dev:web\" \"pnpm dev:api\"",
-    "build:web": "pnpm --filter web build",
-    "build:api": "pnpm --filter @fundordonate/api build",
-    "build": "pnpm build:web && pnpm build:api",
+    "dev:web": "node init && pnpm --filter web dev",
+    "dev:api": "node init && pnpm --filter @fundordonate/api dev",
+    "dev": "node init && concurrently -n \"web,api\" -c \"cyan,magenta\" \"pnpm dev:web\" \"pnpm dev:api\"",
+    "build:web": "node init && pnpm --filter web build",
+    "build:api": "node init && pnpm --filter @fundordonate/api build",
+    "build": "node init && pnpm build:web && pnpm build:api",
     "test": "pnpm --filter web test",
     "test:api": "pnpm --filter @fundordonate/api test",
     "test:admin-contracts": "pnpm --filter @fundordonate/api verify:admin",

@@ -4,12 +4,12 @@
   "private": true,
   "description": "FundorDonate NestJS API (Swagger + PostgreSQL/Prisma + Redis + BullMQ)",
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "build": "node init && nest build",
+    "dev": "node init && nest start --watch",
+    "start": "node init && nest start",
+    "start:dev": "node init && nest start --watch",
+    "start:debug": "node init && nest start --debug --watch",
+    "start:prod": "node init && node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "test": "tsx --test src/modules/rewards/reward-fulfilment.util.spec.ts src/modules/campaigns/campaign-wizard-settings.spec.ts src/mcom/mcom-rewards-webhook.service.spec.ts",
@@ -54,7 +54,6 @@
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sharp": "^0.35.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
