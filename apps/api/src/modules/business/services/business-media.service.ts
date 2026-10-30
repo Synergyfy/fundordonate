@@ -1,21 +1,16 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   PayloadTooLargeException,
-  ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { promises as dns } from "node:dns";
-import { createReadStream } from "node:fs";
 import { mkdir, open, stat, unlink, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { join } from "node:path";
-import sharp from "sharp";
 import { PrismaService } from "@/prisma/prisma.service";
 import { uploadsTempDir } from "@/common/uploads";
 import { BusinessCampaignStatus } from "@prisma/client";
-import { ClamAvClient } from "./clamav.client";
 import { MediaStorageService } from "./media-storage.service";
 
 /** Uploaded/remote media we accept, with the hard size ceiling per type. */
@@ -42,25 +37,6 @@ const BLOCKED_HOSTNAMES = [
   "metadata.goog",
   "instance-data",
 ];
-
-type MediaScanMode = "off" | "clamav";
-
-/** `MEDIA_SCAN=clamav` enables the ClamAV daemon; anything else disables it. */
-function mediaScanMode(): MediaScanMode {
-  return (process.env.MEDIA_SCAN ?? "off").trim().toLowerCase() === "clamav"
-    ? "clamav"
-    : "off";
-}
-
-/** When the scanner is enabled, an unreachable daemon blocks uploads by default. */
-function scanFailClosed(): boolean {
-  return (process.env.MEDIA_SCAN_FAIL_CLOSED ?? "true").trim().toLowerCase() !== "false";
-}
-
-/** Images are re-encoded through libvips unless explicitly disabled. */
-function reencodeImages(): boolean {
-  return (process.env.MEDIA_REENCODE_IMAGES ?? "true").trim().toLowerCase() !== "false";
-}
 
 /** Reject obviously-unroutable / internal IPv4 ranges (SSRF defence). */
 function isPrivateIpv4(ip: string): boolean {
@@ -149,111 +125,10 @@ async function readHeader(filePath: string, bytes = 32): Promise<Buffer> {
 
 @Injectable()
 export class BusinessMediaService {
-  private readonly logger = new Logger(BusinessMediaService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: MediaStorageService,
   ) {}
-
-  /**
-   * Optional ClamAV scan (INSTREAM). With fail-closed enabled (the default when
-   * `MEDIA_SCAN=clamav`), an unreachable daemon rejects the upload rather than
-   * letting unscanned files through.
-   */
-  private async scanFile(filePath: string): Promise<void> {
-    if (mediaScanMode() !== "clamav") return;
-
-    const host = process.env.CLAMAV_HOST?.trim() || "127.0.0.1";
-    const port = Number(process.env.CLAMAV_PORT ?? 3310);
-    const timeout = Number(process.env.CLAMAV_TIMEOUT_MS ?? 60_000);
-
-    try {
-      const result = await new ClamAvClient(host, port, timeout).scanStream(
-        createReadStream(filePath),
-      );
-      if (!result.clean) {
-        throw new BadRequestException(
-          `This file failed our security scan${result.signature ? ` (${result.signature})` : ""}.`,
-        );
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-
-      const message = error instanceof Error ? error.message : String(error);
-      if (scanFailClosed()) {
-        this.logger.error(`Media scan unavailable: ${message}`);
-        throw new ServiceUnavailableException(
-          "File scanning is temporarily unavailable. Please try again shortly.",
-        );
-      }
-      this.logger.warn(`Media scan unavailable, continuing unscanned: ${message}`);
-    }
-  }
-
-  /**
-   * Rebuilds an image from raw pixels into a new temp file. This strips
-   * EXIF/metadata and destroys polyglot payloads (e.g. HTML/JS appended to a
-   * valid PNG). libvips reads/writes from disk, so memory stays bounded.
-   */
-  private async sanitiseImage(
-    sourcePath: string,
-    mime: string,
-  ): Promise<{ path: string; mime: string }> {
-    if (!reencodeImages()) return { path: sourcePath, mime };
-
-    const target: { ext: string; mime: string } =
-      mime === "image/png"
-        ? { ext: ".png", mime: "image/png" }
-        : mime === "image/webp"
-          ? { ext: ".webp", mime: "image/webp" }
-          : mime === "image/gif"
-            ? { ext: ".gif", mime: "image/gif" }
-            : mime === "image/avif"
-              ? { ext: ".avif", mime: "image/avif" }
-              : { ext: ".jpg", mime: "image/jpeg" };
-
-    const outputPath = `${sourcePath}.clean${target.ext}`;
-
-    try {
-      const pipeline = sharp(sourcePath, {
-        animated: mime === "image/gif",
-        limitInputPixels: 50_000_000,
-        failOn: "error",
-      }).rotate();
-
-      switch (target.mime) {
-        case "image/png":
-          await pipeline.png({ compressionLevel: 9 }).toFile(outputPath);
-          break;
-        case "image/webp":
-          await pipeline.webp({ quality: 88 }).toFile(outputPath);
-          break;
-        case "image/gif":
-          await pipeline.gif().toFile(outputPath);
-          break;
-        case "image/avif":
-          await pipeline.avif({ quality: 55 }).toFile(outputPath);
-          break;
-        default:
-          await pipeline.jpeg({ quality: 90, mozjpeg: true }).toFile(outputPath);
-          break;
-      }
-
-      const sniffed = sniffMime(await readHeader(outputPath));
-      const finalMime =
-        sniffed && ALLOWED_MEDIA[sniffed]?.family === "image"
-          ? sniffed
-          : target.mime;
-
-      return { path: outputPath, mime: finalMime };
-    } catch {
-      await unlink(outputPath).catch(() => undefined);
-      throw new BadRequestException(
-        "This image could not be processed. Try a different file.",
-      );
-    }
-  }
 
   /** The campaign must belong to the business and still be editable. */
   private async assertEditableCampaign(businessId: string, campaignId: string) {
@@ -278,10 +153,10 @@ export class BusinessMediaService {
   /**
    * Validates and stores an uploaded image/video.
    *
-   * The raw body is staged on disk by multer (`file.path`); everything after
-   * that — magic bytes, ClamAV, sharp, the CDN request — streams from that file,
-   * so a 50MB upload never sits in the Node heap. The staging file is always
-   * removed, including on failure.
+   * The raw body is staged on disk by multer (`file.path`); the magic-byte
+   * check and the Cloudinary request both stream from that file, so a 50MB
+   * upload never sits in the Node heap. The staging file is always removed,
+   * including on failure.
    */
   async uploadFile(
     businessId: string,
@@ -316,8 +191,6 @@ export class BusinessMediaService {
       await writeFile(stagedPath, buffer);
     }
 
-    let sanitisedPath: string | undefined;
-
     try {
       const declared = (file.mimetype ?? "").toLowerCase();
       const allowed = ALLOWED_MEDIA[declared];
@@ -338,24 +211,11 @@ export class BusinessMediaService {
         );
       }
 
-      // Antivirus streams from disk in 64KB chunks.
-      await this.scanFile(stagedPath);
-
-      let uploadPath = stagedPath;
-      let storedMime = sniffed;
-
-      if (allowed.family === "image") {
-        const sanitised = await this.sanitiseImage(stagedPath, sniffed);
-        if (sanitised.path !== stagedPath) sanitisedPath = sanitised.path;
-        uploadPath = sanitised.path;
-        storedMime = sanitised.mime;
-      }
-
-      const finalType = ALLOWED_MEDIA[storedMime] ?? allowed;
-      const { size: finalSize } = await stat(uploadPath);
+      const finalType = ALLOWED_MEDIA[sniffed] ?? allowed;
+      const { size: finalSize } = await stat(stagedPath);
       if (finalSize > finalType.maxBytes) {
         throw new PayloadTooLargeException(
-          `The processed ${finalType.family} is larger than ${Math.round(
+          `The ${finalType.family} is larger than ${Math.round(
             finalType.maxBytes / (1024 * 1024),
           )}MB. Try a smaller file.`,
         );
@@ -365,22 +225,21 @@ export class BusinessMediaService {
       }
 
       const stored = await this.storage.store({
-        sourcePath: uploadPath,
-        mimeType: storedMime,
+        sourcePath: stagedPath,
+        mimeType: sniffed,
         fileName: `${randomUUID()}${finalType.ext}`,
         campaignId,
       });
 
       return {
         url: stored.url,
-        mimeType: storedMime,
+        mimeType: sniffed,
         size: stored.bytes || finalSize,
         provider: stored.provider,
       };
     } finally {
-      // Staging (multer) + our re-encoded copy are always cleaned up.
+      // Staging (multer) is always cleaned up.
       if (stagedPath) await unlink(stagedPath).catch(() => undefined);
-      if (sanitisedPath) await unlink(sanitisedPath).catch(() => undefined);
     }
   }
 
