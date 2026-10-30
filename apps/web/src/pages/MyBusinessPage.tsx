@@ -3,43 +3,20 @@
 // Business owner's own business profile management, wired to live backend API.
 // =============================================================================
 
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Store, Edit3, Target, TrendingUp, Award, Crown, ExternalLink, AlertCircle, Save, X, RefreshCw,
+  Store, Target, TrendingUp, Award, Crown, ExternalLink, AlertCircle, RefreshCw,
 } from "lucide-react";
-import { useBusinessProfile, useUpdateBusinessProfile } from "@/services/business/hook";
+import { useBusinessProfile } from "@/services/business/hook";
+import { useAuthStore } from "@/stores/auth.store";
+import { getCentralProfileUrl } from "@/lib/central-hub";
 
 export default function MyBusinessPage() {
   const { data: business, isLoading, error, refetch } = useBusinessProfile();
-  const updateMutation = useUpdateBusinessProfile();
-
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    businessType: "",
-    description: "",
-    category: "",
-    preferredAudience: "both" as "consumer" | "business" | "both",
-  });
-
-  const handleStartEdit = () => {
-    if (business) {
-      setForm({
-        name: business.name || "",
-        businessType: business.businessType || "",
-        description: business.description || "",
-        category: business.category || "",
-        preferredAudience: (business.preferredAudience as any) || "both",
-      });
-      setEditing(true);
-    }
-  };
-
-  const handleSave = async () => {
-    await updateMutation.mutateAsync(form);
-    setEditing(false);
-  };
+  const authUser = useAuthStore((s) => s.user);
+  const editProfileUrl = getCentralProfileUrl(
+    authUser ?? { userType: "business", role: "business" },
+  );
 
   if (isLoading) {
     return (
@@ -79,38 +56,20 @@ export default function MyBusinessPage() {
           <p className="text-sm text-gray-500">Manage your business profile and public directory details.</p>
         </div>
         <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                onClick={() => setEditing(false)}
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <X className="h-4 w-4" /> Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={updateMutation.isPending}
-                className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" /> {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleStartEdit}
-                className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-xs"
-              >
-                <Edit3 className="h-4 w-4" /> Edit Profile
-              </button>
-              <Link
-                to={`/business/${business.slug}`}
-                className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 shadow-xs"
-              >
-                <ExternalLink className="h-4 w-4" /> View Public Profile
-              </Link>
-            </>
-          )}
+          <a
+            href={editProfileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-xs"
+          >
+            <ExternalLink className="h-4 w-4" /> Edit on Central Hub
+          </a>
+          <Link
+            to={`/business/${business.slug}`}
+            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 shadow-xs"
+          >
+            <ExternalLink className="h-4 w-4" /> View Public Profile
+          </Link>
         </div>
       </div>
 
@@ -129,71 +88,41 @@ export default function MyBusinessPage() {
         </div>
       </div>
 
-      {/* Profile Details or Edit Form */}
+      {/* Profile Details (read-only — Central Hub is the source of truth) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-xl bg-white p-6 shadow-sm border">
-          {editing ? (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Business Name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Business / Industry Type</label>
-                <input
-                  type="text"
-                  value={form.businessType}
-                  onChange={(e) => setForm({ ...form, businessType: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Category</label>
-                <input
-                  type="text"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Description</label>
-                <textarea
-                  rows={4}
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-hidden"
-                />
-              </div>
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+            <p className="text-xs text-blue-800">
+              Business details are synced from MCOM Central Hub and cannot be
+              edited here. Use <span className="font-semibold">Edit on Central Hub</span>{" "}
+              to update your business name, contact details or address.
+            </p>
+          </div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">{business.name}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{business.businessType}</p>
             </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{business.name}</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">{business.businessType}</p>
-                </div>
-                <Crown className="h-6 w-6 text-yellow-500" />
-              </div>
-              <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-                {business.description || "No business description provided yet."}
-              </p>
-              <div className="space-y-3 text-sm divide-y">
-                <div className="flex justify-between py-1"><span className="text-gray-500">Location</span><span className="text-gray-900 font-medium">{locationDisplay}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Category</span><span className="text-gray-900 font-medium">{business.category}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Subcategories</span><span className="text-gray-900 font-medium">{business.subcategories?.join(", ") || "None"}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Contact Email</span><span className="text-gray-900 font-medium">{business.email}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Phone</span><span className="text-gray-900 font-medium">{business.phone || "—"}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Website</span><span className="text-gray-900 font-medium">{business.website || "—"}</span></div>
-                <div className="flex justify-between py-1"><span className="text-gray-500">Target Audience</span><span className="text-gray-900 capitalize font-medium">{business.preferredAudience}</span></div>
-              </div>
-            </>
-          )}
+            <Crown className="h-6 w-6 text-yellow-500" />
+          </div>
+          <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+            {business.description || "No business description provided yet."}
+          </p>
+          <div className="space-y-3 text-sm divide-y">
+            <div className="flex justify-between py-1"><span className="text-gray-500">Location</span><span className="text-right text-gray-900 font-medium">{locationDisplay}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Address</span><span className="text-right text-gray-900 font-medium">{business.address || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Country</span><span className="text-gray-900 font-medium">{business.country || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Industry</span><span className="text-right text-gray-900 font-medium">{business.industry || business.businessType}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Category</span><span className="text-gray-900 font-medium">{business.category}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Subcategory</span><span className="text-gray-900 font-medium">{business.subCategory || business.subcategories?.join(", ") || "None"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Contact Email</span><span className="text-gray-900 font-medium">{business.email}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Phone</span><span className="text-gray-900 font-medium">{business.phone || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Website</span><span className="text-right text-gray-900 font-medium">{business.website || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Opening Hours</span><span className="text-right text-gray-900 font-medium">{business.openingHours || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Social Media</span><span className="text-right text-gray-900 font-medium">{business.socialMedia || "—"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-gray-500">Target Audience</span><span className="text-gray-900 capitalize font-medium">{business.preferredAudience}</span></div>
+          </div>
         </div>
 
         {/* Membership & Stats Sidebar */}

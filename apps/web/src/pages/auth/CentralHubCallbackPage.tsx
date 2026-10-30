@@ -2,6 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth.store";
 import { centralHubService } from "@/services/central-hub";
+import { isBusinessDashboardUser } from "@/lib/roles";
+
+/**
+ * Where to send a signed-in user. When Central reports no active trial,
+ * membership or access pass we still create a local session, then land the
+ * business owner on the in-dashboard purchase page rather than an upgrade
+ * wall on the public site.
+ */
+function resolveDestination(
+  outcome: { returnPath: string; reason?: string; upgradeUrl?: string },
+  fallback: string,
+): string {
+  if (outcome.reason) {
+    const user = useAuthStore.getState().user;
+    if (user && isBusinessDashboardUser(user)) {
+      const params = new URLSearchParams({ reason: outcome.reason });
+      if (outcome.upgradeUrl) params.set("upgradeUrl", outcome.upgradeUrl);
+      return `/dashboard/plan?${params.toString()}`;
+    }
+  }
+
+  return outcome.returnPath &&
+    outcome.returnPath !== "/" &&
+    outcome.returnPath !== "/auth/login" &&
+    outcome.returnPath !== "/login"
+    ? outcome.returnPath
+    : fallback;
+}
 
 /**
  * Handles both MCOM Central Hub flows:
@@ -40,14 +68,9 @@ export default function CentralHubCallbackPage() {
     if (directToken) {
       handleDirectSsoToken(directToken).then((result) => {
         if (result.success) {
-          const dest =
-            result.returnPath &&
-            result.returnPath !== "/" &&
-            result.returnPath !== "/auth/login" &&
-            result.returnPath !== "/login"
-              ? result.returnPath
-              : getPostLoginRedirect();
-          navigate(dest, { replace: true });
+          navigate(resolveDestination(result, getPostLoginRedirect()), {
+            replace: true,
+          });
         } else {
           fail(result.error || "Authentication failed");
         }
@@ -75,14 +98,9 @@ export default function CentralHubCallbackPage() {
       centralHubService.clearState();
 
       if (result.success) {
-        const dest =
-          result.returnPath &&
-          result.returnPath !== "/" &&
-          result.returnPath !== "/auth/login" &&
-          result.returnPath !== "/login"
-            ? result.returnPath
-            : getPostLoginRedirect();
-        navigate(dest, { replace: true });
+        navigate(resolveDestination(result, getPostLoginRedirect()), {
+          replace: true,
+        });
         return;
       }
 

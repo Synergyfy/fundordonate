@@ -268,6 +268,13 @@ export interface CampaignReward {
   description: string;
   order: number;
   audience: "business" | "consumer" | "both";
+  source?: "mcom" | "fundordonate";
+  mcomRewardId?: string | null;
+  mcomSource?: string | null;
+  fulfilmentProvider?: "MALL" | "CENTRAL" | string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
   triggerType: "contribution" | "membership" | "founding_monthly" | "backer" | "first_n" | "top_n" | "leaderboard";
   triggerConfig: {
     mode: "min" | "range" | "exact";
@@ -802,9 +809,20 @@ export function validateStep(step: StepId, data: CampaignWizardData): StepValida
           errors.push(`Reward ${i + 1}: name is required`);
           fieldErrors[`reward_${i}_title`] = "Reward name is required";
         }
-        if (r.items.length === 0) {
-          errors.push(`Reward ${i + 1}: add at least one item`);
-          fieldErrors[`reward_${i}_items`] = "Add at least one reward item";
+        if (!r.mcomRewardId) {
+          errors.push(`Reward ${i + 1}: select an MCOM Rewards reward`);
+          fieldErrors[`reward_${i}_mcom`] = "Select an MCOM Rewards reward";
+        }
+        if (r.quantityType === "limited" && (!r.quantityLimit || r.quantityLimit < 1)) {
+          errors.push(`Reward ${i + 1}: quantity limit must be at least 1`);
+          fieldErrors[`reward_${i}_quantity`] = "Enter a quantity limit of at least 1";
+        }
+        const central = ["CENTRAL_MEMBERSHIP", "CENTRAL_ACCESS_PASS", "CENTRAL_COUPON"].includes(
+          (r.fulfilmentKind ?? "").toUpperCase(),
+        );
+        if (data.audience === "consumer" && central) {
+          errors.push(`Reward ${i + 1}: Central rewards are business-only`);
+          fieldErrors[`reward_${i}_audience`] = "Central rewards are business-only";
         }
       });
       break;

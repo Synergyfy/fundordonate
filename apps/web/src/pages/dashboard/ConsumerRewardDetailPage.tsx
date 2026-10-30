@@ -7,14 +7,18 @@ import {
   CalendarClock,
   Check,
   Copy,
+  ExternalLink,
   Gift,
   MapPin,
-  Package,
+  ShoppingBag,
 } from "lucide-react";
 import { consumerService } from "@/services/consumer";
 import {
   REWARD_CATEGORY_META,
+  fulfilmentKindLabel,
+  issuedRewardDeliveryState,
   issuedRewardGuidance,
+  issuedRewardIsRedeemable,
   type IssuedReward,
 } from "@/types/rewards";
 
@@ -25,41 +29,51 @@ const formatDate = (iso: string) =>
     year: "numeric",
   });
 
-const formatCurrency = (pence: number) =>
+const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(
-    pence / 100,
+    value,
   );
 
-const STATUS_META: Record<string, { label: string; className: string; hint: string }> = {
-  ISSUED: {
+const STATUS_META: Record<
+  string,
+  { label: string; className: string; hint: string }
+> = {
+  available: {
     label: "Available",
     className: "bg-amber-50 text-amber-700",
     hint: "Show or quote the code below to redeem this reward.",
   },
-  REDEEMED: {
+  processing: {
+    label: "Processing",
+    className: "bg-amber-50 text-amber-700",
+    hint: "MCOM is still delivering this reward. The code will appear once it is ready.",
+  },
+  failed: {
+    label: "Failed",
+    className: "bg-red-50 text-red-700",
+    hint: "We could not deliver this reward. Our team has been notified and will retry where possible.",
+  },
+  redeemed: {
     label: "Redeemed",
     className: "bg-green-50 text-green-700",
     hint: "This reward has already been redeemed.",
   },
-  EXPIRED: {
+  expired: {
     label: "Expired",
     className: "bg-gray-100 text-gray-600",
     hint: "This reward has passed its expiry date.",
   },
-  REVOKED: {
+  revoked: {
     label: "Revoked",
     className: "bg-red-50 text-red-700",
     hint: "This reward was revoked and can no longer be used.",
   },
-  FAILED: {
-    label: "Action required",
-    className: "bg-amber-50 text-amber-700",
-    hint: "We could not issue this reward automatically. Activate your MCOM Rewards account and it will be delivered.",
-  },
 };
 
-function statusMeta(status: string) {
-  return STATUS_META[status?.toUpperCase()] ?? STATUS_META.ISSUED;
+function statusMeta(reward: Pick<IssuedReward, "status" | "fulfilmentStatus">) {
+  return (
+    STATUS_META[issuedRewardDeliveryState(reward)] ?? STATUS_META.processing
+  );
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -116,9 +130,11 @@ export function ConsumerRewardDetailPage() {
   };
 
   const handleCopyCode = async () => {
-    if (!item?.code) return;
+    if (!issuedRewardIsRedeemable(item!)) return;
+    const code = item?.instructions?.code ?? item?.fulfilmentCode ?? item?.code;
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(item.code);
+      await navigator.clipboard.writeText(code);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -156,9 +172,25 @@ export function ConsumerRewardDetailPage() {
     );
   }
 
-  const status = statusMeta(item.status);
+  const status = statusMeta(item);
   const category = item.rewardType ? REWARD_CATEGORY_META[item.rewardType as keyof typeof REWARD_CATEGORY_META] : undefined;
-  const hasCode = !!item.code;
+  const instructions = item.instructions;
+  const deliverable = issuedRewardIsRedeemable(item);
+  const instructionCode = deliverable
+    ? instructions
+      ? instructions.code ?? null
+      : item.fulfilmentCode ?? item.code
+    : null;
+  const hasCode = !!instructionCode;
+  const pendingIdentity =
+    item.fulfilmentStatus === "PENDING_IDENTITY" ||
+    item.fulfilmentStatus === "PENDING_CONFLICT";
+  const guidance = pendingIdentity
+    ? instructions?.body ??
+      (item.fulfilmentStatus === "PENDING_IDENTITY"
+        ? "Link your MCOM account to receive this reward."
+        : "Your reward is on hold while MCOM Rewards resolves a conflict.")
+    : issuedRewardGuidance(item) ?? status.hint;
 
   return (
     <div className="space-y-5">
@@ -181,7 +213,7 @@ export function ConsumerRewardDetailPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">{item.title}</h1>
         <p className="mt-1 text-sm text-gray-600">
-          {issuedRewardGuidance(item) ?? status.hint}
+          {guidance}
         </p>
       </div>
 
@@ -232,7 +264,11 @@ export function ConsumerRewardDetailPage() {
             <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" />
             <span>
               {category?.label ??
-                (item.source === "mcom" ? "MCOM Rewards" : "FundOrDonate reward")}
+                (item.fulfilmentKind
+                  ? fulfilmentKindLabel(item.fulfilmentKind)
+                  : item.source === "mcom"
+                    ? "MCOM Rewards"
+                    : "FundOrDonate reward")}
             </span>
           </p>
         </DetailRow>
@@ -271,32 +307,93 @@ export function ConsumerRewardDetailPage() {
         )}
       </div>
 
-      {/* Redemption code panel */}
-      {hasCode && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700">
-            <Package className="h-4 w-4" />
-            Redemption code
-          </p>
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2">
-            <span className="flex-1 font-mono text-sm font-bold tracking-wide text-gray-900">
-              {item.code}
-            </span>
-            <button
-              type="button"
-              onClick={handleCopyCode}
-              aria-label="Copy reward code"
-              className="rounded-md border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-600" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
+      {/* How to use this reward */}
+      <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary-700">
+          {item.fulfilmentProvider === "CENTRAL" ||
+          (item.fulfilmentKind ?? "").startsWith("CENTRAL")
+            ? <BadgeCheck className="h-4 w-4" />
+            : <ShoppingBag className="h-4 w-4" />}
+          How to use this reward
+        </p>
+        <h2 className="mt-2 text-base font-bold text-gray-900">
+          {instructions?.headline ??
+            (item.fulfilmentKind
+              ? fulfilmentKindLabel(item.fulfilmentKind)
+              : "Your reward")}
+        </h2>
+        <p className="mt-1 text-sm text-gray-700">
+          {instructions?.body ?? item.fulfilmentSummary ?? guidance}
+        </p>
+
+        {hasCode && (
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {item.fulfilmentKind === "CENTRAL_ACCESS_PASS"
+                ? "Access pass code"
+                : "Redemption code"}
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2">
+              <span className="flex-1 font-mono text-sm font-bold tracking-wide text-gray-900">
+                {instructionCode}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                aria-label="Copy reward code"
+                className="rounded-md border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {deliverable && instructions && instructions.links.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {instructions.links.map((link) => (
+              <a
+                key={`${link.label}-${link.url}`}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+              >
+                <ExternalLink className="h-4 w-4" />
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {deliverable && !instructions && item.deepLink && (
+          <a
+            href={item.deepLink}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open reward
+          </a>
+        )}
+
+        {instructions?.note && (
+          <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-gray-600">
+            {instructions.note}
+          </p>
+        )}
+
+        {item.fulfilmentStatus === "FAILED" && item.fulfilmentError && (
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            {item.fulfilmentError}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

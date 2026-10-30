@@ -1,66 +1,42 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
   CircleAlert,
+  ExternalLink,
   Info,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { userDashboardApi } from "@/services/user-dashboard";
+import { getCentralProfileUrl } from "@/lib/central-hub";
+
+const NOTIFICATION_PREFS_KEY = "fod:notificationPrefs";
 
 interface Profile {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
   email: string;
-  username: string;
+  username: string | null;
   avatar: string | null;
-  bio: string | null;
-  phone?: string | null;
-  location?: string | null;
+  jobTitle: string | null;
+  phone: string | null;
+  address: string | null;
+  postcode: string | null;
+  country: string | null;
   role: string;
+  userType: string;
+  profileType: string | null;
+  isAffiliate: boolean;
   emailVerified: boolean;
-  createdAt: string;
-}
-
-const PROFILE_EXTRAS_KEY = "fod:profileExtras";
-const NOTIFICATION_PREFS_KEY = "fod:notificationPrefs";
-
-interface ProfileExtras {
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  bio?: string;
-  phone?: string;
-  location?: string;
-  avatar?: string;
-}
-
-function readProfileExtras(): ProfileExtras {
-  try {
-    const raw = window.localStorage.getItem(PROFILE_EXTRAS_KEY);
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") return parsed as ProfileExtras;
-    }
-  } catch {
-    /* ignore */
-  }
-  return {};
-}
-
-function writeProfileExtras(extras: ProfileExtras): void {
-  try {
-    window.localStorage.setItem(
-      PROFILE_EXTRAS_KEY,
-      JSON.stringify({ ...readProfileExtras(), ...extras }),
-    );
-  } catch {
-    /* storage unavailable */
-  }
+  membershipLevel: string | null;
+  membershipStatus: string | null;
+  profile: Record<string, unknown> | null;
 }
 
 interface NotificationPrefs {
@@ -173,152 +149,100 @@ function CardHeader({
   );
 }
 
+function DetailRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-gray-50 py-3 last:border-b-0">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className="max-w-[60%] break-words text-right text-sm font-medium text-gray-900">
+        {value?.trim() ? value : "Not provided"}
+      </span>
+    </div>
+  );
+}
+
 export function ProfilePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const authUser = useAuthStore((s) => s.user);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
-    return tab === "notifications" ||
-      tab === "danger" ||
-      tab === "profile"
-      ? tab
-      : "profile";
+    return tab === "notifications" || tab === "danger" ? tab : "profile";
   });
   const [message, setMessage] = useState({ type: "", text: "" });
-
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    username: "",
-    bio: "",
-    phone: "",
-    location: "",
-  });
-  const fileRef = useRef<HTMLInputElement>(null);
   const [notPrefs, setNotPrefs] = useState<NotificationPrefs>(readNotificationPrefs);
-
-  // Password change is handled by MCOM Central Hub — no local password UI.
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const profileResult = await userDashboardApi.getProfile().then(
+
+    const load = async (fromCentral: boolean) => {
+      if (fromCentral) {
+        // Central is the source of truth — pick up edits made there without
+        // requiring a re-login. Failures fall back to the cached profile.
+        await useAuthStore.getState().refreshProfile().catch(() => undefined);
+      }
+
+      const result = await userDashboardApi.getProfile().then(
         (value) => ({ status: "fulfilled" as const, value }),
         (reason) => ({ status: "rejected" as const, reason }),
       );
       if (cancelled) return;
-      const extras = readProfileExtras();
-      if (profileResult.status === "fulfilled") {
-        const p = profileResult.value;
-        const bio = extras.bio ?? p.bio ?? "";
-        const phone = extras.phone ?? p.phone ?? "";
-        const location = extras.location ?? p.location ?? "";
-        setProfile({ ...p, bio, phone, location } as any);
-        setForm({
-          firstName: p.firstName || "",
-          lastName: p.lastName || "",
-          username: p.username || "",
-          bio,
-          phone,
-          location,
-        });
+
+      if (result.status === "fulfilled") {
+        setProfile(result.value as unknown as Profile);
       } else {
         const u = useAuthStore.getState().user;
-        const merged: Profile = {
-          id: u?.id ?? "local",
-          firstName: extras.firstName ?? u?.firstName ?? "",
-          lastName: extras.lastName ?? u?.lastName ?? "",
-          email: u?.email ?? "",
-          username: extras.username ?? u?.username ?? "",
-          avatar: extras.avatar ?? u?.avatar ?? null,
-          bio: extras.bio ?? null,
-          phone: extras.phone ?? "",
-          location: extras.location ?? "",
-          role: u?.role ?? "consumer",
-          emailVerified: u?.emailVerified ?? false,
-          createdAt: "",
-        };
-        setProfile(merged);
-        setForm({
-          firstName: merged.firstName || "",
-          lastName: merged.lastName || "",
-          username: merged.username || "",
-          bio: merged.bio || "",
-          phone: merged.phone || "",
-          location: merged.location || "",
-        });
+        setProfile(
+          u
+            ? {
+                id: u.id,
+                firstName: u.firstName ?? null,
+                lastName: u.lastName ?? null,
+                fullName: u.fullName ?? null,
+                email: u.email,
+                username: u.username,
+                avatar: u.avatar ?? null,
+                jobTitle: u.jobTitle ?? null,
+                phone: u.phone ?? null,
+                address: u.address ?? null,
+                postcode: u.postcode ?? null,
+                country: u.country ?? null,
+                role: u.role,
+                userType: u.userType,
+                profileType: u.profileType ?? null,
+                isAffiliate: u.isAffiliate ?? false,
+                emailVerified: u.emailVerified,
+                membershipLevel: u.membershipLevel ?? null,
+                membershipStatus: u.membershipStatus ?? null,
+                profile: u.profile ?? null,
+              }
+            : null,
+        );
       }
       setLoading(false);
-    })();
+    };
+
+    void load(true);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void load(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
   const showMessage = (type: string, text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: "", text: "" }), 3000);
-  };
-
-  const handleSaveProfile = async () => {
-    setSaving(true);
-    writeProfileExtras({
-      firstName: form.firstName,
-      lastName: form.lastName,
-      username: form.username,
-      bio: form.bio,
-      phone: form.phone,
-      location: form.location,
-    });
-    try {
-      const updated = await userDashboardApi.updateProfile({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        username: form.username,
-        bio: form.bio,
-      });
-      setProfile((p) => ({
-        ...updated,
-        bio: form.bio,
-        phone: form.phone,
-        location: form.location,
-        avatar: updated?.avatar ?? p?.avatar ?? null,
-      }));
-      showMessage("success", "Profile updated successfully");
-    } catch {
-      setProfile((p) => (p ? { ...p, ...form } : p));
-      showMessage(
-        "error",
-        "We could not save your profile to the server. Your changes are kept on this device.",
-      );
-    }
-    setSaving(false);
-  };
-
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      if (!dataUrl) return;
-      if (dataUrl.length > 300_000) {
-        showMessage("error", "That photo is too large â€” please pick a smaller image");
-        return;
-      }
-      setProfile((p) => (p ? { ...p, avatar: dataUrl } : p));
-      writeProfileExtras({ avatar: dataUrl });
-      void userDashboardApi.updateProfile({ avatar: dataUrl }).catch(() => {
-        /* kept locally for this session */
-      });
-      showMessage("success", "Profile photo updated");
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
   };
 
   const handleSaveNotifications = () => {
@@ -346,6 +270,17 @@ export function ProfilePage() {
     );
   }
 
+  const displayName =
+    profile?.fullName ||
+    [profile?.firstName, profile?.lastName].filter(Boolean).join(" ").trim() ||
+    profile?.username ||
+    profile?.email ||
+    "Your profile";
+
+  const editProfileUrl = getCentralProfileUrl(
+    authUser ?? (profile ? { role: profile.role, userType: profile.userType } : null),
+  );
+
   const tabs = [
     { id: "profile", label: "Profile" },
     { id: "notifications", label: "Notifications" },
@@ -361,12 +296,11 @@ export function ProfilePage() {
         >
           You
         </Link>
-        <span className="text-xs text-gray-400">Profile Settings</span>
+        <span className="text-xs text-gray-400">Profile</span>
       </div>
 
-      <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900">Your Profile</h1>
 
-      {/* Toast Message */}
       {message.text && (
         <div
           className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium ${
@@ -384,7 +318,6 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
         {tabs.map((t) => (
           <button
@@ -405,110 +338,125 @@ export function ProfilePage() {
         ))}
       </div>
 
-      {/* Profile Tab */}
       {activeTab === "profile" && (
-        <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 space-y-4">
-          {/* Avatar */}
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-2xl font-bold text-primary-700">
-              {profile?.avatar ? (
-                <img src={profile.avatar} alt="" className="h-full w-full object-cover" />
-              ) : (
-                (form.firstName?.[0] || form.username?.[0] || "U").toUpperCase()
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-base font-semibold text-gray-900">
-                {(() => {
-                  const name = `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim();
-                  return name || profile?.username || profile?.email || "Your profile";
-                })()}
-              </p>
-              <p className="truncate text-sm text-gray-400">{profile?.email}</p>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="inline-flex rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium capitalize text-primary-700">
-                  {profile?.role || "consumer"}
-                </span>
-                {profile?.emailVerified ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                    Verified
-                  </span>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-2xl font-bold text-primary-700">
+                {profile?.avatar ? (
+                  <img src={profile.avatar} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-xs text-yellow-600">Not verified</span>
+                  (profile?.firstName?.[0] || profile?.email?.[0] || "U").toUpperCase()
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="mt-2 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-              >
-                Change Photo
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoChange}
-              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-semibold text-gray-900">{displayName}</p>
+                <p className="truncate text-sm text-gray-500">{profile?.email}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium capitalize text-primary-700">
+                    {(profile?.profileType || profile?.userType || "consumer").toLowerCase()}
+                  </span>
+                  {profile?.isAffiliate && (
+                    <span className="inline-flex rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                      Affiliate
+                    </span>
+                  )}
+                  {profile?.emailVerified ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Verified by Central Hub
+                    </span>
+                  ) : (
+                    <span className="text-xs text-yellow-600">Not verified</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Central Hub identity note */}
-          <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-            <p className="text-xs text-blue-800">
-              You sign in through Central Hub. Your name, photo and details here
-              make up your FundOrDonate profile â€” your email stays linked to
-              your Central Hub identity.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label">First Name</label>
-              <input type="text" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} className="input-field w-full" />
-            </div>
-            <div>
-              <label className="label">Last Name</label>
-              <input type="text" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} className="input-field w-full" />
+            <div className="text-xs text-blue-800">
+              <p className="font-semibold">Your details are managed by MCOM Central Hub.</p>
+              <p className="mt-1">
+                Name, email, phone, address and business information are synced from
+                Central Hub each time you sign in. To change them, update your profile
+                in Central Hub.
+              </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label">Phone</label>
-              <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="input-field w-full" placeholder="Your phone number" />
+          <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-gray-900">Personal details</h2>
+              <a
+                href={editProfileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700"
+              >
+                Edit on Central Hub
+                <ExternalLink className="h-4 w-4" />
+              </a>
             </div>
-            <div>
-              <label className="label">Location</label>
-              <input type="text" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className="input-field w-full" placeholder="City or area" />
+            <div className="divide-y divide-gray-50">
+              <DetailRow label="First name" value={profile?.firstName} />
+              <DetailRow label="Last name" value={profile?.lastName} />
+              <DetailRow label="Email" value={profile?.email} />
+              <DetailRow label="Phone" value={profile?.phone} />
+              <DetailRow label="Job title" value={profile?.jobTitle} />
+              <DetailRow label="Address" value={profile?.address} />
+              <DetailRow label="Postcode" value={profile?.postcode} />
+              <DetailRow label="Country" value={profile?.country} />
+              <DetailRow label="Username" value={profile?.username} />
             </div>
           </div>
 
-          <div>
-            <label className="label">Username</label>
-            <input type="text" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} className="input-field w-full" />
-          </div>
+          {profile?.membershipLevel && (
+            <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+              <h2 className="mb-2 text-base font-semibold text-gray-900">Membership</h2>
+              <div className="divide-y divide-gray-50">
+                <DetailRow label="Level" value={profile.membershipLevel} />
+                <DetailRow label="Status" value={profile.membershipStatus} />
+              </div>
+            </div>
+          )}
 
-          <div>
-            <label className="label">Bio</label>
-            <textarea value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} className="input-field w-full" rows={3} placeholder="Tell us about yourself..." />
-          </div>
-
-          <div>
-            <label className="label">Email</label>
-            <input type="email" value={profile?.email || ""} disabled className="input-field w-full bg-gray-50 text-gray-400" />
-          </div>
-
-          <button onClick={handleSaveProfile} disabled={saving} className="btn-primary">
-            {saving ? "Saving..." : "Save Profile"}
-          </button>
+          {profile?.profileType === "CUSTOMER" && profile.profile && (
+            <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+              <h2 className="mb-2 text-base font-semibold text-gray-900">
+                Central Hub profile
+              </h2>
+              <div className="divide-y divide-gray-50">
+                <DetailRow
+                  label="Loyalty points"
+                  value={
+                    profile.profile.loyaltyPoints !== undefined
+                      ? String(profile.profile.loyaltyPoints)
+                      : null
+                  }
+                />
+                <DetailRow
+                  label="Account status"
+                  value={
+                    typeof profile.profile.status === "string"
+                      ? profile.profile.status
+                      : null
+                  }
+                />
+                <DetailRow
+                  label="Platforms used"
+                  value={
+                    Array.isArray(profile.profile.platformUsage)
+                      ? profile.profile.platformUsage.join(", ")
+                      : null
+                  }
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Notifications Tab */}
       {activeTab === "notifications" && (
         <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
           <CardHeader
@@ -535,19 +483,25 @@ export function ProfilePage() {
               label="Campaign updates"
               description="Progress and milestones from campaigns you support."
               checked={notPrefs.emailCampaignUpdates}
-              onChange={(next) => setNotPrefs((p) => ({ ...p, emailCampaignUpdates: next }))}
+              onChange={(next) =>
+                setNotPrefs((p) => ({ ...p, emailCampaignUpdates: next }))
+              }
             />
             <PrefRow
               label="New followers"
               description="When someone new follows your activity."
               checked={notPrefs.emailNewFollowers}
-              onChange={(next) => setNotPrefs((p) => ({ ...p, emailNewFollowers: next }))}
+              onChange={(next) =>
+                setNotPrefs((p) => ({ ...p, emailNewFollowers: next }))
+              }
             />
             <PrefRow
               label="Withdrawal status"
               description="Updates on payout and withdrawal status."
               checked={notPrefs.emailWithdrawals}
-              onChange={(next) => setNotPrefs((p) => ({ ...p, emailWithdrawals: next }))}
+              onChange={(next) =>
+                setNotPrefs((p) => ({ ...p, emailWithdrawals: next }))
+              }
             />
           </div>
 
@@ -565,7 +519,9 @@ export function ProfilePage() {
               label="Campaign updates"
               description="Time-sensitive milestones on this device."
               checked={notPrefs.pushCampaignUpdates}
-              onChange={(next) => setNotPrefs((p) => ({ ...p, pushCampaignUpdates: next }))}
+              onChange={(next) =>
+                setNotPrefs((p) => ({ ...p, pushCampaignUpdates: next }))
+              }
             />
           </div>
 
@@ -577,7 +533,6 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Danger Zone Tab */}
       {activeTab === "danger" && (
         <div className="overflow-hidden rounded-xl border border-red-200 bg-white shadow-sm">
           <div className="flex items-start gap-3 border-b border-red-100 bg-red-50 px-5 py-4">
@@ -587,7 +542,7 @@ export function ProfilePage() {
             <div>
               <h2 className="text-base font-semibold text-red-700">Danger Zone</h2>
               <p className="mt-0.5 text-sm text-red-600/80">
-                Permanent actions â€” please read carefully before continuing.
+                Permanent actions - please read carefully before continuing.
               </p>
             </div>
           </div>
@@ -596,11 +551,12 @@ export function ProfilePage() {
             <div className="flex flex-col gap-3 rounded-lg border border-red-100 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900">
-                  Delete your account
+                  Delete your FundOrDonate account
                 </p>
                 <p className="mt-0.5 text-sm text-gray-500">
-                  Your profile, contribution history, rewards and preferences
-                  will be permanently removed. This action cannot be undone.
+                  Your FundOrDonate profile, contribution history, rewards and
+                  preferences will be permanently removed. Your MCOM Central Hub
+                  account is not deleted.
                 </p>
               </div>
               <button
@@ -614,7 +570,7 @@ export function ProfilePage() {
             <div className="flex items-start gap-2 rounded-lg bg-gray-50 p-3">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
               <p className="text-xs text-gray-500">
-                Just stepping away? You can sign out from the You menu instead â€”
+                Just stepping away? You can sign out from the You menu instead -
                 your account and data stay exactly as they are.
               </p>
             </div>
@@ -622,10 +578,15 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDeleteModal(false)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
@@ -647,7 +608,7 @@ export function ProfilePage() {
               </button>
             </div>
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              Deleting your account is permanent and cannot be undone.
+              Deleting your FundOrDonate account is permanent and cannot be undone.
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
               <button

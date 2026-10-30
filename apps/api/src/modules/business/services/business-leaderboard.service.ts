@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "@/prisma/prisma.service";
 import { LeaderboardQueryDto, LeaderboardScope } from "../dto/leaderboard-query.dto";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
 
 export interface LeaderboardRankResult {
   rank: number;
@@ -22,7 +24,10 @@ export interface LeaderboardEntryDto {
 
 @Injectable()
 export class BusinessLeaderboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilityService,
+  ) {}
 
   /**
    * Calculates the specific rank and total contribution for a given business in its city.
@@ -86,6 +91,20 @@ export class BusinessLeaderboardService {
   }> {
     const scope = query.scope ?? LeaderboardScope.CITY;
     const locationFilter = query.location?.trim();
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: currentBusinessId },
+      select: { ownerId: true },
+    });
+    if (business) {
+      const feature =
+        scope === LeaderboardScope.NATIONAL
+          ? FEATURES.LEADERBOARD_NATIONAL
+          : scope === LeaderboardScope.CITY
+            ? FEATURES.LEADERBOARD_CITY
+            : FEATURES.LEADERBOARD_LOCAL;
+      await this.capabilities.assertFeature(business.ownerId, feature);
+    }
 
     const conditions = [Prisma.sql`b.status = 'ACTIVE'`];
     if (locationFilter) {

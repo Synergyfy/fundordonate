@@ -61,7 +61,7 @@ export function TrialBanner() {
     try {
       const result = await refreshEntitlement();
       if (!result.hasAccess) {
-        navigate("/upgrade?reason=TRIAL_EXPIRED", { replace: false });
+        navigate("/dashboard/plan?reason=TRIAL_EXPIRED", { replace: false });
       }
     } catch {
       // Keep the banner as-is if the re-check fails.
@@ -86,7 +86,7 @@ export function TrialBanner() {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
-                onClick={() => navigate("/upgrade?reason=TRIAL_EXPIRED")}
+                onClick={() => navigate("/dashboard/plan?reason=TRIAL_EXPIRED")}
                 className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-700"
               >
                 Upgrade access

@@ -1,41 +1,16 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowUpRight } from "lucide-react";
-
-const REASON_MESSAGES: Record<string, { title: string; body: string }> = {
-  PLATFORM_NOT_IN_MEMBERSHIP: {
-    title: "FundorDonate isn't included in your membership",
-    body: "Your MCOM membership is active, but it doesn't currently bundle access to FundorDonate. Upgrade your membership to unlock it.",
-  },
-  TRIAL_NO_TASKS: {
-    title: "Trial available — no programme tasks yet",
-    body: "You're in a trial window, but no active programme tasks are configured for FundorDonate yet. Check back soon or upgrade for full access.",
-  },
-  TRIAL_EXPIRED: {
-    title: "Your trial has ended",
-    body: "Your FundorDonate trial access has expired. Upgrade your membership to continue.",
-  },
-  UNVERIFIED: {
-    title: "Verification required",
-    body: "Your MCOM business verification fee hasn't been paid yet. Complete verification to unlock trial access.",
-  },
-  MEMBERSHIP_EXPIRED: {
-    title: "Your membership has expired",
-    body: "Renew your MCOM membership to restore access to FundorDonate.",
-  },
-  NO_ACTIVE_ENTITLEMENT: {
-    title: "No active plan for FundorDonate",
-    body: "There's no active plan or entitlement for your account on this platform yet.",
-  },
-};
+import { AlertTriangle, ArrowRight, ArrowUpRight } from "lucide-react";
+import { getEntitlementReasonMessage } from "@/lib/entitlement-reasons";
+import { useAuthStore } from "@/stores/auth.store";
+import { isBusinessDashboardUser } from "@/lib/roles";
 
 export default function UpgradePage() {
   const [searchParams] = useSearchParams();
   const reason = searchParams.get("reason") || "NO_ACTIVE_ENTITLEMENT";
   const upgradeUrl = searchParams.get("upgradeUrl") || "";
-  const message = REASON_MESSAGES[reason] ?? {
-    title: "Access required",
-    body: "Your account doesn't currently have access to FundorDonate.",
-  };
+  const message = getEntitlementReasonMessage(reason);
+  const user = useAuthStore((s) => s.user);
+  const canBuyInDashboard = Boolean(user && isBusinessDashboardUser(user));
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-8">
@@ -54,13 +29,33 @@ export default function UpgradePage() {
             Reason: {reason}
           </p>
 
-          {upgradeUrl && (
-            <a
-              href={upgradeUrl}
+          {canBuyInDashboard ? (
+            <Link
+              to={`/dashboard/plan?reason=${encodeURIComponent(reason)}`}
               className="btn-primary mt-6 inline-flex items-center gap-2"
             >
-              Go to MCOM Central to upgrade
-              <ArrowUpRight className="h-4 w-4" />
+              Choose a plan or access pass
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            upgradeUrl && (
+              <a
+                href={upgradeUrl}
+                className="btn-primary mt-6 inline-flex items-center gap-2"
+              >
+                Go to MCOM Central to upgrade
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
+            )
+          )}
+
+          {canBuyInDashboard && upgradeUrl && (
+            <a
+              href={upgradeUrl}
+              className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+            >
+              Manage your MCOM membership
+              <ArrowUpRight className="h-3 w-3" />
             </a>
           )}
         </div>

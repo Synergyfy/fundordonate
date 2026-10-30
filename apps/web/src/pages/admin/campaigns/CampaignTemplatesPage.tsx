@@ -153,8 +153,22 @@ export function CampaignTemplatesPage() {
     }
   };
 
-  const handleDuplicate = async (template: AdminCampaignTemplate) => {
+  const handleTogglePremium = async (template: AdminCampaignTemplate) => {
     setBusyId(template.id);
+    try {
+      await adminApi.updateTemplate(template.id, {
+        isPremium: !template.isPremium,
+        requiredFeature: template.isPremium ? null : "templates.premium",
+      });
+      await fetchTemplates();
+    } catch (err) {
+      alert((err as any)?.message ?? "Failed to update premium access");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDuplicate = async (template: AdminCampaignTemplate) => {    setBusyId(template.id);
     try {
       await adminApi.duplicateTemplate(template.id);
       await fetchTemplates();
@@ -296,8 +310,15 @@ export function CampaignTemplatesPage() {
                         {t.category || "General"}
                       </span>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusMeta.className}`}>
-                      {statusMeta.label}
+                    <span className="flex items-center gap-1.5">
+                      {t.isPremium && (
+                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                          PREMIUM
+                        </span>
+                      )}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusMeta.className}`}>
+                        {statusMeta.label}
+                      </span>
                     </span>
                   </div>
                   <h3 className="font-bold text-gray-900 text-base mb-1">{t.name}</h3>
@@ -316,6 +337,14 @@ export function CampaignTemplatesPage() {
                       className="font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
                     >
                       {t.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      onClick={() => handleTogglePremium(t)}
+                      disabled={isBusy}
+                      className="font-medium text-purple-600 hover:text-purple-700 disabled:opacity-50"
+                      title="Toggle premium template (requires the templates.premium capability)"
+                    >
+                      {t.isPremium ? "Make standard" : "Make premium"}
                     </button>
                     <button
                       onClick={() => handleDuplicate(t)}

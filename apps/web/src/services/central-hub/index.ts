@@ -4,7 +4,11 @@
 
 import api from "../api";
 import { CENTRAL_HUB_CONFIG } from "@/lib/config";
-import type { CentralHubCallbackResult, LocalEntitlement } from "./type";
+import type {
+  CentralHubCallbackResult,
+  CentralHubUser,
+  LocalEntitlement,
+} from "./type";
 
 export const centralHubService = {
   /** Whether the backend has MCOM SSO configured. */
@@ -66,6 +70,11 @@ export const centralHubService = {
   /** Re-introspect the current user's entitlement. */
   async refreshEntitlement(): Promise<{ hasAccess: boolean; entitlement: LocalEntitlement | null }> {
     return api.post("/auth/sso/refresh-entitlement");
+  },
+
+  /** Force a fresh copy of the user's identity from Central Hub. */
+  async refreshProfile(): Promise<{ user: CentralHubUser }> {
+    return api.post("/auth/sso/refresh-profile");
   },
 
   /** Clear the local session and get the Central single-logout URL. */

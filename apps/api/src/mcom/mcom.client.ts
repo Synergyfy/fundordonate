@@ -79,12 +79,16 @@ export class McomClient {
   }
 
   /** Fetch the user profile + entitlement using a Bearer access token. */
-  async getUserInfo(accessToken: string): Promise<McomUserInfo> {
+  async getUserInfo(
+    accessToken: string,
+    timeoutMs = 15000,
+  ): Promise<McomUserInfo> {
     const { data } = await this.http.get<McomUserInfo>("/auth/sso/userinfo", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "x-client-id": this.clientId,
       },
+      timeout: timeoutMs,
     });
     return data;
   }

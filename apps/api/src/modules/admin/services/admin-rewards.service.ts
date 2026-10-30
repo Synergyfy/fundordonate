@@ -23,7 +23,14 @@ export interface AdminFulfilmentView {
   rewardId: string;
   userId: string | null;
   businessId: string | null;
+  campaignId: string | null;
+  campaignTitle: string | null;
   status: string;
+  retryPending: boolean;
+  isDigital: boolean;
+  fulfilmentProvider: string | null;
+  fulfilmentKind: string | null;
+  fulfilmentError: string | null;
   recipientName: string | null;
   recipientEmail: string | null;
   shippingAddress: Record<string, unknown> | null;
@@ -127,8 +134,21 @@ export class AdminRewardsService {
       }),
     ]);
 
+    const campaignIds = Array.from(
+      new Set(rows.map((r) => r.campaignId).filter((id): id is string => !!id)),
+    );
+    const campaigns = campaignIds.length
+      ? await this.prisma.businessCampaign.findMany({
+          where: { id: { in: campaignIds } },
+          select: { id: true, title: true },
+        })
+      : [];
+    const campaignTitles = new Map(campaigns.map((c) => [c.id, c.title]));
+
     return {
-      items: rows.map((r) => this.toFulfilmentView(r)),
+      items: rows.map((r) =>
+        this.toFulfilmentView(r, r.campaignId ? campaignTitles.get(r.campaignId) ?? null : null),
+      ),
       total,
       page,
       limit,
@@ -171,7 +191,6 @@ export class AdminRewardsService {
 
     return this.toFulfilmentView(updated);
   }
-
   private toRewardView(
     cfg: StoredRewardConfig,
     template: RewardTemplateRow,
@@ -216,27 +235,68 @@ export class AdminRewardsService {
     };
   }
 
-  private toFulfilmentView(row: {
-    id: string;
-    mcomRewardId: string;
-    rewardTitle: string | null;
-    userId: string | null;
-    campaignId: string | null;
-    recipientName: string | null;
-    recipientEmail: string | null;
-    status: string;
-    metadata: unknown;
-    redeemedAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AdminFulfilmentView {
+  private toFulfilmentView(
+    row: {
+      id: string;
+      mcomRewardId: string;
+      rewardTitle: string | null;
+      userId: string | null;
+      businessId: string | null;
+      campaignId: string | null;
+      recipientName: string | null;
+      recipientEmail: string | null;
+      status: string;
+      metadata: unknown;
+      fulfilmentProvider: string | null;
+      fulfilmentKind: string | null;
+      fulfilmentStatus: string | null;
+      fulfilmentError: string | null;
+      businessName: string | null;
+      redeemedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+    campaignTitle: string | null = null,
+  ): AdminFulfilmentView {
     const meta = (row.metadata as Record<string, unknown>) ?? {};
+    const provider = row.fulfilmentProvider ?? null;
+    const kind = row.fulfilmentKind ?? null;
+    const isDigital =
+      provider === "MALL" ||
+      provider === "CENTRAL" ||
+      (!!kind && kind.startsWith("CENTRAL_")) ||
+      (!!kind && kind.startsWith("MALL_")) ||
+      (!row.fulfilmentProvider && !row.fulfilmentKind && row.status !== "PENDING");
+
+    const failureMessage =
+      row.fulfilmentError ??
+      (typeof meta.failureReason === "string" ? meta.failureReason : null) ??
+      (typeof meta.fulfilmentError === "string" ? meta.fulfilmentError : null);
+
+    const rawStatus = (
+      (meta.fulfilmentStatus as string) ??
+      row.fulfilmentStatus ??
+      row.status
+    ).toLowerCase();
+    const retryPending =
+      row.status === "PENDING" ||
+      Boolean(meta.needsActivation) ||
+      rawStatus === "pending_identity" ||
+      rawStatus === "pending_conflict";
+
     return {
       id: row.id,
       rewardId: row.mcomRewardId,
       userId: row.userId,
-      businessId: row.campaignId,
-      status: (meta.fulfilmentStatus as string) ?? row.status.toLowerCase(),
+      businessId: row.businessId ?? null,
+      campaignId: row.campaignId ?? null,
+      campaignTitle,
+      status: rawStatus,
+      retryPending,
+      isDigital,
+      fulfilmentProvider: provider,
+      fulfilmentKind: kind,
+      fulfilmentError: failureMessage,
       recipientName: row.recipientName,
       recipientEmail: row.recipientEmail,
       shippingAddress: (meta.shippingAddress as Record<string, unknown>) ?? null,
@@ -249,7 +309,10 @@ export class AdminRewardsService {
       reward: {
         id: row.mcomRewardId,
         code: row.mcomRewardId,
-        name: row.rewardTitle ?? "Reward",
+        name:
+          row.rewardTitle ??
+          (typeof meta.rewardName === "string" ? meta.rewardName : null) ??
+          "Reward",
         icon: "🎁",
       },
     };

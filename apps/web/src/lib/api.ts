@@ -57,7 +57,9 @@ api.interceptors.response.use(
       originalRequest.url?.includes("/auth/login") ||
       originalRequest.url?.includes("/auth/admin/login") ||
       originalRequest.url?.includes("/auth/sso/callback") ||
-      originalRequest.url?.includes("/auth/sso/direct-login")
+      originalRequest.url?.includes("/auth/sso/direct-login") ||
+      originalRequest.url?.includes("/auth/sso/refresh-entitlement") ||
+      originalRequest.url?.includes("/auth/sso/refresh-profile")
     ) {
       return Promise.reject(error);
     }
@@ -140,7 +142,7 @@ api.interceptors.response.use(
 // Public Path Detection
 // =============================================================================
 
-const PUBLIC_PATHS = ["/", "/campaigns", "/auth", "/admin/login", "/upgrade", "/donate", "/pledge", "/thank-you", "/payment-failed"];
+const PUBLIC_PATHS = ["/", "/campaigns", "/auth", "/admin/login", "/upgrade", "/donate", "/pledge", "/thank-you", "/payment-failed", "/plans"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));

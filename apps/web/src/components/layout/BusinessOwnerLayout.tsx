@@ -11,7 +11,7 @@ import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import { useBusinessProfile } from "@/services/business/hook";
 import {
   Home, Target, TrendingUp, BarChart3, Award, Settings, Store, LayoutGrid,
-  Ellipsis, X, LogOut, Heart,
+  Ellipsis, X, LogOut, Heart, CreditCard,
 } from "lucide-react";
 import { TrialBanner } from "@/components/trial/TrialBanner";
 import { useAuthStore } from "@/stores/auth.store";
@@ -31,9 +31,11 @@ const SIDEBAR_NAV = [
   { to: "/dashboard/contributions", label: "Contributions", icon: TrendingUp },
   { to: "/dashboard/my-contributions", label: "My Contributions", icon: Heart },
   { to: "/dashboard/leaderboard", label: "Leaderboard", icon: BarChart3 },
+  { to: "/dashboard/plan", label: "Plan & Access", icon: CreditCard },
   { to: "/dashboard/rewards", label: "Rewards", icon: Award },
   { to: "/dashboard/my-business", label: "My Business", icon: Store },
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/plans", label: "Plans & Access", icon: CreditCard },
 ];
 
 // Sidebar pages that are NOT already a bottom tab → surfaced via "More".
@@ -161,7 +163,7 @@ export function BusinessOwnerLayout() {
       {/* Main Content */}
       <main className="flex-1 pb-20 lg:pb-6 bg-gray-50 overflow-auto">
         <div className="p-4 lg:p-6">
-          <TrialBanner />
+          {location.pathname !== "/dashboard/plan" && <TrialBanner />}
           {isMissingProfile && (
             <div className="mb-6 rounded-2xl border-2 border-primary-500 bg-white p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

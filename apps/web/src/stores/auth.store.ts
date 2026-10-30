@@ -6,6 +6,7 @@ import {
 } from "@/services/central-hub";
 import { SESSION_EXPIRED_EVENT } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/config";
+import { clearCapabilitySnapshot } from "@/lib/plan-capability-cache";
 import { getDashboardRoute } from "@/lib/roles";
 
 // =============================================================================
@@ -18,14 +19,24 @@ export interface User {
   username: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  fullName?: string | null;
+  jobTitle?: string | null;
   avatar?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  postcode?: string | null;
+  country?: string | null;
   role: string;
   userType: string;
+  profileType?: string | null;
+  isAffiliate?: boolean;
   businessId?: string | null;
   emailVerified: boolean;
   membershipLevel?: string | null;
+  membershipTier?: string | null;
   membershipPlanName?: string | null;
   membershipStatus?: string | null;
+  profile?: Record<string, unknown> | null;
   subscription?: LocalEntitlement | null;
 }
 
@@ -69,6 +80,7 @@ interface AuthState {
     hasAccess: boolean;
     entitlement: LocalEntitlement | null;
   }>;
+  refreshProfile: () => Promise<void>;
   getPostLoginRedirect: () => string;
   clearSessionError: () => void;
 }
@@ -83,6 +95,17 @@ interface AuthState {
  */
 function resolvePostLoginRoute(user: User): string {
   return getDashboardRoute(user);
+}
+
+/**
+ * SSO can return a different identity in the same tab (link/account switch).
+ * Clear per-user caches so the new session never renders the previous user's
+ * capability snapshot — no manual reload required.
+ */
+function syncIdentityCaches(previous: User | null, next: User | null): void {
+  if (previous && next && previous.id !== next.id) {
+    clearCapabilitySnapshot();
+  }
 }
 
 // =============================================================================
@@ -105,6 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (result.refreshToken) {
       localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.refreshToken);
     }
+    syncIdentityCaches(get().user, result.user);
     set({
       user: result.user,
       entitlement: result.user.subscription ?? null,
@@ -122,6 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+    clearCapabilitySnapshot();
     set({
       user: null,
       entitlement: null,
@@ -136,6 +161,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!user || !user.id) {
         throw new Error("No active session");
       }
+      syncIdentityCaches(get().user, user);
       set({
         user,
         entitlement: user.subscription ?? null,
@@ -164,6 +190,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearAuth: (sessionErrorMessage) => {
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+    clearCapabilitySnapshot();
     set({
       user: null,
       entitlement: null,
@@ -202,6 +229,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
           localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
         }
+        syncIdentityCaches(get().user, result.user);
         set({
           user: result.user,
           entitlement: result.entitlement ?? result.user.subscription ?? null,
@@ -209,7 +237,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           centralHubLoading: false,
           sessionError: null,
         });
-        return { success: true, returnPath };
+        return {
+          success: true,
+          returnPath,
+          reason: result.reason,
+          upgradeUrl: result.upgradeUrl,
+        };
       }
 
       set({ centralHubLoading: false });
@@ -242,6 +275,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, result.tokens.accessToken);
           localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, result.tokens.refreshToken);
         }
+        syncIdentityCaches(get().user, result.user);
         set({
           user: result.user,
           entitlement: result.entitlement ?? result.user.subscription ?? null,
@@ -273,10 +307,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return result;
   },
 
+  refreshProfile: async () => {
+    const result = await centralHubService.refreshProfile();
+    if (result?.user) {
+      set({
+        user: result.user,
+        entitlement: result.user.subscription ?? null,
+      });
+    }
+  },
+
   getPostLoginRedirect: () => {
-    const { user } = get();
+    const { user, entitlement } = get();
     if (!user) return "/";
-    return resolvePostLoginRoute(user);
+    const destination = resolvePostLoginRoute(user);
+
+    // Business accounts without an active trial, membership or locally
+    // purchased plan/access pass land on the in-dashboard purchase page.
+    if (destination === "/dashboard" && !entitlement?.isActive) {
+      return "/dashboard/plan";
+    }
+
+    return destination;
   },
   clearSessionError: () => {
     set({ sessionError: null });

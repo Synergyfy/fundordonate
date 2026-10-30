@@ -39,16 +39,6 @@ export const userDashboardService = {
     return api.get("/user/profile");
   },
 
-  async updateProfile(data: {
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-    bio?: string;
-    avatar?: string;
-  }) {
-    return api.put("/user/profile", data);
-  },
-
   // -------------------------------------------------------------------------
   // Account
   // -------------------------------------------------------------------------

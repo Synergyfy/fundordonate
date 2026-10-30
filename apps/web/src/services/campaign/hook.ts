@@ -76,6 +76,16 @@ export function useBusinessCampaigns(query?: CampaignQueryDto) {
   });
 }
 
+export function useDeleteCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (campaignId: string) => campaignService.deleteCampaign(campaignId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: campaignKeys.all });
+    },
+  });
+}
+
 export function useCampaignDetail(campaignId?: string) {
   return useQuery({
     queryKey: campaignKeys.detail(campaignId || ""),

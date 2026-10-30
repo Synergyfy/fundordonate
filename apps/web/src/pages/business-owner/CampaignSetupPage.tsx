@@ -9,7 +9,7 @@
 //   - Zero dummy or mock data fallback
 // =============================================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import {
+  useBusinessCampaigns,
   useBusinessTemplates,
   useCampaignDetail,
   useClaimTemplate,
@@ -48,6 +49,11 @@ import { MediaAnswerField, MediaPreview } from "@/components/business/MediaAnswe
 import { DatePicker } from "@/components/ui/DatePicker";
 import { campaignService } from "@/services/campaign";
 import { normalizeBusinessRewardsMode } from "@/services/templates";
+import { usePlanCapabilities } from "@/hooks/usePlanCapabilities";
+import {
+  fulfilmentKindLabel,
+  isCentralFulfilmentKind,
+} from "@/types/rewards";
 import type {
   CampaignRewardAttachment,
   McomBusinessReward,
@@ -284,6 +290,8 @@ export default function CampaignSetupPage() {
   // Queries
   const { data: templates = [], isLoading: templatesLoading } =
     useBusinessTemplates();
+  const { data: myCampaigns, isLoading: myCampaignsLoading } =
+    useBusinessCampaigns({ limit: 100 });
   const { data: profile, isLoading: profileLoading } = useBusinessProfile();
   const { data: auditStatus } = useBusinessAuditStatus();
   const preAuditRef = auditStatus?.preAuditId
@@ -300,33 +308,74 @@ export default function CampaignSetupPage() {
   const claimMutation = useClaimTemplate();
   const saveAnswersMutation = useSaveCampaignAnswers();
   const submitMutation = useSubmitCampaign();
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const claimAttempted = useRef(false);
 
   // Find template view
   const templateView = useMemo(() => {
     return templates.find((t) => t.id === templateId) ?? null;
   }, [templates, templateId]);
 
-  // If no instanceId was provided in URL, auto-claim the template
+  // If no instanceId was provided in URL, resume the existing draft for this
+  // template where possible, otherwise claim it once. Never leave the page in
+  // a state where the reward picker is visible but no campaign exists.
   useEffect(() => {
-    if (!instanceId && templateId && !claimMutation.isPending) {
-      claimMutation
-        .mutateAsync(templateId)
-        .then((res) => {
-          setInstanceId(res.campaignId);
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev);
-              next.set("campaign", res.campaignId);
-              return next;
-            },
-            { replace: true }
-          );
-        })
-        .catch((err) => {
-          console.error("Auto claim error:", err);
-        });
+    if (instanceId || !templateId || claimAttempted.current) return;
+    if (myCampaignsLoading) return;
+
+    const existing = (myCampaigns?.items ?? []).find(
+      (campaign) =>
+        campaign.templateId === templateId &&
+        ["DRAFT", "CHANGES_REQUESTED", "PENDING_REVIEW", "APPROVED"].includes(
+          String(campaign.status).toUpperCase(),
+        ),
+    );
+    if (existing) {
+      claimAttempted.current = true;
+      setInstanceId(existing.id);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("campaign", existing.id);
+          return next;
+        },
+        { replace: true },
+      );
+      return;
     }
-  }, [instanceId, templateId, claimMutation, setSearchParams]);
+
+    if (claimMutation.isPending) return;
+    claimAttempted.current = true;
+    setClaimError(null);
+    claimMutation
+      .mutateAsync(templateId)
+      .then((res) => {
+        setInstanceId(res.campaignId);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("campaign", res.campaignId);
+            return next;
+          },
+          { replace: true },
+        );
+      })
+      .catch((err) => {
+        console.error("Auto claim error:", err);
+        setClaimError(
+          err instanceof Error
+            ? err.message
+            : "Could not prepare this campaign for setup.",
+        );
+      });
+  }, [
+    instanceId,
+    templateId,
+    myCampaigns,
+    myCampaignsLoading,
+    claimMutation,
+    setSearchParams,
+  ]);
 
   // Answers state
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -377,16 +426,38 @@ export default function CampaignSetupPage() {
   const businessRewardsMode = normalizeBusinessRewardsMode(
     campaign?.template.businessRewardsMode ?? templateView?.businessRewardsMode
   );
-  const canAttachRewards = businessRewardsMode !== "disabled";
+  const planCaps = usePlanCapabilities();
+  const rewardsModeEnabled = businessRewardsMode !== "disabled";
+  const rewardEntitled = planCaps.can("rewards.attach");
+  const canAttachRewards = rewardsModeEnabled && rewardEntitled;
+  const consumerFacingCampaign =
+    String(campaign?.template.audience ?? templateView?.audience ?? "BOTH").toUpperCase() ===
+    "CONSUMER";
+  const rewardAttachLimit = planCaps.limit("rewards.attach");
+  const rewardAttachUnlimited = planCaps.isUnlimited("rewards.attach");
   const replaceTemplateRewards = businessRewardsMode === "replace";
   const [attachments, setAttachments] = useState<CampaignRewardAttachment[]>([]);
   const [availableRewards, setAvailableRewards] = useState<McomBusinessReward[]>([]);
   const [rewardsBusy, setRewardsBusy] = useState(false);
   const [rewardsError, setRewardsError] = useState<string | null>(null);
+  const [rewardsNotice, setRewardsNotice] = useState<string | null>(null);
   const [attachRewardId, setAttachRewardId] = useState("");
   const [attachMin, setAttachMin] = useState("");
   const [attachMax, setAttachMax] = useState("");
   const [attachLimit, setAttachLimit] = useState("");
+
+  /** Consumer-facing campaigns may only offer consumer-eligible Mall rewards. */
+  const eligibleAvailableRewards = useMemo(
+    () =>
+      consumerFacingCampaign
+        ? availableRewards.filter(
+            (r) =>
+              !isCentralFulfilmentKind(r.fulfilmentKind) &&
+              r.consumerEligible !== false,
+          )
+        : availableRewards,
+    [availableRewards, consumerFacingCampaign],
+  );
 
   useEffect(() => {
     if (!instanceId || !canAttachRewards) return;
@@ -428,10 +499,36 @@ export default function CampaignSetupPage() {
     setAttachments(att?.attachments ?? []);
   };
 
-  const handleAttachReward = async () => {
-    if (!instanceId || !attachRewardId) return;
+  /**
+   * Re-fetch the business's MCOM rewards. Rewards are created in MCOM Rewards,
+   * so a page opened before a reward was created would otherwise show a stale
+   * (empty) picker until a full browser refresh.
+   */
+  const refreshAvailableRewards = async () => {
+    if (rewardsBusy) return;
     setRewardsBusy(true);
     setRewardsError(null);
+    try {
+      const avail = await campaignService.getAvailableBusinessRewards({ limit: 50 });
+      setAvailableRewards(avail?.data ?? []);
+    } catch (e: any) {
+      setRewardsError(e?.message ?? "Could not load your MCOM Rewards rewards");
+    } finally {
+      setRewardsBusy(false);
+    }
+  };
+
+  const handleAttachReward = async () => {
+    if (!attachRewardId) return;
+    if (!instanceId) {
+      setRewardsError(
+        "Your campaign is still being created. Wait a moment, then try attaching the reward again.",
+      );
+      return;
+    }
+    setRewardsBusy(true);
+    setRewardsError(null);
+    setRewardsNotice(null);
     try {
       const conditions: RewardConditionDto[] = [];
       const min = Number(attachMin);
@@ -451,8 +548,14 @@ export default function CampaignSetupPage() {
       setAttachMin("");
       setAttachMax("");
       setAttachLimit("");
+      setRewardsNotice("Reward attached to this campaign.");
     } catch (e: any) {
-      setRewardsError(e?.message ?? "Could not attach this reward");
+      const raw = String(e?.message ?? "");
+      setRewardsError(
+        /MCOM service token|MCOM Rewards is unavailable|503/i.test(raw)
+          ? "MCOM Rewards is temporarily unavailable. Please try again in a moment."
+          : raw || "Could not attach this reward",
+      );
     } finally {
       setRewardsBusy(false);
     }
@@ -462,6 +565,7 @@ export default function CampaignSetupPage() {
     if (!instanceId) return;
     setRewardsBusy(true);
     setRewardsError(null);
+    setRewardsNotice(null);
     try {
       await campaignService.detachCampaignReward(instanceId, attachmentId);
       await refreshAttachments();
@@ -521,8 +625,15 @@ export default function CampaignSetupPage() {
     (campaign?.businessContribution ?? 0) >= (selfFunding.amount || 0);
 
   const templateName = campaign?.template.name ?? templateView?.name ?? "Campaign";
-  const approvalMode =
+  // The API returns the Prisma enum (`AUTOMATIC` / `ADMIN_REVIEW`) on the
+  // campaign and the lowercase form in the template view. Normalise both so the
+  // UI copy always matches the status the server will actually assign.
+  const rawApprovalMode =
     campaign?.template.approvalMode ?? templateView?.approval ?? "admin_review";
+  const approvalMode =
+    String(rawApprovalMode).toLowerCase() === "automatic"
+      ? "automatic"
+      : "admin_review";
 
   const missing = useMemo(() => {
     return fields.filter(
@@ -967,7 +1078,21 @@ export default function CampaignSetupPage() {
                       className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{r.name}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-sm font-semibold text-gray-900">{r.name}</p>
+                          {r.fulfilmentKind && (
+                            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary-700">
+                              {fulfilmentKindLabel(r.fulfilmentKind)}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                            {r.audience === "consumer"
+                              ? "Consumer"
+                              : r.audience === "business"
+                                ? "Business"
+                                : "Both"}
+                          </span>
+                        </div>
                         <p className="text-xs text-gray-500">{r.category}</p>
                       </div>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700">
@@ -1011,6 +1136,11 @@ export default function CampaignSetupPage() {
                     <AlertCircle className="h-3.5 w-3.5" /> {rewardsError}
                   </p>
                 )}
+                {rewardsNotice && (
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-green-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {rewardsNotice}
+                  </p>
+                )}
 
                 {attachments.length > 0 && (
                   <ul className="mb-4 space-y-2">
@@ -1020,7 +1150,23 @@ export default function CampaignSetupPage() {
                         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-3"
                       >
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{a.title}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-sm font-semibold text-gray-900">{a.title}</p>
+                            {a.fulfilmentKind && (
+                              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                                {fulfilmentKindLabel(a.fulfilmentKind)}
+                              </span>
+                            )}
+                            {a.audience && (
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                                {a.audience === "consumer"
+                                  ? "Consumer"
+                                  : a.audience === "business"
+                                    ? "Business"
+                                    : "Both"}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">
                             {a.conditions?.length
                               ? a.conditions
@@ -1055,21 +1201,54 @@ export default function CampaignSetupPage() {
                   <label className="mb-1 block text-xs font-semibold text-gray-700">
                     Add a reward
                   </label>
+                  {!rewardAttachUnlimited &&
+                    rewardAttachLimit !== null &&
+                    attachments.length >= rewardAttachLimit && (
+                      <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                        Your plan allows {rewardAttachLimit} attached reward
+                        {rewardAttachLimit === 1 ? "" : "s"}. Remove one or upgrade
+                        your plan to attach more.
+                      </p>
+                    )}
                   <select
                     value={attachRewardId}
                     onChange={(e) => setAttachRewardId(e.target.value)}
+                    onFocus={() => void refreshAvailableRewards()}
                     className="mb-2 w-full rounded-lg border px-3 py-2 text-sm"
                   >
                     <option value="">Select one of your MCOM rewards…</option>
-                    {availableRewards.map((r) => (
+                    {eligibleAvailableRewards.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.title}
+                        {r.fulfilmentKind ? ` · ${fulfilmentKindLabel(r.fulfilmentKind)}` : ""}
                         {typeof r.remainingQuantity === "number"
                           ? ` (${r.remainingQuantity} left)`
                           : ""}
                       </option>
                     ))}
                   </select>
+                  {consumerFacingCampaign &&
+                    availableRewards.length > eligibleAvailableRewards.length && (
+                      <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
+                        Business-only Central rewards are hidden because this is a consumer-facing
+                        campaign.
+                      </p>
+                    )}
+                  {!rewardsBusy && eligibleAvailableRewards.length === 0 && (
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
+                      <span>
+                        No rewards found on your MCOM Rewards account. Create one in MCOM Rewards,
+                        then refresh this list.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void refreshAvailableRewards()}
+                        className="shrink-0 font-semibold text-primary-600 hover:text-primary-700"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       value={attachMin}
@@ -1096,15 +1275,50 @@ export default function CampaignSetupPage() {
                   <button
                     type="button"
                     onClick={handleAttachReward}
-                    disabled={rewardsBusy || !attachRewardId}
+                    disabled={
+                      rewardsBusy ||
+                      !instanceId ||
+                      !attachRewardId ||
+                      (!rewardAttachUnlimited &&
+                        rewardAttachLimit !== null &&
+                        attachments.length >= rewardAttachLimit)
+                    }
                     className="mt-2 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
                   >
                     {rewardsBusy ? "Please wait…" : "Attach reward"}
                   </button>
+                  {!instanceId && !claimError && (
+                    <p className="mt-2 text-[11px] font-medium text-amber-700">
+                      Preparing your campaign… the reward can be attached once it has been created.
+                    </p>
+                  )}
+                  {!instanceId && claimError && (
+                    <p className="mt-2 text-[11px] font-medium text-red-700">
+                      {claimError}
+                    </p>
+                  )}
                   <p className="mt-2 text-[11px] text-gray-400">
                     Leave the amount fields blank to offer it for any contribution.
                   </p>
                 </div>
+              </div>
+            ) : rewardsModeEnabled && !rewardEntitled ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                  <Lock className="h-4 w-4" /> MCOM Rewards access required
+                </p>
+                <p className="mt-1 text-xs text-amber-800">
+                  This template allows your own MCOM rewards, but your current plan does not include
+                  reward attachments. Add an active MCOM membership or access pass that includes MCOM
+                  Rewards to attach and issue your own rewards.
+                </p>
+                <Link
+                  to="/business/plan"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                >
+                  View plans &amp; access
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
             ) : (
               <div className="rounded-xl border border-dashed bg-gray-50 p-4">

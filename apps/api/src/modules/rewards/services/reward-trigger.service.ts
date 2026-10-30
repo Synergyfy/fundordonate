@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { ContributionStatus, ContributionType, type RewardIssuance } from "@prisma/client";
 import { PrismaService } from "@/prisma/prisma.service";
 import { RewardEngineService } from "./reward-engine.service";
@@ -7,6 +8,11 @@ import {
   businessRewardsReplaceTemplate,
   isPlatformGiftReward,
 } from "../reward-config.util";
+import {
+  INELIGIBLE_AUDIENCE,
+  businessCanWin,
+  consumerCanWin,
+} from "../reward-fulfilment.util";
 
 /**
  * Shape of a reward config entry as persisted in `CampaignTemplate.rewardsConfig`
@@ -44,6 +50,19 @@ interface StoredRewardConfig {
   quantityLimit?: number | string | null;
   availableFrom?: string | null;
   availableUntil?: string | null;
+  // Provider fulfilment + audience eligibility (authored by the admin wizard).
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
+}
+
+interface RewardRecipient {
+  email?: string;
+  mcomUserId?: string;
+  name?: string;
+  userId?: string;
+  isBusiness?: boolean;
 }
 
 /** The fields of a `User` needed to identify a reward recipient/owner. */
@@ -76,6 +95,7 @@ export class RewardTriggerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewardEngine: RewardEngineService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -171,7 +191,7 @@ export class RewardTriggerService {
     strict = false,
     precomputedCumulative?: number,
   ): Promise<RewardIssuance[]> {
-    const recipient = this.resolveRecipient(contribution);
+    const recipient = await this.resolveRecipient(contribution);
     if (!recipient) {
       this.logger.log(
         `No eligible recipient for contribution ${contribution.id} — reward not issued`,
@@ -212,6 +232,8 @@ export class RewardTriggerService {
       const candidates: Array<{ cfg: StoredRewardConfig; amount: number }> = [];
       for (const cfg of configs) {
         if (!cfg || typeof cfg !== "object") continue;
+        // Central membership/access pass/coupons are business-only.
+        if (!this.isAudienceEligible(cfg, recipient, contribution.id)) continue;
         // This engine is contribution-driven. Rewards authored for other
         // trigger types are persisted/displayed but not issued here.
         const triggerType = (cfg.triggerType ?? "contribution").toLowerCase();
@@ -235,12 +257,20 @@ export class RewardTriggerService {
           if (cfg.source === "mcom" && cfg.mcomRewardId) {
             const input = {
               mcomRewardId: cfg.mcomRewardId,
+              rewardTitle: cfg.name,
               recipient,
               campaignId: contribution.campaignId,
               contributionId: contribution.id,
               userId: contribution.backerId ?? undefined,
               rewardConfigId: cfg.id,
               limit,
+              fulfilmentProvider: cfg.fulfilmentProvider ?? undefined,
+              fulfilmentKind: cfg.fulfilmentKind ?? undefined,
+              audience: cfg.audience,
+              consumerEligible: cfg.consumerEligible ?? undefined,
+              businessEligible: cfg.businessEligible ?? undefined,
+              businessId: contribution.campaign?.business?.id ?? undefined,
+              businessName: contribution.campaign?.business?.name ?? undefined,
               metadata: { rewardName: cfg.name, rule: cfg.rule, source: "mcom" },
             };
             // Admin/MCOM-created ("mcom vault") rewards are gifted on behalf of
@@ -255,6 +285,12 @@ export class RewardTriggerService {
                 ? await this.rewardEngine.issue(input)
                 : await this.rewardEngine.issueBestEffort(input);
             if (record) issued.push(record);
+          } else if (this.mcomOnly) {
+            // Legacy FundOrDonate-local rewards are migration-only. Never issue
+            // them in the provider-driven system.
+            this.logger.warn(
+              `Skipping legacy local reward "${cfg.name ?? cfg.id}" for campaign ${contribution.campaignId}: MCOM-only rewards are enabled`,
+            );
           } else {
             const input = {
               rewardRefId: cfg.id ?? cfg.mcomRewardId ?? "local-reward",
@@ -314,6 +350,13 @@ export class RewardTriggerService {
       maxQuantity?: number | null;
       expiresAt?: Date | null;
       enabled?: boolean;
+      fulfilmentProvider?: string | null;
+      fulfilmentKind?: string | null;
+      audience?: string | null;
+      consumerEligible?: boolean | null;
+      businessEligible?: boolean | null;
+      businessId?: string | null;
+      businessName?: string | null;
     }> = contribution.campaign?.rewardAttachments ?? [];
 
     if (attachments.length === 0) return [];
@@ -323,6 +366,7 @@ export class RewardTriggerService {
     for (const att of attachments) {
       if (att.enabled === false) continue;
       if (att.expiresAt && contribution.createdAt > att.expiresAt) continue;
+      if (!this.isAudienceEligible(att, recipient, contribution.id)) continue;
 
       const cfg: StoredRewardConfig = {
         id: att.id,
@@ -348,6 +392,13 @@ export class RewardTriggerService {
         userId: contribution.backerId ?? undefined,
         limit: att.maxQuantity ?? null,
         expiresAt: att.expiresAt ? new Date(att.expiresAt).toISOString() : undefined,
+        fulfilmentProvider: att.fulfilmentProvider ?? undefined,
+        fulfilmentKind: att.fulfilmentKind ?? undefined,
+        audience: att.audience ?? undefined,
+        consumerEligible: att.consumerEligible ?? undefined,
+        businessEligible: att.businessEligible ?? undefined,
+        businessId: att.businessId ?? undefined,
+        businessName: att.businessName ?? undefined,
         metadata: {
           rewardName: att.title,
           source: "mcom-business",
@@ -365,6 +416,50 @@ export class RewardTriggerService {
   }
 
   /**
+   * Enforce the audience matrix server-side (final authority). Consumers must
+   * never receive Central membership/access passes/coupons. Businesses may win
+   * every supported kind, including Mall instruments.
+   */
+  private isAudienceEligible(
+    cfg: Pick<
+      StoredRewardConfig,
+      "name" | "fulfilmentKind" | "consumerEligible" | "businessEligible"
+    > & { audience?: string | null },
+    recipient: RewardRecipient,
+    contributionId: string,
+  ): boolean {
+    const audience = (cfg.audience ?? "").toLowerCase();
+    const consumerEligible =
+      cfg.consumerEligible ?? (audience === "business" ? false : undefined);
+    const businessEligible =
+      cfg.businessEligible ?? (audience === "consumer" ? false : undefined);
+    const eligible = recipient.isBusiness
+      ? businessCanWin({
+          fulfilmentKind: cfg.fulfilmentKind,
+          businessEligible,
+        })
+      : consumerCanWin({
+          fulfilmentKind: cfg.fulfilmentKind,
+          consumerEligible,
+        });
+
+    if (!eligible) {
+      this.logger.warn(
+        `Reward "${cfg.name ?? "reward"}" skipped for contribution ${contributionId}: ` +
+          `reason=${INELIGIBLE_AUDIENCE} ` +
+          `(fulfilmentKind=${cfg.fulfilmentKind ?? "unknown"}, ` +
+          `recipient=${recipient.isBusiness ? "business" : "consumer"})`,
+      );
+    }
+    return eligible;
+  }
+
+  /** Reward issuances must be provider-driven; local rewards are migration-only. */
+  private get mcomOnly(): boolean {
+    return this.config.get<boolean>("rewards.mcomOnly") ?? true;
+  }
+
+  /**
    * The contributor (backer) eligible for a reward.
    *
    * The person **running the campaign** (the campaign business's owner) is never
@@ -375,12 +470,12 @@ export class RewardTriggerService {
    * excluded the same way. An anonymous/guest donation is likewise never
    * attributed to the campaign owner.
    */
-  private resolveRecipient(contribution: {
+  private async resolveRecipient(contribution: {
     id?: string;
     type?: string;
     backer: RewardRecipientUser | null;
     campaign: { business: { owner: RewardRecipientUser } | null } | null;
-  }): { email?: string; mcomUserId?: string; name?: string } | null {
+  }): Promise<RewardRecipient | null> {
     const isSelfFunding = contribution.type === ContributionType.SELF_FUNDING;
     const owner = contribution.campaign?.business?.owner ?? null;
     const user = contribution.backer ?? (isSelfFunding ? owner : null);
@@ -394,10 +489,24 @@ export class RewardTriggerService {
     }
 
     const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+
+    // Central rewards are business-only. Determine whether this recipient acts
+    // as a business owner (they may still win Mall rewards as a consumer).
+    let isBusiness = false;
+    if (user.id) {
+      const business = await this.prisma.business.findFirst({
+        where: { ownerId: user.id },
+        select: { id: true },
+      });
+      isBusiness = !!business;
+    }
+
     return {
       mcomUserId: user.mcomUserId ?? undefined,
       email: user.email ?? undefined,
       name: name || undefined,
+      userId: user.id,
+      isBusiness,
     };
   }
 

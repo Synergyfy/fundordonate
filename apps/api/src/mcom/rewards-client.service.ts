@@ -26,12 +26,55 @@ export type McomRewardType =
   | "physical product";
 export type McomIssuanceStatus =
   | "ISSUED"
+  | "RESERVED"
   | "REDEEMED"
   | "EXPIRED"
   | "REVOKED"
   | "FAILED";
 
-export interface McomRewardCatalogueItem {
+/**
+ * How the provider delivers a reward. Central instruments are business-only;
+ * consumers must never win them. The provider's cosmetic `rewardType` must NOT
+ * be used to infer this — always use `fulfilmentKind`.
+ */
+export type McomFulfilmentProvider = "MALL" | "CENTRAL" | string;
+export type McomFulfilmentKind =
+  | "MALL_GIFT_CARD"
+  | "MALL_VOUCHER"
+  | "MALL_COUPON"
+  | "MALL_DISCOUNT"
+  | "CENTRAL_MEMBERSHIP"
+  | "CENTRAL_ACCESS_PASS"
+  | "CENTRAL_COUPON"
+  | string;
+export type McomFulfilmentStatus =
+  | "PENDING"
+  | "DELIVERED"
+  | "FAILED"
+  | "REVOKED"
+  | "NOT_REQUIRED"
+  | "PENDING_IDENTITY"
+  | "PENDING_CONFLICT";
+
+/**
+ * Fulfilment metadata exposed by the provider on catalogue rewards.
+ *
+ * Provider dependency: these fields already exist on the MCOM Rewards `Reward`
+ * entity but are not yet on `toCatalogDto`. They are optional here so
+ * FundOrDonate degrades safely (and feature-detects) until the provider
+ * exposes them.
+ */
+export interface McomRewardFulfilmentDescriptor {
+  fulfilmentProvider?: McomFulfilmentProvider | null;
+  fulfilmentKind?: McomFulfilmentKind | null;
+  fulfilmentConfig?: Record<string, unknown> | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
+  /** Provider-rendered deep link, when supplied. */
+  deepLink?: string | null;
+}
+
+export interface McomRewardCatalogueItem extends McomRewardFulfilmentDescriptor {
   id: string;
   title: string;
   description: string | null;
@@ -76,7 +119,7 @@ export type McomRewardStatus = "active" | "draft";
  * so a business can attach one of its own rewards to a campaign it runs.
  * `/partner/business-rewards`.
  */
-export interface McomBusinessReward {
+export interface McomBusinessReward extends McomRewardFulfilmentDescriptor {
   id: string;
   businessId: string;
   title: string;
@@ -221,6 +264,18 @@ export interface McomRewardIssuance {
   redeemedAt: string | null;
   revokedAt: string | null;
   metadata: Record<string, unknown> | null;
+
+  // ── Fulfilment (the key part of the contract for the consumer UI) ───────
+  fulfilmentProvider?: McomFulfilmentProvider | null;
+  fulfilmentKind?: McomFulfilmentKind | null;
+  fulfilmentStatus?: McomFulfilmentStatus | string | null;
+  fulfilmentRef?: string | null;
+  fulfilmentCode?: string | null;
+  fulfilmentError?: string | null;
+  centralReference?: string | null;
+  deepLink?: string | null;
+  fulfilledAt?: string | null;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -242,6 +297,18 @@ export const MCOM_ERROR_CODES = {
   BUSINESS_NOT_ENTITLED: "BUSINESS_NOT_ENTITLED",
   /** 403 — entitlement could not be verified (Central down). Retryable. */
   ENTITLEMENT_UNAVAILABLE: "ENTITLEMENT_UNAVAILABLE",
+  /** 400 — a consumer was selected for a Central-only (business) reward. */
+  RECIPIENT_NOT_A_BUSINESS: "RECIPIENT_NOT_A_BUSINESS",
+  /** 409 — membership already exists / conflicts with the requested grant. */
+  MEMBERSHIP_CONFLICT: "MEMBERSHIP_CONFLICT",
+  /** 400 — the reward's plan is no longer available. Fix the reward config. */
+  PLAN_NOT_AVAILABLE: "PLAN_NOT_AVAILABLE",
+  /** 400 — the reward's tier is no longer available. Fix the reward config. */
+  TIER_NOT_AVAILABLE: "TIER_NOT_AVAILABLE",
+  /** 403 — the provider feature flag is off. Retry later / alert. */
+  FEATURE_DISABLED: "FEATURE_DISABLED",
+  /** 409 — provider stock is exhausted. Stop retrying. */
+  OUT_OF_STOCK: "OUT_OF_STOCK",
 } as const;
 
 /**
@@ -298,6 +365,28 @@ export class McomRewardsError extends Error {
   /** A point offer whose recipient cannot resolve to a participant account. */
   get isRecipientUnresolved(): boolean {
     return this.httpStatus === 400 && /resolvable to a participant|participant account/i.test(this.message);
+  }
+  /** A consumer was selected for a Central-only (business) reward. */
+  get isRecipientNotABusiness(): boolean {
+    return (
+      this.code === MCOM_ERROR_CODES.RECIPIENT_NOT_A_BUSINESS ||
+      (/not a business|business[- ]only|business recipient/i.test(this.message) &&
+        (this.httpStatus === 400 || this.httpStatus === 422))
+    );
+  }
+  /** Provider stock is exhausted — retrying will not help. */
+  get isOutOfStock(): boolean {
+    return (
+      this.code === MCOM_ERROR_CODES.OUT_OF_STOCK ||
+      /out of stock|no (?:remaining )?stock|sold out/i.test(this.message)
+    );
+  }
+  /** The reward's plan/tier is stale or unavailable; the config must be fixed. */
+  get isRewardConfigInvalid(): boolean {
+    return (
+      this.code === MCOM_ERROR_CODES.PLAN_NOT_AVAILABLE ||
+      this.code === MCOM_ERROR_CODES.TIER_NOT_AVAILABLE
+    );
   }
 }
 

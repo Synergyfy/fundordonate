@@ -8,7 +8,7 @@ import {
   LogIn,
   LayoutDashboard, LogOut,
   User as UserIcon, Settings, Building2, Activity,
-  Facebook, Twitter, Instagram,
+  Facebook, Twitter, Instagram, CreditCard,
 } from "lucide-react";
 
 const NAV_LINKS: {
@@ -30,6 +30,7 @@ const NAV_LINKS: {
       { label: "For Consumers", to: "/campaigns/consumer" },
     ],
   },
+  { label: "Plans", to: "/plans", icon: CreditCard, exact: false },
   { label: "About", to: "/about", icon: Info, exact: false },
   { label: "Contact", to: "/contact", icon: Mail, exact: false },
 ];
@@ -90,6 +91,7 @@ function getUserMenuLinks(user: User | null): UserMenuLink[] {
   if (user.userType === "business" || user.role === "business" || user.role === "fundraiser") {
     return [
       { label: "My Business", to: "/dashboard/my-business", icon: <Building2 className="h-4 w-4" /> },
+      { label: "Plan & Access", to: "/dashboard/plan", icon: <CreditCard className="h-4 w-4" /> },
       { label: "Settings", to: "/dashboard/settings", icon: <Settings className="h-4 w-4" /> },
     ];
   }
@@ -224,6 +226,7 @@ const FOOTER_LINKS: { title: string; links: { label: string; to: string }[] }[] 
       { label: "About", to: "/about" },
       { label: "Contact", to: "/contact" },
       { label: "How It Works", to: "/how-it-works" },
+      { label: "Plans & Access Passes", to: "/plans" },
       { label: "Start a Campaign", to: "/campaigns/create" },
     ],
   },

@@ -32,8 +32,11 @@ export interface BusinessProfile {
   id: string;
   name: string;
   slug: string;
+  mcomBusinessId?: string | null;
   businessType: string;
+  industry?: string | null;
   category: string;
+  subCategory?: string | null;
   subcategories: string[];
   description: string | null;
   email: string;
@@ -41,6 +44,8 @@ export interface BusinessProfile {
   website: string | null;
   logoUrl: string | null;
   coverImageUrl: string | null;
+  openingHours?: string | null;
+  socialMedia?: string | null;
   status: string;
   membershipTier: string;
   membershipExpiry: string | null;
@@ -51,6 +56,7 @@ export interface BusinessProfile {
   highStreet: string;
   address: string | null;
   postcode: string;
+  country?: string | null;
   location?: {
     id: string;
     name: string;

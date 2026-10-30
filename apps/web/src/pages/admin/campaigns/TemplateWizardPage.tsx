@@ -32,7 +32,6 @@ import {
   CreditCard,
   Eye,
   FileText,
-  Filter,
   Gift,
   GitBranch,
   Globe,
@@ -75,6 +74,8 @@ import {
   type LibraryReward,
   type RewardAudience,
   type RewardCategory,
+  fulfilmentKindLabel,
+  isCentralFulfilmentKind,
 } from "@/types/rewards";
 import {
   adaptAdminTemplateToMaster,
@@ -164,9 +165,13 @@ function mcomRewardCategory(rewardType: string): RewardCategory {
   return "other";
 }
 
-/** Maps an MCOM catalogue audience to a FundOrDonate reward audience. */
-function mcomRewardAudience(audience: string): RewardAudience {
-  const a = (audience ?? "").toLowerCase();
+/** Maps an MCOM catalogue audience/eligibility to a FundOrDonate reward audience. */
+function mcomRewardAudience(item: McomCatalogueReward): RewardAudience {
+  if (isCentralFulfilmentKind(item.fulfilmentKind) || item.consumerEligible === false) {
+    return "business";
+  }
+  if (item.businessEligible === false) return "consumer";
+  const a = (item.audience ?? "").toLowerCase();
   if (a.includes("consumer")) return "consumer";
   if (a.includes("all") || a.includes("business")) return "business";
   return "both";
@@ -181,9 +186,13 @@ function mcomItemToLibraryReward(item: McomCatalogueReward): LibraryReward {
     description: item.description ?? "",
     category: mcomRewardCategory(item.rewardType),
     valueGbp: item.value ?? null,
-    audience: mcomRewardAudience(item.audience),
+    audience: mcomRewardAudience(item),
     source: "mcom",
     mcomSource: item.source,
+    fulfilmentProvider: item.fulfilmentProvider ?? null,
+    fulfilmentKind: item.fulfilmentKind ?? null,
+    consumerEligible: item.consumerEligible ?? null,
+    businessEligible: item.businessEligible ?? null,
     status: "active",
     defaultDelivery: "mcom_asset",
     uses: 0,
@@ -362,17 +371,6 @@ const TIMING_OPTIONS: { id: DeliveryTiming; label: string }[] = [
   { id: "instant", label: "Instantly on contribution" },
   { id: "campaign_end", label: "After the campaign ends" },
   { id: "manual", label: "Manual release by Admin" },
-];
-
-const CATEGORY_FILTERS: { id: "all" | RewardCategory; label: string }[] = [
-  { id: "all", label: "All Rewards" },
-  { id: "egift_card", label: "E-Gift Cards" },
-  { id: "gift_card", label: "Gift Cards" },
-  { id: "voucher", label: "Vouchers" },
-  { id: "coupon", label: "Coupons" },
-  { id: "deal", label: "Deals" },
-  { id: "membership", label: "Membership / Access" },
-  { id: "other", label: "Other" },
 ];
 
 const LOCATION_LEVELS: { id: LocationLevel; label: string; description: string; icon: React.ReactNode }[] = [
@@ -1201,13 +1199,6 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         }
   );
 
-  // Reward library picker
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [libSearch, setLibSearch] = useState("");
-  const [libCategory, setLibCategory] = useState<"all" | RewardCategory>("all");
-  const [libAudience, setLibAudience] = useState<"all" | RewardAudience>("all");
-  const [libSelected, setLibSelected] = useState<string[]>([]);
-
   // MCOM Rewards catalogue picker (admin selects rewards owned by MCOM Rewards)
   const [mcomOpen, setMcomOpen] = useState(false);
   const [mcomLoading, setMcomLoading] = useState(false);
@@ -1216,40 +1207,12 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
   const [mcomSearch, setMcomSearch] = useState("");
   const [mcomSelected, setMcomSelected] = useState<string[]>([]);
 
-  // Create-your-own reward form (a FundOrDonate-local reward)
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customReward, setCustomReward] = useState<{
-    name: string;
-    description: string;
-    category: RewardCategory;
-    valueGbp: string;
-    audience: RewardAudience;
-    delivery: DeliveryMethod;
-  }>({
-    name: "",
-    description: "",
-    category: "gift_card",
-    valueGbp: "",
-    audience: "both",
-    delivery: "digital_delivery",
-  });
-
   const selectedIds = useMemo(() => new Set(rewards.map((r) => r.id)), [rewards]);
 
   const connectablePlatforms = useMemo(
     () => getMcomPlatforms().filter((p) => p.connected),
     []
   );
-
-  const libraryResults = useMemo(() => {
-    const q = libSearch.trim().toLowerCase();
-    return LIBRARY_REWARDS.filter((r) => r.status !== "archived").filter((r) => {
-      if (q && !`${r.name} ${r.description} ${r.tags.join(" ")}`.toLowerCase().includes(q)) return false;
-      if (libCategory !== "all" && r.category !== libCategory) return false;
-      if (libAudience !== "all" && r.audience !== libAudience && r.audience !== "both") return false;
-      return true;
-    });
-  }, [libSearch, libCategory, libAudience]);
 
   const mcomResults = useMemo(() => {
     const q = mcomSearch.trim().toLowerCase();
@@ -1496,68 +1459,6 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     );
   };
 
-  const openLibrary = () => {
-    setLibSelected([]);
-    setLibSearch("");
-    setLibCategory("all");
-    setLibAudience("all");
-    setLibraryOpen(true);
-  };
-
-  const toggleLibReward = (rewardId: string) => {
-    setLibSelected((prev) =>
-      prev.includes(rewardId) ? prev.filter((r) => r !== rewardId) : [...prev, rewardId]
-    );
-  };
-
-  const confirmAddRewards = () => {
-    setRewards((prev) => {
-      const existing = new Set(prev.map((r) => r.id));
-      const additions: TemplateRewardEntry[] = [];
-      for (const rid of libSelected) {
-        if (existing.has(rid)) continue;
-        const reward = LIBRARY_REWARDS.find((r) => r.id === rid);
-        if (!reward) continue;
-        additions.push(addRewardEntry(reward));
-      }
-      return [...prev, ...additions];
-    });
-    setLibraryOpen(false);
-  };
-
-  // ── Create-your-own reward (FundOrDonate-local) ──────────────────────
-  const openCustomReward = () => {
-    setCustomReward({
-      name: "",
-      description: "",
-      category: "gift_card",
-      valueGbp: "",
-      audience: "both",
-      delivery: "digital_delivery",
-    });
-    setCustomOpen(true);
-  };
-
-  const saveCustomReward = () => {
-    const name = customReward.name.trim();
-    if (!name) return;
-    const reward: LibraryReward = {
-      id: `lr-custom-${Date.now()}`,
-      name,
-      description: customReward.description.trim(),
-      category: customReward.category,
-      valueGbp: customReward.valueGbp.trim() ? Number(customReward.valueGbp) : null,
-      audience: customReward.audience,
-      source: "fundordonate",
-      status: "active",
-      defaultDelivery: customReward.delivery,
-      uses: 0,
-      tags: ["custom"],
-    };
-    setRewards((prev) => [...prev, addRewardEntry(reward)]);
-    setCustomOpen(false);
-  };
-
   // ── Select rewards from MCOM Rewards ─────────────────────────────────
   const openMcomPicker = () => {
     setMcomOpen(true);
@@ -1575,6 +1476,14 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
   };
 
   const toggleMcomReward = (id: string) => {
+    const item = mcomItems.find((r) => r.id === id);
+    if (
+      item &&
+      audience === "consumer" &&
+      (isCentralFulfilmentKind(item.fulfilmentKind) || item.consumerEligible === false)
+    ) {
+      return;
+    }
     setMcomSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
@@ -1713,6 +1622,10 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
           source: entry.reward.source,
           mcomRewardId: entry.reward.mcomRewardId ?? null,
           mcomSource: entry.reward.mcomSource ?? null,
+          fulfilmentProvider: entry.reward.fulfilmentProvider ?? null,
+          fulfilmentKind: entry.reward.fulfilmentKind ?? null,
+          consumerEligible: entry.reward.consumerEligible ?? null,
+          businessEligible: entry.reward.businessEligible ?? null,
           valueGbp: entry.reward.valueGbp,
           audience: entry.reward.audience,
           delivery: entry.delivery.method,
@@ -1817,7 +1730,28 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
     { label: "Funding configuration", ok: funding.methods.length > 0, note: funding.methods.length > 0 ? `${funding.methods.length} method(s) · ${durationLabel}` : "No contribution method selected", blocking: true },
     { label: "Business access", ok: access.eligibility.length > 0, note: accessMeta ? `${accessMeta.label} · ${eligibilityLabels.length} rule(s)${access.eligibility.includes("admin_assigned") ? ` · ${access.assignedBusinesses.length} assigned` : ""}` : "No access type", blocking: true },
     { label: "Editable fields", ok: editableFieldCount > 0, note: `${editableFieldCount} of ${fieldAccess.length} fields editable by the business`, blocking: true },
-    { label: "Rewards connected", ok: rewards.length > 0, note: rewards.length > 0 ? `${rewards.length} reward(s) from the library` : "No rewards connected (recommended)", blocking: false },
+    { label: "Rewards connected", ok: rewards.length > 0, note: rewards.length > 0 ? `${rewards.length} reward(s) from the MCOM catalogue` : "No rewards connected (recommended)", blocking: false },
+    {
+      label: "Reward audience",
+      ok: !(
+        audience === "consumer" &&
+        rewards.some(
+          (entry) =>
+            isCentralFulfilmentKind(entry.reward.fulfilmentKind) ||
+            entry.reward.consumerEligible === false,
+        )
+      ),
+      note:
+        audience === "consumer" &&
+        rewards.some(
+          (entry) =>
+            isCentralFulfilmentKind(entry.reward.fulfilmentKind) ||
+            entry.reward.consumerEligible === false,
+        )
+          ? "Central rewards are business-only"
+          : "Reward eligibility matches the template audience",
+      blocking: true,
+    },
     { label: "Internal asset connections", ok: connectedServices.length > 0, note: connectedServices.length > 0 ? `${connectedServices.length} platform(s) connected` : "No Internal Assets connected (optional)", blocking: false },
     { label: "Business contribution", ok: true, note: `${contributionModeLabel} · ${contributionAmountLabel}`, blocking: false },
     { label: "Location requirements", ok: !location.required || location.levels.length > 0, note: location.required ? locationLevelLabels.join(" › ") || "No levels selected" : "Location not required", blocking: true },
@@ -2835,17 +2769,9 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         <div className="space-y-5">
           <Panel
             title="Reusable Rewards"
-            description="Add a reward by creating your own, or by selecting one from the MCOM Rewards catalogue. The same reward can be reused across campaigns — no need to recreate it."
+            description="Select rewards from the MCOM Rewards admin catalogue (source = mcom vault). Rewards are issued and fulfilled by MCOM Rewards; FundOrDonate does not create campaign rewards locally."
             action={
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openCustomReward}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create reward
-                </button>
                 <button
                   type="button"
                   onClick={openMcomPicker}
@@ -2862,18 +2788,11 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                 <Gift className="mx-auto mb-3 h-9 w-9 text-gray-300" />
                 <p className="text-sm font-medium text-gray-500">No rewards connected yet</p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-gray-400">
-                  Create your own reward, or pick one from the MCOM Rewards catalogue — for
-                  example the £5, £10 and £15 e-gift cards or MCOM Rewards &amp; Loyalty access.
+                  Pick a reward from the MCOM Rewards admin catalogue. Mall gift cards, vouchers,
+                  coupons and discounts can be won by consumers; Central membership, access passes
+                  and Central coupons are business-only.
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={openCustomReward}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create your own reward
-                  </button>
                   <button
                     type="button"
                     onClick={openMcomPicker}
@@ -2881,14 +2800,6 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                   >
                     <Store className="h-4 w-4" />
                     Select from MCOM Rewards
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openLibrary}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    <Search className="h-4 w-4" />
-                    Reward Library
                   </button>
                 </div>
               </div>
@@ -3063,6 +2974,37 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                 }
               >
                 <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+                      {entry.reward.fulfilmentProvider === "CENTRAL" ||
+                      isCentralFulfilmentKind(entry.reward.fulfilmentKind)
+                        ? "Central"
+                        : entry.reward.fulfilmentProvider === "MALL"
+                          ? "Mall"
+                          : "MCOM"}
+                    </span>
+                    {entry.reward.fulfilmentKind && (
+                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-medium text-primary-700">
+                        {fulfilmentKindLabel(entry.reward.fulfilmentKind)}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                      {entry.reward.audience === "business"
+                        ? "Business"
+                        : entry.reward.audience === "consumer"
+                          ? "Consumer"
+                          : "Both"}
+                    </span>
+                  </div>
+                  {(audience === "consumer" &&
+                    (isCentralFulfilmentKind(entry.reward.fulfilmentKind) ||
+                      entry.reward.consumerEligible === false)) && (
+                    <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      This is a business-only Central reward and cannot be used on a consumer
+                      template. Remove it or change the template audience.
+                    </p>
+                  )}
                   {entry.conditions.map((condition, ci) => (
                     <div key={condition.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3.5">
                       <div className="flex flex-wrap items-end gap-3">
@@ -4688,171 +4630,6 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </button>
       )}
 
-      {/* ── Reward library picker ───────────────────────────────────────── */}
-      {libraryOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-                  <Gift className="h-5 w-5 text-primary-600" />
-                  Reward Library
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Select existing rewards. The same reward can be reused across campaigns — you
-                  never have to recreate it.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLibraryOpen(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="border-b border-gray-100 px-6 py-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={libSearch}
-                  onChange={(e) => setLibSearch(e.target.value)}
-                  placeholder="Search rewards, vouchers, gift cards, access..."
-                  className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
-                />
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <Filter className="mr-1 h-3.5 w-3.5 text-gray-400" />
-                {CATEGORY_FILTERS.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setLibCategory(c.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      libCategory === c.id
-                        ? "bg-primary-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-                <select
-                  value={libAudience}
-                  onChange={(e) => setLibAudience(e.target.value as "all" | RewardAudience)}
-                  className="ml-auto rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs outline-none focus:border-primary-300"
-                >
-                  <option value="all">All audiences</option>
-                  <option value="business">Business</option>
-                  <option value="consumer">Consumer</option>
-                  <option value="both">Both</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {libraryResults.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Gift className="mx-auto mb-3 h-9 w-9 text-gray-300" />
-                  <p className="text-sm font-medium text-gray-500">No rewards match your search</p>
-                  <p className="mt-1 text-xs text-gray-400">Try a different keyword or filter.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {libraryResults.map((reward) => {
-                    const alreadyAdded = selectedIds.has(reward.id);
-                    const checked = libSelected.includes(reward.id);
-                    return (
-                      <label
-                        key={reward.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors ${
-                          checked
-                            ? "border-primary-400 bg-primary-50"
-                            : alreadyAdded
-                            ? "border-gray-200 bg-gray-50 opacity-70"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked || alreadyAdded}
-                          disabled={alreadyAdded}
-                          onChange={() => toggleLibReward(reward.id)}
-                          className="mt-1 h-4 w-4 shrink-0 rounded text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-semibold text-gray-900">{reward.name}</span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardCategoryMeta(reward.category).color}`}
-                            >
-                              {getRewardCategoryMeta(reward.category).label}
-                            </span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardSourceMeta(reward.source).color}`}
-                            >
-                              {getRewardSourceMeta(reward.source).label}
-                            </span>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRewardAudienceMeta(reward.audience).color}`}
-                            >
-                              {getRewardAudienceMeta(reward.audience).label}
-                            </span>
-                            {reward.status === "draft" && (
-                              <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-700">
-                                Draft
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-0.5 truncate text-xs text-gray-500">{reward.description}</p>
-                          <p className="mt-1 text-[11px] text-gray-400">
-                            {reward.valueGbp !== null ? `£${reward.valueGbp} value · ` : ""}
-                            Used by {reward.uses} campaign{reward.uses === 1 ? "" : "s"} · default
-                            delivery: {DELIVERY_LABELS[reward.defaultDelivery]}
-                          </p>
-                        </div>
-                        {alreadyAdded && (
-                          <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
-                            Added
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-gray-200 px-6 py-3.5">
-              <span className="text-xs text-gray-500">
-                {libSelected.length} reward{libSelected.length === 1 ? "" : "s"} selected
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLibraryOpen(false)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmAddRewards}
-                  disabled={libSelected.length === 0}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add {libSelected.length} Reward{libSelected.length === 1 ? "" : "s"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── MCOM Rewards catalogue picker ───────────────────────────────── */}
       {mcomOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -4916,13 +4693,26 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                   {mcomResults.map((item) => {
                     const alreadyAdded = selectedIds.has(`mcom-${item.id}`);
                     const checked = mcomSelected.includes(item.id);
+                    const central =
+                      isCentralFulfilmentKind(item.fulfilmentKind) ||
+                      item.consumerEligible === false;
+                    const disallowed = audience === "consumer" && central;
+                    const disabled = alreadyAdded || disallowed;
+                    const audienceLabel =
+                      central || item.businessEligible === false
+                        ? central
+                          ? "Business only"
+                          : "Consumer only"
+                        : item.consumerEligible === true && item.businessEligible === true
+                          ? "Consumer & business"
+                          : "MCOM";
                     return (
                       <label
                         key={item.id}
                         className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors ${
                           checked
                             ? "border-primary-400 bg-primary-50"
-                            : alreadyAdded
+                            : disabled
                             ? "border-gray-200 bg-gray-50 opacity-70"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
@@ -4930,7 +4720,7 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                         <input
                           type="checkbox"
                           checked={checked || alreadyAdded}
-                          disabled={alreadyAdded}
+                          disabled={disabled}
                           onChange={() => toggleMcomReward(item.id)}
                           className="mt-1 h-4 w-4 shrink-0 rounded text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed"
                         />
@@ -4943,15 +4733,30 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${SOURCE_META.mcom.color}`}>
                               {SOURCE_META.mcom.label}
                             </span>
+                            <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+                              {item.fulfilmentProvider === "CENTRAL" || central ? "Central" : item.fulfilmentProvider === "MALL" ? "Mall" : "MCOM"}
+                            </span>
+                            {item.fulfilmentKind && (
+                              <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-medium text-primary-700">
+                                {fulfilmentKindLabel(item.fulfilmentKind)}
+                              </span>
+                            )}
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                              {audienceLabel}
+                            </span>
                           </div>
                           <p className="mt-0.5 truncate text-xs text-gray-500">{item.description}</p>
                           <p className="mt-1 text-[11px] text-gray-400">
                             {item.value != null ? `£${item.value} value · ` : ""}
-                            {item.isPointsEnabled ? "Points" : ""}
-                            {item.isPointsEnabled && item.isStampsEnabled ? " · " : ""}
-                            {item.isStampsEnabled ? "Stamps" : ""}
-                            {!item.isPointsEnabled && !item.isStampsEnabled ? item.source : ""}
+                            {typeof item.quantity === "number" && item.quantity > 0
+                              ? `${item.quantity} in stock`
+                              : item.source}
                           </p>
+                          {disallowed && (
+                            <p className="mt-1 text-[11px] font-medium text-amber-700">
+                              Business-only Central rewards cannot be used on a consumer template.
+                            </p>
+                          )}
                         </div>
                         {alreadyAdded && (
                           <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
@@ -4992,137 +4797,6 @@ function TemplateWizard({ existing }: { existing?: MasterTemplate }) {
         </div>
       )}
 
-      {/* ── Create your own reward ──────────────────────────────────────── */}
-      {customOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-                  <Gift className="h-5 w-5 text-primary-600" />
-                  Create your own reward
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Define a reward owned by FundOrDonate for this template.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCustomOpen(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-gray-700">Reward name</span>
-                <input
-                  type="text"
-                  value={customReward.name}
-                  onChange={(e) => setCustomReward((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. £5 High Street Voucher"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-gray-700">Description</span>
-                <textarea
-                  value={customReward.description}
-                  onChange={(e) => setCustomReward((p) => ({ ...p, description: e.target.value }))}
-                  rows={2}
-                  placeholder="What the contributor receives"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Category</span>
-                  <select
-                    value={customReward.category}
-                    onChange={(e) =>
-                      setCustomReward((p) => ({ ...p, category: e.target.value as RewardCategory }))
-                    }
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
-                  >
-                    {Object.entries(REWARD_CATEGORY_META).map(([value, meta]) => (
-                      <option key={value} value={value}>
-                        {meta.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Value (£)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={customReward.valueGbp}
-                    onChange={(e) => setCustomReward((p) => ({ ...p, valueGbp: e.target.value }))}
-                    placeholder="Optional"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Audience</span>
-                  <select
-                    value={customReward.audience}
-                    onChange={(e) =>
-                      setCustomReward((p) => ({ ...p, audience: e.target.value as RewardAudience }))
-                    }
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
-                  >
-                    <option value="business">Business</option>
-                    <option value="consumer">Consumer</option>
-                    <option value="both">Both</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Delivery</span>
-                  <select
-                    value={customReward.delivery}
-                    onChange={(e) =>
-                      setCustomReward((p) => ({ ...p, delivery: e.target.value as DeliveryMethod }))
-                    }
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-300"
-                  >
-                    {DELIVERY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-3.5">
-              <button
-                type="button"
-                onClick={() => setCustomOpen(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveCustomReward}
-                disabled={!customReward.name.trim()}
-                className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" />
-                Add reward
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

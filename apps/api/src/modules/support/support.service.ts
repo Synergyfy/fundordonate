@@ -2,12 +2,32 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "@/prisma/prisma.service";
 import { SupportTicketStatus } from "@prisma/client";
 import { CreateTicketDto } from "./dto/create-ticket.dto";
+import { CapabilityService } from "@/modules/plans/services/capability.service";
+import { FEATURES } from "@/modules/plans/plan.constants";
+import { Prisma } from "@prisma/client";
 
 @Injectable()
 export class SupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilityService,
+  ) {}
 
   async create(userId: string | null, dto: CreateTicketDto) {
+    let priority = "STANDARD";
+    if (userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { userType: true },
+      });
+      if (
+        user?.userType === "business" &&
+        (await this.capabilities.isEnabled(userId, FEATURES.SUPPORT_PRIORITY))
+      ) {
+        priority = "PRIORITY";
+      }
+    }
+
     const ticket = await this.prisma.supportTicket.create({
       data: {
         userId: userId ?? undefined,
@@ -17,6 +37,7 @@ export class SupportService {
         subject: dto.subject,
         message: dto.message,
         source: dto.source ?? "web",
+        metadata: { priority } as Prisma.InputJsonValue,
       },
     });
 

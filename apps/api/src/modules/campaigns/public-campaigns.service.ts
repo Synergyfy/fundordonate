@@ -14,6 +14,10 @@ import {
   effectiveConditions,
   minQualifyingPence,
 } from "@/modules/rewards/reward-config.util";
+import {
+  businessCanWin,
+  consumerCanWin,
+} from "@/modules/rewards/reward-fulfilment.util";
 
 /** A reward rule as persisted in `CampaignTemplate.rewardsConfig`. */
 interface StoredRewardCondition {
@@ -37,6 +41,10 @@ interface StoredRewardConfig {
   valueGbp?: number | null;
   audience?: string;
   delivery?: string;
+  fulfilmentProvider?: string | null;
+  fulfilmentKind?: string | null;
+  consumerEligible?: boolean | null;
+  businessEligible?: boolean | null;
   qualificationMode?: string;
   conditions?: StoredRewardCondition[];
   trigger?: StoredRewardCondition;
@@ -56,6 +64,10 @@ export interface PublicCampaignReward {
   mcomRewardId: string | null;
   rewardType: string | null;
   fulfilmentType: string | null;
+  fulfilmentProvider: string | null;
+  fulfilmentKind: string | null;
+  consumerEligible: boolean;
+  businessEligible: boolean;
   audience: string | null;
   qualificationMode: string;
   valueGbp: number | null;
@@ -68,6 +80,9 @@ export interface PublicCampaignReward {
   quantityType?: string;
   quantityLimit?: number | null;
   quantityClaimed?: number;
+  /** Remaining issuances under the effective campaign cap (null = unlimited). */
+  quantityRemaining?: number | null;
+  soldOut?: boolean;
   claimDeadlineDays?: number;
   items: { title: string; physicalType?: string }[];
 }
@@ -908,7 +923,11 @@ export class PublicCampaignsService {
     if (!includeTemplateRewards && enabledAttachments.length === 0) return [];
 
     const issuances = await this.prisma.rewardIssuance.findMany({
-      where: { campaignId },
+      where: {
+        campaignId,
+        // Match the reservation cap accounting: failed/revoked rows free a slot.
+        status: { in: ["PENDING", "ISSUED", "REDEEMED", "EXPIRED"] },
+      },
       select: { mcomRewardId: true, businessRewardId: true, rewardConfigId: true },
     });
     const countMap = new Map<string, number>();
@@ -952,9 +971,19 @@ export class PublicCampaignsService {
       countMap.get(cfg.mcomRewardId ?? cfg.id ?? "") ??
       countMap.get(cfg.id ?? "") ??
       0;
-    const quantityLimit =
-      cfg.quantityLimit !== null && cfg.quantityLimit !== undefined && cfg.quantityLimit !== ""
+    const configuredLimit =
+      cfg.quantityLimit !== null &&
+      cfg.quantityLimit !== undefined &&
+      cfg.quantityLimit !== ""
         ? Number(cfg.quantityLimit)
+        : null;
+    const limited =
+      (cfg.quantityType ?? "").toLowerCase() === "limited" ||
+      (cfg.quantityType == null && configuredLimit != null);
+    const quantityLimit = limited ? configuredLimit : null;
+    const quantityRemaining =
+      quantityLimit != null && Number.isFinite(quantityLimit)
+        ? Math.max(0, quantityLimit - issuedCount)
         : null;
     const claimDeadlineDays =
       cfg.claimDeadlineDays !== null &&
@@ -971,6 +1000,16 @@ export class PublicCampaignsService {
       mcomRewardId: cfg.mcomRewardId ?? null,
       rewardType: cfg.rewardCategory ?? null,
       fulfilmentType: cfg.delivery ?? null,
+      fulfilmentProvider: cfg.fulfilmentProvider ?? null,
+      fulfilmentKind: cfg.fulfilmentKind ?? null,
+      consumerEligible: consumerCanWin({
+        fulfilmentKind: cfg.fulfilmentKind,
+        consumerEligible: cfg.consumerEligible,
+      }),
+      businessEligible: businessCanWin({
+        fulfilmentKind: cfg.fulfilmentKind,
+        businessEligible: cfg.businessEligible,
+      }),
       audience: cfg.audience ?? null,
       qualificationMode: cfg.qualificationMode ?? "highest",
       valueGbp: cfg.valueGbp ?? null,
@@ -988,6 +1027,8 @@ export class PublicCampaignsService {
         cfg.quantityType ?? (quantityLimit != null ? "limited" : undefined),
       quantityLimit,
       quantityClaimed: issuedCount,
+      quantityRemaining,
+      soldOut: quantityRemaining !== null && quantityRemaining <= 0,
       claimDeadlineDays,
       items: Array.isArray(cfg.items)
         ? cfg.items.filter((item) => item && typeof item === "object")
@@ -1009,6 +1050,8 @@ export class PublicCampaignsService {
     const condition = this.normalizeCondition(cfg);
     const issuedCount = countMap.get(attachment.businessRewardId) ?? 0;
     const quantityLimit = attachment.maxQuantity ?? null;
+    const quantityRemaining =
+      quantityLimit != null ? Math.max(0, quantityLimit - issuedCount) : null;
 
     return {
       id: attachment.id,
@@ -1018,7 +1061,19 @@ export class PublicCampaignsService {
       mcomRewardId: attachment.businessRewardId,
       rewardType: attachment.rewardType ?? null,
       fulfilmentType: null,
-      audience: null,
+      fulfilmentProvider: attachment.fulfilmentProvider ?? null,
+      fulfilmentKind: attachment.fulfilmentKind ?? null,
+      consumerEligible: consumerCanWin({
+        fulfilmentKind: attachment.fulfilmentKind,
+        consumerEligible:
+          attachment.audience === "business" ? false : undefined,
+      }),
+      businessEligible: businessCanWin({
+        fulfilmentKind: attachment.fulfilmentKind,
+        businessEligible:
+          attachment.audience === "consumer" ? false : undefined,
+      }),
+      audience: attachment.audience ?? null,
       qualificationMode: attachment.qualificationMode ?? "independent",
       valueGbp: null,
       amount: minQualifyingPence(cfg),
@@ -1034,6 +1089,8 @@ export class PublicCampaignsService {
       quantityType: quantityLimit != null ? "limited" : undefined,
       quantityLimit,
       quantityClaimed: issuedCount,
+      quantityRemaining,
+      soldOut: quantityRemaining !== null && quantityRemaining <= 0,
       items: [],
     };
   }

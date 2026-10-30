@@ -386,6 +386,22 @@ export class CreateCampaignTemplateDto {
   @IsIn(["disabled", "coexist", "replace", "enabled"])
   businessRewardsMode?: string = "disabled";
 
+  @ApiPropertyOptional({
+    description: "Premium templates require the templates.premium capability.",
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPremium?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Capability key required to claim this template (defaults to templates.premium).",
+  })
+  @IsOptional()
+  @IsString()
+  requiredFeature?: string;
+
   @ApiPropertyOptional({ description: "Array of fields schema" })
   @IsOptional()
   @Type(() => Object)
@@ -510,6 +526,16 @@ export class UpdateCampaignTemplateDto {
   @IsOptional()
   @IsIn(["disabled", "coexist", "replace", "enabled"])
   businessRewardsMode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPremium?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  requiredFeature?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

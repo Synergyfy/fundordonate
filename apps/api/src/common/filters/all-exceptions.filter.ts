@@ -13,6 +13,7 @@ interface ErrorBody {
   statusCode: number;
   error: string;
   message: string | string[];
+  details?: unknown;
   path: string;
   timestamp: string;
 }
@@ -31,6 +32,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let error = "InternalServerError";
     let message: string | string[] = "Internal server error";
+    let details: unknown;
 
     if (isHttp) {
       const res = exception.getResponse();
@@ -41,6 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const body = res as Record<string, unknown>;
         message = (body.message as string | string[]) ?? exception.message;
         error = (body.error as string) ?? exception.name;
+        details = body.details;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
@@ -58,6 +61,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       error,
       message,
+      ...(details !== undefined ? { details } : {}),
       path: request.originalUrl,
       timestamp: new Date().toISOString(),
     };

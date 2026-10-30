@@ -3,6 +3,7 @@ import { PrismaModule } from "@/prisma/prisma.module";
 import { RewardsModule } from "@/modules/rewards/rewards.module";
 import { AuditModule } from "@/modules/audit/audit.module";
 import { EligibilityModule } from "@/modules/eligibility/eligibility.module";
+import { PlansModule } from "@/modules/plans/plans.module";
 
 // Guards
 import { BusinessOwnerGuard } from "./guards/business-owner.guard";
@@ -30,7 +31,7 @@ import { BusinessSettingsController } from "./controllers/business-settings.cont
 import { BusinessMediaController } from "./controllers/business-media.controller";
 
 @Module({
-  imports: [PrismaModule, RewardsModule, AuditModule, EligibilityModule],
+  imports: [PrismaModule, RewardsModule, AuditModule, EligibilityModule, PlansModule],
   controllers: [
     BusinessDashboardController,
     BusinessProfileController,

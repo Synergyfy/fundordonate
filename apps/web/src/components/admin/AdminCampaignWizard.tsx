@@ -856,6 +856,27 @@ export function AdminCampaignWizard({ campaignId, onClose, onSaved }: AdminCampa
                 <div><span className="text-gray-500">Self-Funding:</span> <span className="font-medium">{form.isSelfFunding ? form.selfFundingLevel || "Yes" : "No"}</span></div>
                 <div><span className="text-gray-500">Status:</span> <span className="font-medium capitalize">{form.status.replace(/_/g, " ")}</span></div>
               </div>
+              <div className="border-t pt-2">
+                <p className="text-xs font-semibold text-gray-700">
+                  Rewards ({form.rewards.length}) ·{" "}
+                  {form.qualificationMode === "cumulative"
+                    ? "all qualifying rewards"
+                    : "highest qualifying reward"}
+                </p>
+                {form.rewards.length === 0 ? (
+                  <p className="mt-1 text-xs text-gray-400">No rewards configured.</p>
+                ) : (
+                  <ul className="mt-1 space-y-1">
+                    {form.rewards.map((reward, index) => (
+                      <li key={reward.id} className="text-xs text-gray-600">
+                        <span className="font-medium text-gray-800">{index + 1}. {reward.title || "Untitled reward"}</span>
+                        {reward.audience ? ` · ${reward.audience}` : ""}
+                        {reward.triggerType ? ` · ${reward.triggerType}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         )}

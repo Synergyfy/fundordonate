@@ -8,12 +8,21 @@ import {
   MapPin,
 } from "lucide-react";
 import { consumerService } from "@/services/consumer";
-import { REWARD_CATEGORY_META, type IssuedReward } from "@/types/rewards";
+import {
+  REWARD_CATEGORY_META,
+  fulfilmentKindLabel,
+  fulfilmentSummary,
+  isCentralFulfilmentKind,
+  issuedRewardDeliveryState,
+  type IssuedReward,
+  type IssuedRewardDeliveryState,
+} from "@/types/rewards";
 
-type TabId = "available" | "redeemed" | "expired";
+type TabId = "available" | "processing" | "redeemed" | "expired";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "available", label: "Available" },
+  { id: "processing", label: "Processing" },
   { id: "redeemed", label: "Redeemed" },
   { id: "expired", label: "Expired" },
 ];
@@ -29,40 +38,50 @@ const CATEGORY_META: Record<string, { label: string; color: string }> = {
   ...REWARD_CATEGORY_META,
 };
 
-/** Which list tab an issuance belongs to. */
-function tabFor(status: string): TabId {
-  switch (status?.toUpperCase()) {
-    case "REDEEMED":
+/** Which list tab an issuance belongs to (status + fulfilment status). */
+function tabFor(reward: Pick<IssuedReward, "status" | "fulfilmentStatus">): TabId {
+  const state = issuedRewardDeliveryState(reward);
+  switch (state) {
+    case "redeemed":
       return "redeemed";
-    case "EXPIRED":
-    case "REVOKED":
+    case "expired":
+    case "revoked":
       return "expired";
-    case "ISSUED":
-    case "FAILED": // needs activation — surface it as actionable, not expired
+    case "processing":
+    case "failed":
+      return "processing";
+    case "available":
     default:
       return "available";
   }
 }
 
-function statusLabel(status: string): { label: string; className: string } {
-  switch (status?.toUpperCase()) {
-    case "REDEEMED":
+function statusLabel(
+  reward: Pick<IssuedReward, "status" | "fulfilmentStatus">,
+): { label: string; className: string } {
+  const state: IssuedRewardDeliveryState = issuedRewardDeliveryState(reward);
+  switch (state) {
+    case "redeemed":
       return { label: "Redeemed", className: "bg-green-50 text-green-700" };
-    case "EXPIRED":
+    case "expired":
       return { label: "Expired", className: "bg-gray-100 text-gray-600" };
-    case "REVOKED":
+    case "revoked":
       return { label: "Revoked", className: "bg-red-50 text-red-700" };
-    case "FAILED":
-      return { label: "Action required", className: "bg-amber-50 text-amber-700" };
-    case "ISSUED":
+    case "failed":
+      return { label: "Failed", className: "bg-red-50 text-red-700" };
+    case "processing":
+      return { label: "Processing", className: "bg-amber-50 text-amber-700" };
+    case "available":
     default:
       return { label: "Available", className: "bg-amber-50 text-amber-700" };
   }
 }
 
 function RewardCard({ reward }: { reward: IssuedReward }) {
-  const status = statusLabel(reward.status);
+  const status = statusLabel(reward);
+  const deliveryState = issuedRewardDeliveryState(reward);
   const category = reward.rewardType ? CATEGORY_META[reward.rewardType] : undefined;
+  const fulfilment = reward.fulfilmentKind;
 
   return (
     <article className="group rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
@@ -101,10 +120,41 @@ function RewardCard({ reward }: { reward: IssuedReward }) {
               {reward.campaignTitle}
             </p>
           )}
-          {category && (
-            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-600">
-              <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-500" />
-              <span>{category.label}</span>
+          {fulfilment && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary-700">
+                {fulfilmentKindLabel(fulfilment)}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  isCentralFulfilmentKind(fulfilment)
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "bg-teal-50 text-teal-700"
+                }`}
+              >
+                {isCentralFulfilmentKind(fulfilment) ? "MCOM Central" : "MCOM Mall"}
+              </span>
+            </div>
+          )}
+          <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-600">
+            <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-500" />
+            <span>{category?.label ?? fulfilmentSummary(fulfilment)}</span>
+          </p>
+          {(deliveryState === "failed" || deliveryState === "processing") &&
+            reward.fulfilmentError && (
+              <p
+                className={`mt-1.5 rounded-lg px-2 py-1 text-xs font-medium ${
+                  deliveryState === "failed"
+                    ? "bg-red-50 text-red-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
+              >
+                {reward.fulfilmentError}
+              </p>
+            )}
+          {reward.value != null && (
+            <p className="mt-0.5 text-xs font-semibold text-gray-700">
+              £{reward.value.toFixed(2)} value
             </p>
           )}
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -136,6 +186,11 @@ const EMPTY_COPY: Record<TabId, { title: string; body: string; cta: string }> = 
     body: "Rewards you qualify for will show up here once they are issued.",
     cta: "Explore Campaigns",
   },
+  processing: {
+    title: "No rewards processing",
+    body: "Rewards being delivered or awaiting action will appear here.",
+    cta: "View Available Rewards",
+  },
   redeemed: {
     title: "No redeemed rewards yet",
     body: "Rewards you redeem will appear here.",
@@ -152,7 +207,11 @@ export function ConsumerRewardsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: TabId =
-    tabParam === "redeemed" || tabParam === "expired" ? tabParam : "available";
+    tabParam === "processing" ||
+    tabParam === "redeemed" ||
+    tabParam === "expired"
+      ? tabParam
+      : "available";
   const [rewards, setRewards] = useState<IssuedReward[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -184,7 +243,7 @@ export function ConsumerRewardsPage() {
   };
 
   const visible = useMemo(
-    () => rewards.filter((r) => tabFor(r.status) === tab),
+    () => rewards.filter((r) => tabFor(r) === tab),
     [rewards, tab],
   );
   const empty = EMPTY_COPY[tab];

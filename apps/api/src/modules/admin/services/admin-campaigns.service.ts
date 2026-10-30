@@ -36,9 +36,11 @@ import { AuditDataService } from "@/modules/audit/services/audit-data.service";
 import { TemplateEligibilityService } from "@/modules/eligibility/template-eligibility.service";
 import { AuditLinkStatus } from "@prisma/client";
 import {
+  getCampaignRewardConfigs,
   getCampaignWizardSettings,
   normaliseCampaignWizardSettings,
 } from "@/modules/campaigns/campaign-wizard-settings";
+import { isCentralFulfilmentKind } from "@/modules/rewards/reward-fulfilment.util";
 
 /** Why a business was skipped when an admin assigned a template to it. */
 export interface InstantiateSkipReason {
@@ -559,6 +561,37 @@ export class AdminCampaignsService {
   }
 
   /**
+   * Editing a live campaign may raise a reward's cap but must never lower it
+   * below the number already issued (which would make the cap untrue).
+   */
+  private async assertRewardCapsNotReduced(
+    campaignId: string,
+    nextSettings: ReturnType<typeof normaliseCampaignWizardSettings>,
+  ): Promise<void> {
+    const configs = (nextSettings.rewardConfigs ?? []).filter(
+      (cfg) => (cfg.quantityType ?? "").toLowerCase() === "limited",
+    );
+    if (configs.length === 0) return;
+
+    for (const cfg of configs) {
+      const newCap = Number(cfg.quantityLimit);
+      if (!Number.isFinite(newCap) || newCap <= 0) continue;
+      const issued = await this.prisma.rewardIssuance.count({
+        where: {
+          campaignId,
+          rewardConfigId: cfg.id,
+          status: { in: ["PENDING", "ISSUED", "REDEEMED", "EXPIRED"] },
+        },
+      });
+      if (newCap < issued) {
+        throw new BadRequestException(
+          `Reward "${cfg.name}" has already been issued ${issued} time(s); the quantity limit cannot be reduced below that`,
+        );
+      }
+    }
+  }
+
+  /**
    * Updates the campaign-level fields admins can safely edit without going
    * through the template/approval workflow.
    */
@@ -591,11 +624,13 @@ export class AdminCampaignsService {
     if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
     if (dto.isFeatured !== undefined) data.isFeatured = dto.isFeatured;
     if (dto.settings !== undefined) {
-      data.settings = normaliseCampaignWizardSettings(
+      const nextSettings = normaliseCampaignWizardSettings(
         dto.settings,
         dto.targetAmount ?? campaign.targetAmount,
         { strict: false },
-      ) as Prisma.InputJsonValue;
+      );
+      await this.assertRewardCapsNotReduced(id, nextSettings);
+      data.settings = nextSettings as Prisma.InputJsonValue;
     }
 
     const startDate =
@@ -917,6 +952,59 @@ export class AdminCampaignsService {
   }
 
   /**
+   * Admin templates may only use MCOM Rewards admin ("mcom vault") rewards, and
+   * a consumer-only template must never carry a business-only Central reward.
+   */
+  private assertTemplateRewardEligibility(
+    audience: string,
+    rewardsConfig: unknown,
+  ): void {
+    if (!Array.isArray(rewardsConfig)) return;
+
+    for (const raw of rewardsConfig) {
+      if (!raw || typeof raw !== "object") continue;
+      const reward = raw as Record<string, unknown>;
+      const name =
+        typeof reward.name === "string"
+          ? reward.name
+          : typeof reward.title === "string"
+            ? reward.title
+            : "Reward";
+      const source = typeof reward.source === "string" ? reward.source : null;
+      const mcomRewardId =
+        typeof reward.mcomRewardId === "string" ? reward.mcomRewardId : null;
+      const mcomSource =
+        typeof reward.mcomSource === "string" ? reward.mcomSource : "mcom vault";
+
+      if (source && source !== "mcom") {
+        throw new BadRequestException(
+          `Template reward "${name}" must come from MCOM Rewards (no local reward creation)`,
+        );
+      }
+      if (source === "mcom" && !mcomRewardId) {
+        throw new BadRequestException(
+          `Template reward "${name}" is missing its MCOM reward id`,
+        );
+      }
+      if (source === "mcom" && mcomSource.toLowerCase() !== "mcom vault") {
+        throw new BadRequestException(
+          `Template reward "${name}" must use the "mcom vault" source`,
+        );
+      }
+
+      const kind =
+        typeof reward.fulfilmentKind === "string"
+          ? reward.fulfilmentKind
+          : null;
+      if (audience === "CONSUMER" && isCentralFulfilmentKind(kind)) {
+        throw new BadRequestException(
+          `Template reward "${name}" is a business-only Central reward and cannot be used on a consumer template`,
+        );
+      }
+    }
+  }
+
+  /**
    * Creates a new campaign template blueprint and persists the full wizard config.
    */
   async createTemplate(dto: CreateCampaignTemplateDto, adminUserId?: string) {
@@ -930,6 +1018,8 @@ export class AdminCampaignsService {
     const seasonId = await this.resolveSeasonId(dto.seasonId);
     const status = dto.status ?? TemplateStatus.DRAFT;
     const config = await this.normaliseTemplateConfig(dto.config);
+    const audience = (dto.audience ?? "BOTH").toUpperCase();
+    this.assertTemplateRewardEligibility(audience, dto.rewardsConfig);
 
     try {
       const created = await this.prisma.campaignTemplate.create({
@@ -942,7 +1032,7 @@ export class AdminCampaignsService {
           approvalMode: dto.approvalMode ?? "ADMIN_REVIEW",
           status,
           category: dto.category,
-          audience: (dto.audience ?? "BOTH").toUpperCase(),
+          audience,
           minEligibilityTier: dto.minEligibilityTier ?? "BRONZE",
           minContributionRequired: dto.minContributionRequired ?? false,
           minContributionAmount: dto.minContributionAmount ?? 0,
@@ -951,6 +1041,8 @@ export class AdminCampaignsService {
           selfFundingAmount: dto.selfFundingAmount ?? 10000,
           selfFundingRewardName: dto.selfFundingRewardName,
           businessRewardsMode: dto.businessRewardsMode ?? "disabled",
+          isPremium: dto.isPremium ?? false,
+          requiredFeature: dto.requiredFeature ?? null,
           fieldsConfig: dto.fieldsConfig ?? [],
           rewardsConfig: dto.rewardsConfig ?? [],
           mcomAssetsConfig: dto.mcomAssetsConfig ?? [],
@@ -989,6 +1081,13 @@ export class AdminCampaignsService {
       }
     }
 
+    if (dto.rewardsConfig !== undefined) {
+      this.assertTemplateRewardEligibility(
+        (dto.audience ?? existing.audience).toUpperCase(),
+        dto.rewardsConfig,
+      );
+    }
+
     const data: Prisma.CampaignTemplateUpdateInput = {
       version: { increment: 1 },
     };
@@ -1017,6 +1116,8 @@ export class AdminCampaignsService {
     if (dto.selfFundingAmount !== undefined) data.selfFundingAmount = dto.selfFundingAmount;
     if (dto.selfFundingRewardName !== undefined) data.selfFundingRewardName = dto.selfFundingRewardName;
     if (dto.businessRewardsMode !== undefined) data.businessRewardsMode = dto.businessRewardsMode;
+    if (dto.isPremium !== undefined) data.isPremium = dto.isPremium;
+    if (dto.requiredFeature !== undefined) data.requiredFeature = dto.requiredFeature || null;
     if (dto.fieldsConfig !== undefined) data.fieldsConfig = dto.fieldsConfig;
     if (dto.rewardsConfig !== undefined) data.rewardsConfig = dto.rewardsConfig;
     if (dto.mcomAssetsConfig !== undefined) data.mcomAssetsConfig = dto.mcomAssetsConfig;
@@ -1107,6 +1208,9 @@ export class AdminCampaignsService {
         selfFundingMode: source.selfFundingMode,
         selfFundingAmount: source.selfFundingAmount,
         selfFundingRewardName: source.selfFundingRewardName,
+        businessRewardsMode: source.businessRewardsMode,
+        isPremium: source.isPremium,
+        requiredFeature: source.requiredFeature,
         fieldsConfig: source.fieldsConfig as Prisma.InputJsonValue,
         rewardsConfig: source.rewardsConfig as Prisma.InputJsonValue,
         mcomAssetsConfig: source.mcomAssetsConfig as Prisma.InputJsonValue,

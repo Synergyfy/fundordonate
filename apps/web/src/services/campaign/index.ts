@@ -33,6 +33,10 @@ export const campaignService = {
     return api.get(`/business/campaigns/${campaignId}`);
   },
 
+  async deleteCampaign(campaignId: string): Promise<{ success: boolean; deletedId: string }> {
+    return api.delete(`/business/campaigns/${campaignId}`);
+  },
+
   async saveAnswers(
     campaignId: string,
     dto: SaveCampaignAnswersDto,

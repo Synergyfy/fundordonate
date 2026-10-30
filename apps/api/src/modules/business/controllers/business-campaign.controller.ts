@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -76,6 +77,20 @@ export class BusinessCampaignController {
     @Param("id") campaignId: string,
   ) {
     return this.campaignService.getCampaignDetail(businessId, campaignId);
+  }
+
+  @Delete("campaigns/:id")
+  @ApiOperation({
+    summary: "Delete a draft campaign",
+    description:
+      "Permanently removes a campaign the business has not submitted yet. Only DRAFT campaigns with no contributions can be deleted.",
+  })
+  @ApiResponse({ status: 200, description: "Draft campaign deleted" })
+  async deleteCampaign(
+    @CurrentBusiness("id") businessId: string,
+    @Param("id") campaignId: string,
+  ) {
+    return this.campaignService.deleteDraftCampaign(businessId, campaignId);
   }
 
   @Patch("campaigns/:id/answers")

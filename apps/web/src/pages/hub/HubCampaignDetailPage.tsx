@@ -129,10 +129,23 @@ export default function HubCampaignDetailPage() {
   // Earned rewards after payment
   const [earnedRewards, setEarnedRewards] = useState<{
     entitlementId: string;
+    rewardId?: string | null;
     rewardTitle: string;
     rewardDescription: string;
     expiresAt: string;
     items: { title: string; physicalType: string }[];
+    code?: string | null;
+    fulfilmentProvider?: string | null;
+    fulfilmentKind?: string | null;
+    fulfilmentStatus?: string | null;
+    fulfilmentError?: string | null;
+    instructions?: {
+      headline: string;
+      body: string;
+      code?: string | null;
+      links: { label: string; url: string }[];
+      note?: string | null;
+    } | null;
   }[]>([]);
 
   const handleSelectReward = (rewardId: string) => {
@@ -225,13 +238,21 @@ export default function HubCampaignDetailPage() {
           setEarnedRewards(
             mine.map((r) => ({
               entitlementId: r.id,
+              rewardId: r.id,
               rewardTitle: r.title,
               rewardDescription:
-                r.source === "mcom"
+                r.fulfilmentLabel ??
+                (r.source === "mcom"
                   ? "Issued via MCOM Rewards"
-                  : "FundOrDonate reward",
+                  : "FundOrDonate reward"),
               expiresAt: r.expiresAt ?? "",
               items: [],
+              code: r.instructions?.code ?? r.fulfilmentCode ?? r.code,
+              fulfilmentProvider: r.fulfilmentProvider,
+              fulfilmentKind: r.fulfilmentKind,
+              fulfilmentStatus: r.fulfilmentStatus,
+              fulfilmentError: r.fulfilmentError,
+              instructions: r.instructions ?? null,
             })),
           );
           return;
